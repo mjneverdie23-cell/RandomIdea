@@ -1,0 +1,71 @@
+/*
+ * Design tokens.
+ *
+ * Dark broadcast palette: near-black studio background, raised panels with a
+ * cool tint, and a hard blue/red split that carries side identity everywhere
+ * (draft, prediction buttons, reveal, results, leaderboard).
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg: #06080d;
+  --bg-deep: #04060a;
+  --panel: #0c111b;
+  --panel-raised: #121927;
+  --panel-hover: #172033;
+  --line: rgba(148, 172, 214, 0.13);
+  --line-strong: rgba(148, 172, 214, 0.26);
+
+  /* Text */
+  --text: #e9eefb;
+  --text-dim: #93a3c2;
+  --text-faint: #64748f;
+
+  /* Side identity */
+  --blue: #3d8bfd;
+  --blue-bright: #7ab4ff;
+  --blue-deep: #0d1f3d;
+  --blue-glow: rgba(61, 139, 253, 0.45);
+  --blue-wash: rgba(61, 139, 253, 0.12);
+  --red: #ff4655;
+  --red-bright: #ff8189;
+  --red-glow: rgba(255, 70, 85, 0.45);
+  --red-wash: rgba(255, 70, 85, 0.12);
+
+  /* Accents */
+  --gold: #f5c542;
+  --green: #4ade80;
+  --amber: #fbbf24;
+  --violet: #a78bfa;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --shadow-panel: 0 18px 40px -24px rgba(0, 0, 0, 0.9);
+  --shadow-lift: 0 22px 50px -20px rgba(0, 0, 0, 0.85);
+
+  /* Type */
+  --font-ui: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur: 240ms;
+  --dur-slow: 420ms;
+
+  /* Layout */
+  --nav-height: 60px;
+  --page-max: 1480px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}

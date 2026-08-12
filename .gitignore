@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.DS_Store
+.vite/
+coverage/
+
+# Match data isn't checked in — drop CSVs in through the Data page instead.
+*.csv

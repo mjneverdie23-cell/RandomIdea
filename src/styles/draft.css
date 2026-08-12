@@ -1,0 +1,617 @@
+/*
+ * Broadcast draft board — the visual centerpiece.
+ *
+ * Desktop layout mirrors a pro draft screen: bans pinned to the outer edges,
+ * team identity flanking a central matchup divider, and five tall
+ * face-focused champion portraits per side. Below 1080px the two sides stack
+ * into full-width blue/red blocks with the divider becoming a horizontal rule.
+ */
+
+.draft {
+  display: grid;
+  grid-template-columns: 1fr minmax(140px, 176px) 1fr;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(18, 25, 39, 0.9), rgba(8, 11, 18, 0.96)),
+    var(--panel);
+  box-shadow: var(--shadow-lift);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Side wash behind each half. */
+.draft::before,
+.draft::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.draft::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--blue-wash), transparent);
+}
+
+.draft::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--red-wash), transparent);
+}
+
+.draft-side {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  transition: opacity var(--dur) var(--ease-out), filter var(--dur) var(--ease-out);
+}
+
+/* Side header ------------------------------------------------------- */
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.draft-side--red .side-head {
+  flex-direction: row-reverse;
+}
+
+.side-id {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+  text-align: right;
+}
+
+.draft-side--red .side-id {
+  text-align: left;
+}
+
+.side-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.draft-side--blue .side-label {
+  color: var(--blue-bright);
+  justify-content: flex-end;
+}
+
+.draft-side--red .side-label {
+  color: var(--red-bright);
+  justify-content: flex-start;
+}
+
+.side-team {
+  font-size: clamp(17px, 1.7vw, 26px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.side-tag {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-deep);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.draft-side--blue .side-tag {
+  border-color: rgba(61, 139, 253, 0.45);
+  color: var(--blue-bright);
+  box-shadow: inset 0 0 22px -8px var(--blue-glow);
+}
+
+.draft-side--red .side-tag {
+  border-color: rgba(255, 70, 85, 0.45);
+  color: var(--red-bright);
+  box-shadow: inset 0 0 22px -8px var(--red-glow);
+}
+
+/* Bans -------------------------------------------------------------- */
+
+.bans {
+  display: flex;
+  gap: 5px;
+  flex: none;
+}
+
+.ban {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-deep);
+  overflow: hidden;
+  /*
+   * Bans read as "removed" — desaturated, dimmed and struck through — but stay
+   * recognizable, since which champions got taken away is part of the read.
+   */
+  filter: grayscale(1) brightness(0.72) contrast(1.08);
+  transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.ban:hover {
+  filter: grayscale(0.15) brightness(1);
+  transform: translateY(-2px);
+  z-index: 2;
+}
+
+.ban img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ban::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to top left,
+      transparent calc(50% - 1px),
+      rgba(255, 90, 100, 0.85) 50%,
+      transparent calc(50% + 1px)
+    );
+}
+
+.ban-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 16px;
+  filter: none;
+}
+
+.ban-empty::after {
+  display: none;
+}
+
+.bans-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  align-self: center;
+  margin-inline-end: 2px;
+}
+
+/* Picks ------------------------------------------------------------- */
+
+.picks {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  aspect-ratio: 26 / 45;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, hsl(var(--pick-hue, 220) 45% 26%), hsl(var(--pick-hue, 220) 40% 12%));
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+  animation: pick-in var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--pick-index, 0) * 45ms);
+}
+
+@keyframes pick-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.draft-side--blue .pick:hover {
+  border-color: rgba(61, 139, 253, 0.6);
+  box-shadow: 0 16px 34px -18px var(--blue-glow);
+  transform: translateY(-3px);
+}
+
+.draft-side--red .pick:hover {
+  border-color: rgba(255, 70, 85, 0.6);
+  box-shadow: 0 16px 34px -18px var(--red-glow);
+  transform: translateY(-3px);
+}
+
+.pick-art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+
+/*
+ * Data Dragon loading art is a full-body portrait whose aspect ratio is close
+ * to the card's, so `object-fit: cover` alone would barely crop it and every
+ * champion would read as a small full-body figure. Oversizing the image and
+ * anchoring it to the top zooms into the head-and-shoulders region instead —
+ * the face-focused treatment a broadcast draft uses.
+ */
+.pick-art img {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 156%;
+  height: 156%;
+  transform: translateX(-50%);
+  object-fit: cover;
+  object-position: 50% 2%;
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+
+.pick-art img.is-loaded {
+  opacity: 1;
+}
+
+/*
+ * Shown while art loads and when Data Dragon can't be reached. Sits in the
+ * upper third so it never collides with the name plate at the bottom.
+ */
+.pick-fallback {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 62%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
+.ban .pick-fallback,
+.meta-icon .pick-fallback {
+  inset: 0;
+  height: 100%;
+  font-size: 12px;
+}
+
+/* Readability scrim under the name plate. */
+.pick::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgba(4, 6, 10, 0.05) 0%,
+    rgba(4, 6, 10, 0.12) 42%,
+    rgba(4, 6, 10, 0.86) 78%,
+    rgba(4, 6, 10, 0.97) 100%
+  );
+}
+
+.pick-role {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(4, 6, 10, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  backdrop-filter: blur(4px);
+}
+
+.pick-info {
+  position: relative;
+  padding: 8px 8px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pick-player {
+  font-size: clamp(11px, 0.95vw, 14px);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pick-champ {
+  font-size: clamp(9px, 0.72vw, 11px);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.draft-side--blue .pick-info {
+  border-top: 2px solid var(--blue);
+}
+
+.draft-side--red .pick-info {
+  border-top: 2px solid var(--red);
+}
+
+/* Center divider ---------------------------------------------------- */
+
+.draft-center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 6px;
+  text-align: center;
+  border-inline: 1px solid var(--line);
+  background: linear-gradient(180deg, transparent, rgba(148, 172, 214, 0.05), transparent);
+}
+
+.draft-vs {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.draft-center-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.draft-center-tags .blue {
+  color: var(--blue-bright);
+}
+
+.draft-center-tags .red {
+  color: var(--red-bright);
+}
+
+.draft-center-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Reveal states ----------------------------------------------------- */
+
+.draft[data-winner='blue'] .draft-side--red,
+.draft[data-winner='red'] .draft-side--blue {
+  opacity: 0.42;
+  filter: grayscale(0.75);
+}
+
+.draft[data-winner='blue'] .draft-side--blue .pick,
+.draft[data-winner='red'] .draft-side--red .pick {
+  border-color: var(--winner-color, var(--gold));
+  box-shadow: 0 0 0 1px var(--winner-color, var(--gold)), 0 18px 40px -22px var(--winner-color, var(--gold));
+}
+
+.winner-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  animation: stamp-in var(--dur) var(--ease-out) both;
+}
+
+.draft-side--blue .winner-stamp {
+  background: var(--blue);
+  color: #fff;
+}
+
+.draft-side--red .winner-stamp {
+  background: var(--red);
+  color: #fff;
+}
+
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Compact variant used in the results review list ------------------- */
+
+.draft.is-compact {
+  padding: 12px;
+  gap: 10px;
+  grid-template-columns: 1fr minmax(96px, 116px) 1fr;
+}
+
+.draft.is-compact .pick {
+  aspect-ratio: 3 / 4;
+}
+
+.draft.is-compact .ban {
+  width: 28px;
+  height: 28px;
+}
+
+.draft.is-compact .side-tag {
+  width: 34px;
+  height: 34px;
+  font-size: 11px;
+}
+
+.draft.is-compact .side-team {
+  font-size: 14px;
+}
+
+.draft.is-compact .pick-art img {
+  width: 134%;
+  height: 134%;
+  object-position: 50% 4%;
+}
+
+/* Responsive -------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+  /* `.is-compact` is listed explicitly: it outranks a bare `.draft` rule. */
+  .draft,
+  .draft.is-compact {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .draft::before,
+  .draft::after {
+    width: 100%;
+    height: 40%;
+  }
+
+  .draft::before {
+    background: linear-gradient(180deg, var(--blue-wash), transparent);
+  }
+
+  .draft::after {
+    top: auto;
+    bottom: 0;
+    background: linear-gradient(0deg, var(--red-wash), transparent);
+  }
+
+  .draft-side {
+    padding: 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: rgba(8, 11, 18, 0.55);
+  }
+
+  .draft-side--blue {
+    border-left: 3px solid var(--blue);
+  }
+
+  .draft-side--red {
+    border-left: 3px solid var(--red);
+  }
+
+  .draft-side--red .side-head {
+    flex-direction: row;
+  }
+
+  .side-id,
+  .draft-side--red .side-id {
+    text-align: left;
+  }
+
+  .draft-side--blue .side-label {
+    justify-content: flex-start;
+  }
+
+  .draft-center {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-inline: 0;
+    border-block: 1px solid var(--line);
+    padding: 10px;
+  }
+
+  .draft-vs {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 620px) {
+  .draft {
+    padding: 12px;
+  }
+
+  .side-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .bans {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ban {
+    width: 34px;
+    height: 34px;
+  }
+
+  .picks {
+    gap: 5px;
+  }
+
+  .pick-role {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+
+  .pick-info {
+    padding: 6px 5px 7px;
+  }
+
+  .pick-player {
+    font-size: 10px;
+    letter-spacing: 0.01em;
+  }
+}
