@@ -1,57 +1,63 @@
 import { useEffect, useState } from 'react';
 import {
   championHue,
-  championIconUrl,
+  championIconSources,
   championInitials,
-  championPortraitUrl,
+  championPortraitSources,
 } from '../domain/champions.ts';
 import type { Champion } from '../domain/types.ts';
 
 interface ChampionArtProps {
   champion: Champion;
-  /** `portrait` uses tall face-focused loading art, `icon` uses the square. */
+  /** `portrait` uses tall face-cropped loading art, `icon` the square face. */
   variant: 'portrait' | 'icon';
   className?: string;
 }
 
 /**
- * Champion art with a graceful degradation path.
+ * Champion art with a source chain and a graceful floor.
  *
- * Data Dragon is a third-party CDN: it can be blocked, offline, or simply not
- * have art for a champion the CSV names. Rather than leaving a broken image,
- * the card falls back to a deterministic colored plate with the champion's
- * initials, so the draft stays readable either way.
+ * Tries the downloaded local copy first, then Riot's CDN, then gives up and
+ * renders a deterministic colored plate with the champion's initials. The CDN
+ * can be blocked, offline, or simply missing art for a champion the CSV names,
+ * and a broken image in the middle of a draft is worse than a colored tile.
  */
 export function ChampionArt({ champion, variant, className }: ChampionArtProps) {
-  const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>('loading');
-  const src = variant === 'portrait' ? championPortraitUrl(champion) : championIconUrl(champion);
+  const sources = variant === 'portrait'
+    ? championPortraitSources(champion)
+    : championIconSources(champion);
+
+  const [index, setIndex] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   // Reset when the card is recycled for a different champion.
+  const key = `${champion.id}:${variant}`;
   useEffect(() => {
-    setStatus('loading');
-  }, [src]);
+    setIndex(0);
+    setLoaded(false);
+  }, [key]);
 
-  if (!champion.id) {
-    return <span className="pick-fallback" aria-hidden="true">—</span>;
-  }
+  const src = sources[index];
+  const exhausted = index >= sources.length;
 
   return (
     <>
-      {status !== 'loaded' && (
+      {!loaded && (
         <span className="pick-fallback" aria-hidden="true">
-          {championInitials(champion)}
+          {champion.id ? championInitials(champion) : '—'}
         </span>
       )}
-      {status !== 'failed' && (
+      {!exhausted && src && (
         <img
-          className={[className, status === 'loaded' ? 'is-loaded' : ''].filter(Boolean).join(' ')}
+          key={src}
+          className={[className, loaded ? 'is-loaded' : ''].filter(Boolean).join(' ')}
           src={src}
           alt=""
           loading="lazy"
           decoding="async"
           draggable={false}
-          onLoad={() => setStatus('loaded')}
-          onError={() => setStatus('failed')}
+          onLoad={() => setLoaded(true)}
+          onError={() => setIndex((current) => current + 1)}
         />
       )}
     </>

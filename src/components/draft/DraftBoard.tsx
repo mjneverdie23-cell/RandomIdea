@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { ChampionArt, championStyle } from '../ChampionArt.tsx';
+import { TeamLogo } from '../TeamLogo.tsx';
 import { ROLE_SHORT, type GamePrompt, type Side, type TeamSide } from '../../domain/types.ts';
 import { formatSeriesFormat } from '../../lib/format.ts';
 
@@ -29,9 +30,9 @@ export const DraftBoard = memo(function DraftBoard({
 
       <div className="draft-center">
         <div className="draft-center-tags">
-          <span className="blue">{game.blue.tag}</span>
+          <TeamLogo teamName={game.blue.teamName} tag={game.blue.tag} size="sm" />
           <span className="dim">/</span>
-          <span className="red">{game.red.tag}</span>
+          <TeamLogo teamName={game.red.teamName} tag={game.red.tag} size="sm" />
         </div>
         <div className="draft-vs">VS</div>
         <div className="draft-center-meta">
@@ -64,9 +65,7 @@ function DraftSide({ team, isWinner }: { team: TeamSide; isWinner: boolean }) {
             {team.teamName}
           </span>
         </div>
-        <span className="side-tag" aria-hidden="true">
-          {team.tag}
-        </span>
+        <TeamLogo teamName={team.teamName} tag={team.tag} size="lg" className="side-tag" />
       </header>
 
       <div className="picks">

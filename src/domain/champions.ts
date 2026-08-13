@@ -10,6 +10,11 @@
  * the UI never re-derives an asset key from a display string.
  */
 
+import {
+  hasLocalChampion,
+  localChampionIcon,
+  localChampionPortrait,
+} from '../assets/manifest.ts';
 import type { Champion } from './types.ts';
 
 /** Used when Data Dragon's version list can't be reached. */
@@ -114,12 +119,12 @@ export function dataDragonVersion(): string {
   return resolvedVersion;
 }
 
-/** Tall, face-focused loading art — used for pick cards. */
+/** Tall loading art on Riot's CDN — cropped to the face by the pick card. */
 export function championPortraitUrl(champion: Champion): string {
   return `${DDRAGON_BASE}/cdn/img/champion/loading/${champion.id}_0.jpg`;
 }
 
-/** Square icon — used for bans and compact lists. */
+/** Square face icon on Riot's CDN — used for bans and compact lists. */
 export function championIconUrl(champion: Champion): string {
   return `${DDRAGON_BASE}/cdn/${resolvedVersion}/img/champion/${champion.id}.png`;
 }
@@ -127,6 +132,30 @@ export function championIconUrl(champion: Champion): string {
 /** Wide splash — used for ambient backgrounds. */
 export function championSplashUrl(champion: Champion): string {
   return `${DDRAGON_BASE}/cdn/img/champion/splash/${champion.id}_0.jpg`;
+}
+
+/**
+ * Ordered candidate URLs for a champion's art, best source first.
+ *
+ * A downloaded local copy wins when `npm run assets` has run; Riot's CDN is
+ * the fallback, so a fresh clone still shows art without any download step.
+ * `ChampionArt` walks this list on load errors and lands on the initials
+ * plate if every source fails.
+ */
+export function championPortraitSources(champion: Champion): string[] {
+  if (!champion.id) return [];
+  const sources: string[] = [];
+  if (hasLocalChampion(champion.id)) sources.push(localChampionPortrait(champion.id));
+  sources.push(championPortraitUrl(champion));
+  return sources;
+}
+
+export function championIconSources(champion: Champion): string[] {
+  if (!champion.id) return [];
+  const sources: string[] = [];
+  if (hasLocalChampion(champion.id)) sources.push(localChampionIcon(champion.id));
+  sources.push(championIconUrl(champion));
+  return sources;
 }
 
 /** Deterministic hue so art-less fallbacks still read as distinct cards. */

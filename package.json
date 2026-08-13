@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "assets": "node scripts/fetch-assets.mjs",
+    "assets:champions": "node scripts/fetch-assets.mjs --only=champions",
+    "assets:teams": "node scripts/fetch-assets.mjs --only=teams"
   },
   "dependencies": {
     "papaparse": "^5.5.4",

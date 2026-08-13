@@ -150,6 +150,8 @@ export function QuizPage() {
       <PredictionBar
         blueTeam={game.blue.teamName}
         redTeam={game.red.teamName}
+        blueTag={game.blue.tag}
+        redTag={game.red.tag}
         prediction={lastAnswer?.prediction ?? null}
         winner={revealed ? game.winner : null}
         disabled={revealed}

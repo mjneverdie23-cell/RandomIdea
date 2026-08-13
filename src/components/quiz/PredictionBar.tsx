@@ -1,8 +1,11 @@
+import { TeamLogo } from '../TeamLogo.tsx';
 import type { Side } from '../../domain/types.ts';
 
 interface PredictionBarProps {
   blueTeam: string;
   redTeam: string;
+  blueTag: string;
+  redTag: string;
   /** What the user picked, once they've picked. */
   prediction: Side | null;
   /** Revealed winner — set only during the reveal phase. */
@@ -21,6 +24,8 @@ interface PredictionBarProps {
 export function PredictionBar({
   blueTeam,
   redTeam,
+  blueTag,
+  redTag,
   prediction,
   winner,
   disabled,
@@ -31,6 +36,7 @@ export function PredictionBar({
       <PredictButton
         side="blue"
         team={blueTeam}
+        tag={blueTag}
         hint="Blue Side"
         shortcut="B"
         prediction={prediction}
@@ -44,6 +50,7 @@ export function PredictionBar({
       <PredictButton
         side="red"
         team={redTeam}
+        tag={redTag}
         hint="Red Side"
         shortcut="R"
         prediction={prediction}
@@ -55,9 +62,11 @@ export function PredictionBar({
   );
 }
 
-interface PredictButtonProps extends Omit<PredictionBarProps, 'blueTeam' | 'redTeam'> {
+interface PredictButtonProps
+  extends Omit<PredictionBarProps, 'blueTeam' | 'redTeam' | 'blueTag' | 'redTag'> {
   side: Side;
   team: string;
+  tag: string;
   hint: string;
   shortcut: string;
 }
@@ -65,6 +74,7 @@ interface PredictButtonProps extends Omit<PredictionBarProps, 'blueTeam' | 'redT
 function PredictButton({
   side,
   team,
+  tag,
   hint,
   shortcut,
   prediction,
@@ -95,6 +105,7 @@ function PredictButton({
       onClick={() => onPredict(side)}
       aria-pressed={chosen}
     >
+      <TeamLogo teamName={team} tag={tag} size="md" className="predict-logo" />
       <span className="predict-hint">{hint}</span>
       <span className="predict-team">{team}</span>
       <span className="predict-shortcut" aria-hidden="true">

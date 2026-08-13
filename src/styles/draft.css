@@ -109,33 +109,6 @@
   text-overflow: ellipsis;
 }
 
-.side-tag {
-  display: inline-grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  flex: none;
-  border-radius: var(--radius);
-  border: 1px solid var(--line-strong);
-  background: var(--bg-deep);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.draft-side--blue .side-tag {
-  border-color: rgba(61, 139, 253, 0.45);
-  color: var(--blue-bright);
-  box-shadow: inset 0 0 22px -8px var(--blue-glow);
-}
-
-.draft-side--red .side-tag {
-  border-color: rgba(255, 70, 85, 0.45);
-  color: var(--red-bright);
-  box-shadow: inset 0 0 22px -8px var(--red-glow);
-}
-
 /* Bans -------------------------------------------------------------- */
 
 .bans {
@@ -493,12 +466,6 @@
   height: 28px;
 }
 
-.draft.is-compact .side-tag {
-  width: 34px;
-  height: 34px;
-  font-size: 11px;
-}
-
 .draft.is-compact .side-team {
   font-size: 14px;
 }
@@ -613,5 +580,94 @@
   .pick-player {
     font-size: 10px;
     letter-spacing: 0.01em;
+  }
+}
+
+/* Team logos --------------------------------------------------------- */
+
+/*
+ * Renders either a downloaded logo or the derived monogram. Both branches use
+ * the same box so the header never reflows when `npm run assets` has (or
+ * hasn't) been run.
+ */
+.team-logo {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-deep);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+
+.team-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 12%;
+}
+
+.team-logo--sm {
+  width: 30px;
+  height: 30px;
+  font-size: 10px;
+}
+
+.team-logo--md {
+  width: 38px;
+  height: 38px;
+  font-size: 11px;
+}
+
+.team-logo--lg {
+  width: 52px;
+  height: 52px;
+  font-size: 13px;
+}
+
+/* The side header slot keeps its blue/red identity ring. */
+.draft-side--blue .side-tag {
+  border-color: rgba(61, 139, 253, 0.45);
+  color: var(--blue-bright);
+  box-shadow: inset 0 0 22px -8px var(--blue-glow);
+}
+
+.draft-side--red .side-tag {
+  border-color: rgba(255, 70, 85, 0.45);
+  color: var(--red-bright);
+  box-shadow: inset 0 0 22px -8px var(--red-glow);
+}
+
+.draft-center-tags .team-logo {
+  border-color: var(--line);
+}
+
+.draft-center-tags .team-logo.is-monogram:first-child {
+  color: var(--blue-bright);
+}
+
+.draft-center-tags .team-logo.is-monogram:last-child {
+  color: var(--red-bright);
+}
+
+.draft.is-compact .team-logo--lg {
+  width: 36px;
+  height: 36px;
+  font-size: 11px;
+}
+
+.draft.is-compact .team-logo--sm {
+  width: 26px;
+  height: 26px;
+  font-size: 9px;
+}
+
+@media (max-width: 620px) {
+  .team-logo--lg {
+    width: 42px;
+    height: 42px;
   }
 }

@@ -25,10 +25,12 @@ npm run build      # typecheck + production bundle into dist/
 npm run preview    # serve the production build
 npm test           # vitest
 npm run typecheck
+npm run assets     # download champion art + team logos into public/assets/
 ```
 
 No backend, no API keys, no build-time data step. The app boots on a bundled
-synthetic dataset so every screen works immediately.
+synthetic dataset so every screen works immediately, pulling champion art from
+Riot's CDN until you download it locally with `npm run assets`.
 
 ---
 
@@ -135,18 +137,57 @@ sample for the patch is used instead so the panel never shows noise.
 
 ---
 
-## Champion art
+## Images
 
-Portraits come from Riot's Data Dragon CDN. `src/domain/champions.ts` maps
-display names to asset ids — one rule (strip non-alphanumerics) plus a small
-table of irregulars (`Kai'Sa` → `Kaisa`, `Wukong` → `MonkeyKing`,
-`Nunu & Willump` → `Nunu`, …). Picks use tall loading art cropped to the
-head-and-shoulders; bans use square icons, desaturated, dimmed and struck
-through.
+```bash
+npm run assets              # champion art + team logos
+npm run assets:champions
+npm run assets:teams
+npm run assets -- --force   # re-download files that already exist
+```
 
-If the CDN is unreachable or a champion has no art, cards fall back to a
-deterministic colored plate with the champion's initials, so the draft stays
-readable offline.
+Everything lands in `public/assets/`, which is empty on a fresh clone:
+
+```
+champions/portrait/<ChampionId>.jpg   tall art, cropped to the face on pick cards
+champions/icon/<ChampionId>.png       square face icon, for bans and the meta panel
+teams/<team-slug>.png                 team logo
+```
+
+**Champions** come from Riot's [Data Dragon](https://developer.riotgames.com/docs/lol#data-dragon)
+— every champion on the current patch, both sizes. `src/domain/champions.ts`
+maps display names to asset ids with one rule (strip non-alphanumerics) plus a
+small table of irregulars (`Kai'Sa` → `Kaisa`, `Wukong` → `MonkeyKing`,
+`Nunu & Willump` → `Nunu`, …).
+
+**Team logos** come from [Leaguepedia](https://lol.fandom.com) via its MediaWiki
+API: the `Teams` Cargo table gives each org's logo file, which a second call
+resolves to a download URL. Edit `scripts/teams.json` to change which teams are
+fetched — teams that can't be resolved are listed at the end of the run and
+simply keep their monogram.
+
+The script is re-runnable (existing files are skipped), writes
+`src/assets/assetManifest.json` describing what it got, and can be pointed at a
+mirror with `DRAFTCALL_DDRAGON_BASE` / `DRAFTCALL_FANDOM_API`. Expect roughly
+10 MB for ~170 champions plus a few hundred KB of logos.
+
+### Face-focused crops
+
+Data Dragon's loading art is a full-body portrait whose aspect ratio is close to
+the pick card's, so `object-fit: cover` alone would barely crop it and every
+champion would read as a small full-body figure. The card oversizes the image to
+156% and anchors it to the top, zooming into the head-and-shoulders — the
+treatment a broadcast draft uses. Bans use the square face icon instead,
+desaturated, dimmed and struck through so they read as removed while staying
+recognizable.
+
+### Nothing here is required
+
+Assets are a convenience, not a dependency. Champion art falls back to Riot's
+CDN and then to a colored plate with the champion's initials; team logos fall
+back to the team's derived monogram tag. A skipped, partial or failed download
+degrades rather than breaking the draft — which is also why the repo ships with
+an empty manifest and still works.
 
 ---
 
@@ -169,8 +210,11 @@ mode" branch anywhere downstream.
 ## Project structure
 
 ```
+public/assets/     champion art + team logos (populated by `npm run assets`)
+scripts/           asset downloader + the team list it reads
 src/
-  domain/          types, competition registry, champion identity + art
+  assets/          local-asset manifest
+  domain/          types, competition registry, champion + team identity/art
   data/            Oracle's Elixir schema, CSV parsing, ingestion, stage
                    inference, synthetic demo dataset
   quiz/            seeded RNG, config, question generation, scoring,
@@ -227,4 +271,8 @@ meta aggregation, and leaderboard ranking/filtering.
 ---
 
 Not endorsed by Riot Games. Champion art © Riot Games, served via Data Dragon.
-Team and player names belong to their organizations.
+Team logos are the trademarks of their respective organizations and are shown to
+identify the teams in a match — they are not covered by Leaguepedia's CC
+license. Empty `scripts/teams.json` and re-run the script for a build without
+them; the monogram fallback covers it. Team and player names belong to their
+organizations.

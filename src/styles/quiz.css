@@ -212,6 +212,12 @@
   box-shadow: 0 16px 40px -22px var(--red-glow);
 }
 
+/* Logo sits above the side label inside the button's column layout. */
+.predict-logo {
+  position: relative;
+  margin-bottom: 6px;
+}
+
 .predict-hint {
   position: relative;
   font-size: 10px;
