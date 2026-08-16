@@ -8,6 +8,7 @@ import './styles/base.css';
 import './styles/layout.css';
 import './styles/draft.css';
 import './styles/quiz.css';
+import './styles/predictor.css';
 import './styles/pages.css';
 
 const container = document.getElementById('root');

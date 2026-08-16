@@ -54,6 +54,12 @@ export const COLUMN_ALIASES = {
   seriesFormat: ['seriesformat', 'bestof', 'format', 'seriestype'],
   bans: ['ban1', 'ban2', 'ban3', 'ban4', 'ban5'],
   picks: ['pick1', 'pick2', 'pick3', 'pick4', 'pick5'],
+  /**
+   * Optional: gold difference at fixed minute marks, on the team rows.
+   * The predictor reads these to tell a team that throws leads apart from one
+   * that wins from behind; files without them simply lose those two reads.
+   */
+  goldDiff: ['golddiffat10', 'golddiffat15', 'golddiffat20', 'golddiffat25'],
 } as const;
 
 export type LogicalField = keyof typeof COLUMN_ALIASES;
@@ -77,23 +83,31 @@ export type RawRow = Record<ColumnKey, string>;
 export type ColumnMap = Partial<Record<LogicalField, ColumnKey>> & {
   banColumns: ColumnKey[];
   pickColumns: ColumnKey[];
+  goldDiffColumns: ColumnKey[];
 };
+
+/** Fields whose aliases are a list of sibling columns, not preference order. */
+const MULTI_COLUMN_FIELDS = new Set<LogicalField>(['bans', 'picks', 'goldDiff']);
 
 export function buildColumnMap(headers: string[]): ColumnMap {
   const present = new Set(headers.map(normalizeHeader));
-  const map: ColumnMap = { banColumns: [], pickColumns: [] };
+  const map: ColumnMap = { banColumns: [], pickColumns: [], goldDiffColumns: [] };
 
   for (const [field, aliases] of Object.entries(COLUMN_ALIASES) as [
     LogicalField,
     readonly string[],
   ][]) {
-    if (field === 'bans' || field === 'picks') continue;
+    if (MULTI_COLUMN_FIELDS.has(field)) continue;
     const hit = aliases.map(normalizeHeader).find((alias) => present.has(alias));
     if (hit) map[field] = hit;
   }
 
-  map.banColumns = COLUMN_ALIASES.bans.map(normalizeHeader).filter((c) => present.has(c));
-  map.pickColumns = COLUMN_ALIASES.picks.map(normalizeHeader).filter((c) => present.has(c));
+  const columnsFor = (aliases: readonly string[]): ColumnKey[] =>
+    aliases.map(normalizeHeader).filter((c) => present.has(c));
+
+  map.banColumns = columnsFor(COLUMN_ALIASES.bans);
+  map.pickColumns = columnsFor(COLUMN_ALIASES.picks);
+  map.goldDiffColumns = columnsFor(COLUMN_ALIASES.goldDiff);
   return map;
 }
 

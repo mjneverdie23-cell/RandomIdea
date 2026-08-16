@@ -8,6 +8,7 @@ import { YearBar } from '../components/data/YearBar.tsx';
 import type { StorageBackend } from '../storage/datasetStore.ts';
 import type { YearDataset } from '../domain/types.ts';
 import { useDataset, type ImportProgress, type ImportResult } from '../state/DatasetContext.tsx';
+import { usePredictor, type RatingsImportReport } from '../state/PredictorContext.tsx';
 
 type ImportState =
   | { kind: 'idle' }
@@ -215,6 +216,8 @@ export function DataPage() {
 
         <ImageAssetsCard />
 
+        <TeamRatingsCard />
+
         <section className="panel">
           <div className="panel-header">
             <h2>Competition filter</h2>
@@ -283,6 +286,116 @@ export function DataPage() {
  * CDN and teams fall back to a monogram — but "why are there no logos?" is a
  * reasonable question, so it gets answered here rather than only in the README.
  */
+/**
+ * The predictor's optional ratings file.
+ *
+ * GlobalRank and Fraud are hand-maintained judgements that appear nowhere in an
+ * Oracle's Elixir export, so this stays optional: without it the predictor
+ * simply awards no rank edge and no fraud penalty, and says so in its output.
+ */
+function TeamRatingsCard() {
+  const { ratings, importRatings, clearRatings } = usePredictor();
+  const [report, setReport] = useState<RatingsImportReport | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setReport(await importRatings(file));
+    setBusy(false);
+  };
+
+  return (
+    <section className="panel ratings-card">
+      <div className="panel-header">
+        <h2>Team ratings</h2>
+        {ratings ? (
+          <span className="badge badge-strong">{ratings.teams.length} teams</span>
+        ) : (
+          <span className="badge">Optional</span>
+        )}
+      </div>
+      <div className="panel-pad">
+        <p className="dim">
+          A champion-pool CSV with <code>teamName</code>, <code>GlobalRank</code> and{' '}
+          <code>Fraud</code> columns. The predictor uses it for the rank edge and the fraud
+          penalty; every other number it reports comes from the imported seasons.
+        </p>
+
+        <div className="ratings-summary">
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+          >
+            {busy ? 'Reading…' : ratings ? 'Replace file' : 'Choose file'}
+          </button>
+          {ratings && (
+            <>
+              <span className="dim">
+                {ratings.label} · imported {formatDate(ratings.importedAt)}
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => {
+                  void clearRatings();
+                  setReport(null);
+                }}
+              >
+                Remove
+              </button>
+            </>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,text/csv"
+            hidden
+            onChange={(event) => {
+              void onFile(event.target.files?.[0]);
+              event.target.value = '';
+            }}
+          />
+        </div>
+
+        {report && (
+          <p className={report.ok ? 'ratings-report is-ok' : 'ratings-report is-warn'}>
+            {report.message}
+            {report.detail && <span className="dim"> {report.detail}</span>}
+          </p>
+        )}
+
+        {ratings && ratings.teams.length > 0 && (
+          <table className="ratings-table">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Global rank</th>
+                <th>Fraud</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ratings.teams.slice(0, 12).map((rating) => (
+                <tr key={rating.team}>
+                  <td>{rating.team}</td>
+                  <td>{rating.globalRank ?? '—'}</td>
+                  <td>{rating.fraud || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {ratings && ratings.teams.length > 12 && (
+          <p className="dim">…and {ratings.teams.length - 12} more.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ImageAssetsCard() {
   const assets = assetStats();
   const hasChampions = assets.champions > 0;

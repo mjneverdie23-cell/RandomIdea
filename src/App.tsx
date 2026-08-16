@@ -2,40 +2,45 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { NavBar } from './components/layout/NavBar.tsx';
 import { DatasetProvider, useDataset } from './state/DatasetContext.tsx';
 import { QuizProvider } from './state/QuizContext.tsx';
+import { PredictorProvider } from './state/PredictorContext.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { SetupPage } from './pages/SetupPage.tsx';
 import { QuizPage } from './pages/QuizPage.tsx';
 import { ResultsPage } from './pages/ResultsPage.tsx';
 import { LeaderboardPage } from './pages/LeaderboardPage.tsx';
 import { DataPage } from './pages/DataPage.tsx';
+import { PredictorPage } from './pages/PredictorPage.tsx';
 
 export default function App() {
   return (
     <DatasetProvider>
       <QuizProvider>
-        <NavBar />
-        <main className="app-main">
-          <DatasetGate>
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/setup" element={<SetupPage />} />
-              <Route path="/quiz" element={<QuizPage />} />
-              <Route path="/results" element={<ResultsPage />} />
-              <Route path="/leaderboard" element={<LeaderboardPage />} />
-              <Route path="/data" element={<DataPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </DatasetGate>
-        </main>
-        <footer className="app-footer">
-          <span>
-            DraftCall · built for Oracle’s Elixir exports · champion art © Riot Games via Data
-            Dragon
-          </span>
-          <span className="dim">
-            Not endorsed by Riot Games. Team and player names belong to their organizations.
-          </span>
-        </footer>
+        <PredictorProvider>
+          <NavBar />
+          <main className="app-main">
+            <DatasetGate>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/setup" element={<SetupPage />} />
+                <Route path="/quiz" element={<QuizPage />} />
+                <Route path="/results" element={<ResultsPage />} />
+                <Route path="/predictor" element={<PredictorPage />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/data" element={<DataPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </DatasetGate>
+          </main>
+          <footer className="app-footer">
+            <span>
+              DraftCall · built for Oracle’s Elixir exports · champion art © Riot Games via Data
+              Dragon
+            </span>
+            <span className="dim">
+              Not endorsed by Riot Games. Team and player names belong to their organizations.
+            </span>
+          </footer>
+        </PredictorProvider>
       </QuizProvider>
     </DatasetProvider>
   );

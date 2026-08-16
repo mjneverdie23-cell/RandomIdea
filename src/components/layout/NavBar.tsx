@@ -6,6 +6,7 @@ import { formatCount } from '../../lib/format.ts';
 const LINKS = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/setup', label: 'Play' },
+  { to: '/predictor', label: 'Predictor' },
   { to: '/leaderboard', label: 'Leaderboard' },
   { to: '/data', label: 'Data' },
 ] as const;

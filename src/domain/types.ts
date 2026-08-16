@@ -54,6 +54,21 @@ export interface TeamSide {
   tag: string;
   players: PlayerSlot[];
   bans: Champion[];
+  /**
+   * Gold swing across the 10/15/20/25-minute marks, from this side's point of
+   * view. `null` when the export omits those columns, and absent entirely on
+   * games imported before this was captured — either way the predictor skips
+   * its throw/comeback reads rather than guessing.
+   */
+  goldDiff?: GoldDiffTrack | null;
+}
+
+/** Gold lead (positive) or deficit (negative) at fixed minute marks. */
+export interface GoldDiffTrack {
+  /** Largest lead held at any checkpoint. */
+  peak: number;
+  /** Deepest deficit faced at any checkpoint. */
+  trough: number;
 }
 
 /** Competition bucket the game belongs to. Ids are stable and used in URLs. */

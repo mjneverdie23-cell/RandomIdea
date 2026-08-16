@@ -1,0 +1,629 @@
+/**
+ * Build the predictor's model from the games already in the app.
+ *
+ * The original predictor shipped a batch step that turned an Oracle's Elixir
+ * export into four cached artifacts (a match-data workbook, a team-info
+ * workbook, a meta-champion list and a behaviour blob) and read those back at
+ * launch. DraftCall already ingests the same export into `Game[]`, so all four
+ * are computed here instead — no cache files, no rebuild step, and the
+ * predictor reflects whichever seasons are switched on at that moment.
+ *
+ * Two different time scopes are used on purpose:
+ *
+ * - **Champion win rates** span every enabled season. How well a team plays a
+ *   champion is a durable skill signal, and thin samples are the main way this
+ *   model goes wrong, so it gets all the data available.
+ * - **Standings and behaviour** cover the most recent season only. These are
+ *   current-form reads; a 2022 record says nothing about how a team is playing
+ *   now, and averaging five seasons together would wash out exactly the signal
+ *   they exist to provide.
+ */
+
+import { comparePatches } from '../data/ingest.ts';
+import { makeSeriesKey, partitionSeries } from '../data/stage.ts';
+import { ROLES, type Champion, type CompetitionId, type Game, type Role, type Side } from '../domain/types.ts';
+import { anywhereKey, recordKey } from './engine.ts';
+import type {
+  PredictorModel,
+  StandingRow,
+  TeamBehavior,
+  TeamRating,
+  WinLoss,
+} from './types.ts';
+
+/** How many of the newest patches define the current meta. */
+export const META_PATCH_COUNT = 2;
+/** Share of games a champion must be picked in to count as meta. */
+export const META_PICK_RATE = 0.05;
+/** Below this many observations a rate is reported as unknown, not as a number. */
+export const MIN_SAMPLE = 4;
+/** Games in the recency-weighted form window. */
+export const FORM_WINDOW = 8;
+/** Gold lead that counts as decisive for the throw/comeback reads. */
+export const DECISIVE_GOLD = 2500;
+
+function bump(map: Map<string, WinLoss>, key: string, won: boolean): void {
+  const record = map.get(key);
+  if (record) {
+    record.games += 1;
+    if (won) record.wins += 1;
+  } else {
+    map.set(key, { games: 1, wins: won ? 1 : 0 });
+  }
+}
+
+function rate(wins: number, total: number): number | null {
+  return total >= MIN_SAMPLE ? wins / total : null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Champion records                                                    */
+/* ------------------------------------------------------------------ */
+
+function buildChampionRecords(games: readonly Game[]): {
+  scoped: Map<string, WinLoss>;
+  anywhere: Map<string, WinLoss>;
+} {
+  const scoped = new Map<string, WinLoss>();
+  const anywhere = new Map<string, WinLoss>();
+
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      const won = game.winner === side.side;
+      for (const player of side.players) {
+        const { role, champion } = player;
+        bump(scoped, recordKey(game.competition, side.teamName, role, champion.id), won);
+        bump(anywhere, anywhereKey(side.teamName, role, champion.id), won);
+      }
+    }
+  }
+  return { scoped, anywhere };
+}
+
+/* ------------------------------------------------------------------ */
+/* Meta                                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Meta = picked often enough on the newest patches, computed per role.
+ *
+ * This is pick-frequency meta, not win-rate meta: the question the score asks
+ * is "did they draft what everyone is drafting", and a champion can be
+ * contested constantly while sitting at a 48% win rate.
+ */
+export function deriveMeta(games: readonly Game[]): {
+  metaByRole: Map<Role, Set<string>>;
+  patches: string[];
+} {
+  const patches = [...new Set(games.map((g) => g.patch).filter((p): p is string => p !== null))].sort(
+    comparePatches,
+  );
+  const recentPatches = patches.slice(0, META_PATCH_COUNT);
+  const wanted = new Set(recentPatches);
+
+  const recent = wanted.size ? games.filter((g) => g.patch && wanted.has(g.patch)) : games;
+
+  const counts = new Map<Role, Map<string, number>>();
+  for (const role of ROLES) counts.set(role, new Map());
+
+  for (const game of recent) {
+    for (const side of [game.blue, game.red] as const) {
+      for (const player of side.players) {
+        const perRole = counts.get(player.role)!;
+        perRole.set(player.champion.id, (perRole.get(player.champion.id) ?? 0) + 1);
+      }
+    }
+  }
+
+  const metaByRole = new Map<Role, Set<string>>();
+  for (const role of ROLES) {
+    const keep = new Set<string>();
+    // Presence per game, so a champion picked by both teams counts twice —
+    // being contested on both sides is the strongest meta signal there is.
+    for (const [championId, picks] of counts.get(role)!) {
+      if (recent.length > 0 && picks / recent.length >= META_PICK_RATE) keep.add(championId);
+    }
+    metaByRole.set(role, keep);
+  }
+
+  return { metaByRole, patches: recentPatches };
+}
+
+/* ------------------------------------------------------------------ */
+/* Series reconstruction                                               */
+/* ------------------------------------------------------------------ */
+
+interface SeriesRun {
+  competition: CompetitionId;
+  games: Game[];
+  teams: [string, string];
+}
+
+function seriesRuns(games: readonly Game[]): SeriesRun[] {
+  const members = games.map((game) => ({
+    gameId: game.gameId,
+    seriesKey: makeSeriesKey({
+      competition: game.competition,
+      season: game.season,
+      split: game.split,
+      playoffs: game.stage.kind !== 'regular',
+      teamA: game.blue.teamName,
+      teamB: game.red.teamName,
+    }),
+    gameNumber: game.gameNumber,
+    timestamp: Date.parse(game.date),
+    game,
+  }));
+
+  const runs: SeriesRun[] = [];
+  for (const run of partitionSeries(members)) {
+    const ordered = run.map((m) => m.game);
+    const first = ordered[0];
+    if (!first) continue;
+    runs.push({
+      competition: first.competition,
+      games: ordered,
+      teams: [first.blue.teamName, first.red.teamName],
+    });
+  }
+  return runs;
+}
+
+/** Games each team won inside one series. */
+function seriesTally(run: SeriesRun): Map<string, number> {
+  const wins = new Map<string, number>([
+    [run.teams[0], 0],
+    [run.teams[1], 0],
+  ]);
+  for (const game of run.games) {
+    const winner = game.winner === 'blue' ? game.blue.teamName : game.red.teamName;
+    wins.set(winner, (wins.get(winner) ?? 0) + 1);
+  }
+  return wins;
+}
+
+/* ------------------------------------------------------------------ */
+/* Standings                                                           */
+/* ------------------------------------------------------------------ */
+
+interface StandingAcc {
+  seriesWon: number;
+  seriesLost: number;
+  gamesWon: number;
+  gamesLost: number;
+  sequence: string[];
+}
+
+function blankStanding(): StandingAcc {
+  return { seriesWon: 0, seriesLost: 0, gamesWon: 0, gamesLost: 0, sequence: [] };
+}
+
+/** Current run of the same result, e.g. `3W`. */
+export function streakOf(sequence: readonly string[]): string {
+  if (sequence.length === 0) return '';
+  const last = sequence[sequence.length - 1]!;
+  let n = 0;
+  for (let i = sequence.length - 1; i >= 0 && sequence[i] === last; i -= 1) n += 1;
+  return `${n}${last}`;
+}
+
+function rankRows(scope: Map<string, StandingAcc>): Map<string, StandingRow> {
+  const pct = (w: number, l: number): number => (w + l > 0 ? w / (w + l) : 0);
+  const rows = [...scope.entries()].map(([team, acc]) => ({
+    team,
+    rank: 0,
+    seriesWon: acc.seriesWon,
+    seriesLost: acc.seriesLost,
+    seriesPct: pct(acc.seriesWon, acc.seriesLost),
+    gamesWon: acc.gamesWon,
+    gamesLost: acc.gamesLost,
+    gamePct: pct(acc.gamesWon, acc.gamesLost),
+    streak: streakOf(acc.sequence),
+  }));
+
+  rows.sort(
+    (a, b) => b.seriesPct - a.seriesPct || b.gamePct - a.gamePct || b.seriesWon - a.seriesWon,
+  );
+  rows.forEach((row, index) => {
+    row.rank = index + 1;
+  });
+
+  return new Map(rows.map((row) => [row.team.toLowerCase(), row]));
+}
+
+function deriveStandings(runs: readonly SeriesRun[]): {
+  byCompetition: Map<CompetitionId, Map<string, StandingRow>>;
+  overall: Map<string, StandingRow>;
+} {
+  const perCompetition = new Map<CompetitionId, Map<string, StandingAcc>>();
+  const overall = new Map<string, StandingAcc>();
+
+  const ordered = [...runs].sort(
+    (a, b) => Date.parse(a.games[0]!.date) - Date.parse(b.games[0]!.date),
+  );
+
+  for (const run of ordered) {
+    const wins = seriesTally(run);
+    const [teamA, teamB] = run.teams;
+    const winsA = wins.get(teamA) ?? 0;
+    const winsB = wins.get(teamB) ?? 0;
+    if (winsA === 0 && winsB === 0) continue;
+    const winner = winsA > winsB ? teamA : teamB;
+
+    let competitionScope = perCompetition.get(run.competition);
+    if (!competitionScope) {
+      competitionScope = new Map();
+      perCompetition.set(run.competition, competitionScope);
+    }
+
+    for (const scope of [competitionScope, overall]) {
+      for (const [team, own, against] of [
+        [teamA, winsA, winsB],
+        [teamB, winsB, winsA],
+      ] as const) {
+        let acc = scope.get(team);
+        if (!acc) {
+          acc = blankStanding();
+          scope.set(team, acc);
+        }
+        acc.gamesWon += own;
+        acc.gamesLost += against;
+        if (team === winner) {
+          acc.seriesWon += 1;
+          acc.sequence.push('W');
+        } else {
+          acc.seriesLost += 1;
+          acc.sequence.push('L');
+        }
+      }
+    }
+  }
+
+  const byCompetition = new Map<CompetitionId, Map<string, StandingRow>>();
+  for (const [competition, scope] of perCompetition) {
+    byCompetition.set(competition, rankRows(scope));
+  }
+  return { byCompetition, overall: rankRows(overall) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Behaviour                                                           */
+/* ------------------------------------------------------------------ */
+
+interface TeamGame {
+  timestamp: number;
+  side: Side;
+  won: boolean;
+  peakGold: number | null;
+  troughGold: number | null;
+}
+
+interface SeriesAcc {
+  matchPointWon: number;
+  matchPointSeen: number;
+  deciderWon: number;
+  deciderSeen: number;
+  chokeWon: number;
+  chokeSeen: number;
+  game1Won: number;
+  game1Seen: number;
+}
+
+function blankSeriesAcc(): SeriesAcc {
+  return {
+    matchPointWon: 0,
+    matchPointSeen: 0,
+    deciderWon: 0,
+    deciderSeen: 0,
+    chokeWon: 0,
+    chokeSeen: 0,
+    game1Won: 0,
+    game1Seen: 0,
+  };
+}
+
+function deriveBehavior(games: readonly Game[], runs: readonly SeriesRun[]): Map<string, TeamBehavior> {
+  const perTeam = new Map<string, TeamGame[]>();
+  const displayName = new Map<string, string>();
+
+  for (const game of games) {
+    const timestamp = Date.parse(game.date);
+    for (const side of [game.blue, game.red] as const) {
+      const key = side.teamName.toLowerCase();
+      displayName.set(key, side.teamName);
+      const bucket = perTeam.get(key) ?? [];
+      bucket.push({
+        timestamp,
+        side: side.side,
+        won: game.winner === side.side,
+        peakGold: side.goldDiff?.peak ?? null,
+        troughGold: side.goldDiff?.trough ?? null,
+      });
+      perTeam.set(key, bucket);
+    }
+  }
+
+  const seriesAcc = new Map<string, SeriesAcc>();
+  const accFor = (team: string): SeriesAcc => {
+    const key = team.toLowerCase();
+    let acc = seriesAcc.get(key);
+    if (!acc) {
+      acc = blankSeriesAcc();
+      seriesAcc.set(key, acc);
+    }
+    return acc;
+  };
+
+  for (const run of runs) {
+    const [teamA, teamB] = run.teams;
+    const ordered = [...run.games].sort(
+      (a, b) => Date.parse(a.date) - Date.parse(b.date) || a.gameNumber - b.gameNumber,
+    );
+
+    // A best-of-5 is decided at 3 wins; anything shorter at 2.
+    const target = ordered.some((g) => g.seriesFormat === 'BO5' || g.gameNumber >= 4) ? 3 : 2;
+
+    const wins = new Map<string, number>([
+      [teamA, 0],
+      [teamB, 0],
+    ]);
+    let previousWinner: string | null = null;
+
+    for (const game of ordered) {
+      const winner = game.winner === 'blue' ? game.blue.teamName : game.red.teamName;
+      if (!wins.has(winner)) continue;
+
+      if (game.gameNumber === 1) {
+        for (const team of [teamA, teamB]) {
+          const acc = accFor(team);
+          acc.game1Seen += 1;
+          if (team === winner) acc.game1Won += 1;
+        }
+      }
+
+      // Anyone one win from taking the series is closing it out this game.
+      for (const team of [teamA, teamB]) {
+        if (wins.get(team) === target - 1) {
+          const acc = accFor(team);
+          acc.matchPointSeen += 1;
+          if (team === winner) acc.matchPointWon += 1;
+        }
+      }
+
+      if (wins.get(teamA) === target - 1 && wins.get(teamB) === target - 1) {
+        for (const team of [teamA, teamB]) {
+          const acc = accFor(team);
+          acc.deciderSeen += 1;
+          if (team === winner) acc.deciderWon += 1;
+        }
+      }
+
+      // Game 5 for the side that just dropped game 4 from a 2-1 lead.
+      if (target === 3 && game.gameNumber === 5 && previousWinner !== null) {
+        const gameFourLoser: string = previousWinner === teamA ? teamB : teamA;
+        const acc = accFor(gameFourLoser);
+        acc.chokeSeen += 1;
+        if (gameFourLoser === winner) acc.chokeWon += 1;
+      }
+
+      wins.set(winner, (wins.get(winner) ?? 0) + 1);
+      previousWinner = winner;
+    }
+  }
+
+  const behavior = new Map<string, TeamBehavior>();
+  for (const [key, entries] of perTeam) {
+    entries.sort((a, b) => a.timestamp - b.timestamp);
+    const results: number[] = entries.map((entry) => (entry.won ? 1 : 0));
+    const total = results.length;
+
+    const tail = results.slice(-FORM_WINDOW);
+    let weighted: number | null = null;
+    if (tail.length) {
+      let numerator = 0;
+      let denominator = 0;
+      tail.forEach((result, index) => {
+        const weight = index + 1;
+        numerator += result * weight;
+        denominator += weight;
+      });
+      weighted = numerator / denominator;
+    }
+
+    const blue = entries.filter((e) => e.side === 'blue');
+    const red = entries.filter((e) => e.side === 'red');
+
+    const withGold = entries.filter((e) => e.peakGold !== null && e.troughGold !== null);
+    const bigLeads = withGold.filter((e) => e.peakGold! >= DECISIVE_GOLD);
+    const deficits = withGold.filter((e) => e.troughGold! <= -DECISIVE_GOLD);
+
+    const afterLoss: number[] = [];
+    for (let i = 0; i < total - 1; i += 1) {
+      if (results[i] === 0) afterLoss.push(results[i + 1]!);
+    }
+
+    const acc = seriesAcc.get(key) ?? blankSeriesAcc();
+
+    behavior.set(key, {
+      games: total,
+      winRate: rate(
+        results.reduce((sum, r) => sum + r, 0),
+        total,
+      ),
+      recentForm: weighted,
+      blueWinRate: rate(blue.filter((e) => e.won).length, blue.length),
+      redWinRate: rate(red.filter((e) => e.won).length, red.length),
+      throwRate: rate(bigLeads.filter((e) => !e.won).length, bigLeads.length),
+      throwSample: bigLeads.length,
+      comebackRate: rate(deficits.filter((e) => e.won).length, deficits.length),
+      comebackSample: deficits.length,
+      bouncebackRate: rate(
+        afterLoss.reduce((sum, r) => sum + r, 0),
+        afterLoss.length,
+      ),
+      deciderRate: rate(acc.deciderWon, acc.deciderSeen),
+      matchPointCloseRate: rate(acc.matchPointWon, acc.matchPointSeen),
+      // Two attempts is a thin sample, but choking a 2-1 lead is rare enough
+      // that waiting for four would report nothing for almost every team.
+      chokeRate: acc.chokeSeen >= 2 ? acc.chokeWon / acc.chokeSeen : null,
+      chokeSample: acc.chokeSeen,
+      game1Rate: rate(acc.game1Won, acc.game1Seen),
+    });
+  }
+
+  return behavior;
+}
+
+/* ------------------------------------------------------------------ */
+/* Rosters, teams, champion pools                                      */
+/* ------------------------------------------------------------------ */
+
+/** Starters, taken from each team's most recent game. */
+function deriveRosters(games: readonly Game[]): Map<string, Partial<Record<Role, string>>> {
+  const rosters = new Map<string, Partial<Record<Role, string>>>();
+  const seenAt = new Map<string, number>();
+
+  for (const game of games) {
+    const timestamp = Date.parse(game.date);
+    for (const side of [game.blue, game.red] as const) {
+      const key = side.teamName.toLowerCase();
+      if ((seenAt.get(key) ?? -Infinity) >= timestamp) continue;
+      seenAt.set(key, timestamp);
+      const roster: Partial<Record<Role, string>> = {};
+      for (const player of side.players) roster[player.role] = player.playerName;
+      rosters.set(key, roster);
+    }
+  }
+  return rosters;
+}
+
+function deriveTeams(games: readonly Game[]): {
+  byCompetition: Map<CompetitionId, string[]>;
+  all: string[];
+} {
+  const byCompetition = new Map<CompetitionId, Set<string>>();
+  const all = new Set<string>();
+
+  for (const game of games) {
+    let bucket = byCompetition.get(game.competition);
+    if (!bucket) {
+      bucket = new Set();
+      byCompetition.set(game.competition, bucket);
+    }
+    for (const side of [game.blue, game.red] as const) {
+      bucket.add(side.teamName);
+      all.add(side.teamName);
+    }
+  }
+
+  const sorted = new Map<CompetitionId, string[]>();
+  for (const [competition, teams] of byCompetition) {
+    sorted.set(competition, [...teams].sort((a, b) => a.localeCompare(b)));
+  }
+  return { byCompetition: sorted, all: [...all].sort((a, b) => a.localeCompare(b)) };
+}
+
+/**
+ * Champions to offer per role, ordered by how often they are actually picked
+ * there. Derived rather than hardcoded, so a new champion becomes selectable
+ * as soon as it shows up in an imported season.
+ */
+function deriveChampionPools(games: readonly Game[]): Map<Role, Champion[]> {
+  const counts = new Map<Role, Map<string, { champion: Champion; picks: number }>>();
+  for (const role of ROLES) counts.set(role, new Map());
+
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      for (const player of side.players) {
+        const perRole = counts.get(player.role)!;
+        const entry = perRole.get(player.champion.id);
+        if (entry) entry.picks += 1;
+        else perRole.set(player.champion.id, { champion: player.champion, picks: 1 });
+      }
+    }
+  }
+
+  const pools = new Map<Role, Champion[]>();
+  for (const role of ROLES) {
+    const entries = [...counts.get(role)!.values()];
+    entries.sort((a, b) => b.picks - a.picks || a.champion.name.localeCompare(b.champion.name));
+    pools.set(
+      role,
+      entries.map((entry) => entry.champion),
+    );
+  }
+  return pools;
+}
+
+/* ------------------------------------------------------------------ */
+/* Entry point                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Most recent season present, which scopes the current-form reads. */
+export function latestSeason(games: readonly Game[]): string | null {
+  let latest: string | null = null;
+  for (const game of games) {
+    if (latest === null || game.season > latest) latest = game.season;
+  }
+  return latest;
+}
+
+export function buildPredictorModel(
+  games: readonly Game[],
+  ratings: Map<string, TeamRating> = new Map(),
+): PredictorModel {
+  const { scoped, anywhere } = buildChampionRecords(games);
+  const { metaByRole, patches } = deriveMeta(games);
+
+  const formSeason = latestSeason(games);
+  const formGames = formSeason ? games.filter((game) => game.season === formSeason) : games;
+  const runs = seriesRuns(formGames);
+
+  const { byCompetition: standingsByCompetition, overall: standingsOverall } = deriveStandings(runs);
+  const { byCompetition: teamsByCompetition, all: allTeams } = deriveTeams(games);
+
+  return {
+    championRecord: scoped,
+    championRecordAnywhere: anywhere,
+    metaByRole,
+    metaPatches: patches,
+    metaPickRateThreshold: META_PICK_RATE,
+    behavior: deriveBehavior(formGames, runs),
+    standingsByCompetition,
+    standingsOverall,
+    formSeason,
+    rosters: deriveRosters(games),
+    teamsByCompetition,
+    allTeams,
+    championsByRole: deriveChampionPools(games),
+    ratings,
+    gamesAnalyzed: games.length,
+  };
+}
+
+/** An empty model, so the page can render before any data is loaded. */
+export function emptyPredictorModel(): PredictorModel {
+  const metaByRole = new Map<Role, Set<string>>();
+  const championsByRole = new Map<Role, Champion[]>();
+  for (const role of ROLES) {
+    metaByRole.set(role, new Set());
+    championsByRole.set(role, []);
+  }
+  return {
+    championRecord: new Map(),
+    championRecordAnywhere: new Map(),
+    metaByRole,
+    metaPatches: [],
+    metaPickRateThreshold: META_PICK_RATE,
+    behavior: new Map(),
+    standingsByCompetition: new Map(),
+    standingsOverall: new Map(),
+    formSeason: null,
+    rosters: new Map(),
+    teamsByCompetition: new Map(),
+    allTeams: [],
+    championsByRole,
+    ratings: new Map(),
+    gamesAnalyzed: 0,
+  };
+}

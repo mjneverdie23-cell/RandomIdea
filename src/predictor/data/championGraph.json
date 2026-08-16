@@ -1,0 +1,3098 @@
+{
+ "Aatrox": {
+  "name": "Aatrox",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Nasus"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Olaf",
+   "Fiora"
+  ],
+  "synergy": [
+   "Orianna",
+   "JarvanIV",
+   "Amumu"
+  ]
+ },
+ "Ahri": {
+  "name": "Ahri",
+  "counters": [
+   "Fizz",
+   "Talon",
+   "Zed"
+  ],
+  "counteredBy": [
+   "Syndra",
+   "Kassadin",
+   "Zoe"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "MonkeyKing"
+  ]
+ },
+ "Akali": {
+  "name": "Akali",
+  "counters": [
+   "Pantheon",
+   "Renekton",
+   "Irelia"
+  ],
+  "counteredBy": [
+   "Galio",
+   "Malzahar",
+   "Diana"
+  ],
+  "synergy": [
+   "Vi",
+   "Amumu",
+   "Leona"
+  ]
+ },
+ "Akshan": {
+  "name": "Akshan",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Malzahar",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Nautilus",
+   "Lulu"
+  ]
+ },
+ "Alistar": {
+  "name": "Alistar",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Zilean",
+   "Soraka",
+   "Karma"
+  ],
+  "synergy": [
+   "Draven",
+   "Samira",
+   "Kaisa"
+  ]
+ },
+ "Ambessa": {
+  "name": "Ambessa",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Amumu": {
+  "name": "Amumu",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Fizz",
+   "Akali",
+   "Talon"
+  ],
+  "synergy": [
+   "Orianna",
+   "Jinx",
+   "Veigar"
+  ]
+ },
+ "Anivia": {
+  "name": "Anivia",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Leblanc",
+   "Zoe",
+   "Talon"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Leona",
+   "Nautilus"
+  ]
+ },
+ "Annie": {
+  "name": "Annie",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Talon"
+  ],
+  "counteredBy": [
+   "Zoe",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "Amumu",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Aphelios": {
+  "name": "Aphelios",
+  "counters": [
+   "Alistar",
+   "Leona",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Braum"
+  ]
+ },
+ "Ashe": {
+  "name": "Ashe",
+  "counters": [
+   "Draven",
+   "Samira",
+   "Lucian"
+  ],
+  "counteredBy": [
+   "MissFortune",
+   "Ziggs",
+   "Corki"
+  ],
+  "synergy": [
+   "Thresh",
+   "Nautilus",
+   "Blitzcrank"
+  ]
+ },
+ "AurelionSol": {
+  "name": "Aurelion Sol",
+  "counters": [
+   "Kassadin",
+   "Fizz",
+   "Zed"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Leblanc",
+   "Talon"
+  ],
+  "synergy": [
+   "Vi",
+   "JarvanIV",
+   "MonkeyKing"
+  ]
+ },
+ "Aurora": {
+  "name": "Aurora",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Vex",
+   "Lissandra",
+   "Syndra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Nautilus"
+  ]
+ },
+ "Azir": {
+  "name": "Azir",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Leblanc"
+  ],
+  "counteredBy": [
+   "Ryze",
+   "Viktor",
+   "Cassiopeia"
+  ],
+  "synergy": [
+   "Vi",
+   "JarvanIV",
+   "Amumu"
+  ]
+ },
+ "Bard": {
+  "name": "Bard",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "Belveth": {
+  "name": "Bel'Veth",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Gragas",
+   "Rammus",
+   "Amumu"
+  ],
+  "synergy": [
+   "Orianna",
+   "Corki",
+   "Kaisa"
+  ]
+ },
+ "Blitzcrank": {
+  "name": "Blitzcrank",
+  "counters": [
+   "Thresh",
+   "Nautilus",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Senna",
+   "Zilean",
+   "Karma"
+  ],
+  "synergy": [
+   "Draven",
+   "MissFortune",
+   "Samira"
+  ]
+ },
+ "Brand": {
+  "name": "Brand",
+  "counters": [
+   "Thresh",
+   "Nautilus",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Zilean",
+   "Soraka",
+   "Karma"
+  ],
+  "synergy": [
+   "Kaisa",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "Braum": {
+  "name": "Braum",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Zyra"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Lulu"
+  ],
+  "synergy": [
+   "MissFortune",
+   "Aphelios",
+   "Lucian"
+  ]
+ },
+ "Briar": {
+  "name": "Briar",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Warwick"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Caitlyn": {
+  "name": "Caitlyn",
+  "counters": [
+   "Lucian",
+   "Samira",
+   "Ezreal"
+  ],
+  "counteredBy": [
+   "MissFortune",
+   "Draven",
+   "Samira"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Nautilus"
+  ]
+ },
+ "Camille": {
+  "name": "Camille",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Kayle"
+  ],
+  "synergy": [
+   "Orianna",
+   "JarvanIV",
+   "Vi"
+  ]
+ },
+ "Cassiopeia": {
+  "name": "Cassiopeia",
+  "counters": [
+   "Zed",
+   "Talon",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ryze",
+   "Azir",
+   "Viktor"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Amumu",
+   "Vi"
+  ]
+ },
+ "Chogath": {
+  "name": "Cho'Gath",
+  "counters": [
+   "Garen",
+   "Darius",
+   "Renekton"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Nasus"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "JarvanIV"
+  ]
+ },
+ "Corki": {
+  "name": "Corki",
+  "counters": [
+   "Samira",
+   "MissFortune",
+   "Jinx"
+  ],
+  "counteredBy": [
+   "Varus",
+   "Draven",
+   "Caitlyn"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Bard"
+  ]
+ },
+ "Darius": {
+  "name": "Darius",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Sion"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Amumu",
+   "Vi",
+   "Orianna"
+  ]
+ },
+ "Diana": {
+  "name": "Diana",
+  "counters": [
+   "Kassadin",
+   "Fizz",
+   "Zed"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Amumu",
+   "Vi"
+  ]
+ },
+ "DrMundo": {
+  "name": "Dr. Mundo",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Sion"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Azir",
+   "Orianna",
+   "Vi"
+  ]
+ },
+ "Draven": {
+  "name": "Draven",
+  "counters": [
+   "Alistar",
+   "Leona",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "MissFortune",
+   "Caitlyn"
+  ],
+  "synergy": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ]
+ },
+ "Ekko": {
+  "name": "Ekko",
+  "counters": [
+   "Kassadin",
+   "Talon",
+   "Zed"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Amumu",
+   "Orianna"
+  ]
+ },
+ "Elise": {
+  "name": "Elise",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Corki",
+   "Varus",
+   "Orianna"
+  ]
+ },
+ "Evelynn": {
+  "name": "Evelynn",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Warwick"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Ezreal": {
+  "name": "Ezreal",
+  "counters": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "counteredBy": [
+   "Corki",
+   "Varus",
+   "Caitlyn"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Bard"
+  ]
+ },
+ "Fiddlesticks": {
+  "name": "Fiddlesticks",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Jinx"
+  ]
+ },
+ "Fiora": {
+  "name": "Fiora",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Darius",
+   "Renekton",
+   "Ambessa"
+  ],
+  "synergy": [
+   "Vi",
+   "Orianna",
+   "JarvanIV"
+  ]
+ },
+ "Fizz": {
+  "name": "Fizz",
+  "counters": [
+   "Malzahar",
+   "Galio",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "Amumu",
+   "JarvanIV",
+   "Vi"
+  ]
+ },
+ "Galio": {
+  "name": "Galio",
+  "counters": [
+   "Azir",
+   "Viktor",
+   "Cassiopeia"
+  ],
+  "counteredBy": [
+   "Akali",
+   "Leblanc",
+   "Katarina"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Gangplank": {
+  "name": "Gangplank",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Darius"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Garen": {
+  "name": "Garen",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "Amumu",
+   "Orianna"
+  ]
+ },
+ "Gnar": {
+  "name": "Gnar",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Camille",
+   "Vayne"
+  ],
+  "synergy": [
+   "Orianna",
+   "JarvanIV",
+   "Vi"
+  ]
+ },
+ "Gragas": {
+  "name": "Gragas",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Warwick"
+  ],
+  "synergy": [
+   "Corki",
+   "Varus",
+   "Orianna"
+  ]
+ },
+ "Graves": {
+  "name": "Graves",
+  "counters": [
+   "Khazix",
+   "Trundle",
+   "Olaf"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Vi"
+  ]
+ },
+ "Gwen": {
+  "name": "Gwen",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Hecarim": {
+  "name": "Hecarim",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Heimerdinger": {
+  "name": "Heimerdinger",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Talon"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Hwei": {
+  "name": "Hwei",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Nautilus"
+  ]
+ },
+ "Illaoi": {
+  "name": "Illaoi",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Sion"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "Amumu",
+   "Orianna"
+  ]
+ },
+ "Irelia": {
+  "name": "Irelia",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Ivern": {
+  "name": "Ivern",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Caitlyn"
+  ]
+ },
+ "Janna": {
+  "name": "Janna",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Caitlyn"
+  ]
+ },
+ "JarvanIV": {
+  "name": "Jarvan IV",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Jax": {
+  "name": "Jax",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Jayce": {
+  "name": "Jayce",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "JarvanIV",
+   "Orianna"
+  ]
+ },
+ "Jhin": {
+  "name": "Jhin",
+  "counters": [
+   "MissFortune",
+   "Jinx",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "Draven",
+   "Caitlyn"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Nautilus"
+  ]
+ },
+ "Jinx": {
+  "name": "Jinx",
+  "counters": [
+   "Caitlyn",
+   "Lucian",
+   "Ezreal"
+  ],
+  "counteredBy": [
+   "Samira",
+   "MissFortune",
+   "Draven"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Thresh"
+  ]
+ },
+ "KSante": {
+  "name": "K'Sante",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Kaisa": {
+  "name": "Kai'Sa",
+  "counters": [
+   "Alistar",
+   "Leona",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "MissFortune",
+   "Draven"
+  ],
+  "synergy": [
+   "Alistar",
+   "Nautilus",
+   "Blitzcrank"
+  ]
+ },
+ "Kalista": {
+  "name": "Kalista",
+  "counters": [
+   "Alistar",
+   "Leona",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Thresh",
+   "Rakan",
+   "Blitzcrank"
+  ]
+ },
+ "Karma": {
+  "name": "Karma",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Zilean",
+   "Lulu"
+  ],
+  "synergy": [
+   "Ezreal",
+   "Lucian",
+   "Caitlyn"
+  ]
+ },
+ "Karthus": {
+  "name": "Karthus",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "JarvanIV"
+  ]
+ },
+ "Kassadin": {
+  "name": "Kassadin",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Katarina": {
+  "name": "Katarina",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Kayle": {
+  "name": "Kayle",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Kayn": {
+  "name": "Kayn",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Kennen": {
+  "name": "Kennen",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Khazix": {
+  "name": "Kha'Zix",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Kindred": {
+  "name": "Kindred",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Kled": {
+  "name": "Kled",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "KogMaw": {
+  "name": "Kog'Maw",
+  "counters": [
+   "Alistar",
+   "Leona",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "Draven",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Janna"
+  ]
+ },
+ "Leblanc": {
+  "name": "LeBlanc",
+  "counters": [
+   "Kassadin",
+   "Galio",
+   "Malzahar"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "LeeSin": {
+  "name": "Lee Sin",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Leona": {
+  "name": "Leona",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ]
+ },
+ "Lillia": {
+  "name": "Lillia",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Lissandra": {
+  "name": "Lissandra",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Lucian": {
+  "name": "Lucian",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "Draven",
+   "Corki"
+  ],
+  "synergy": [
+   "Nami",
+   "Karma",
+   "Lulu"
+  ]
+ },
+ "Lulu": {
+  "name": "Lulu",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Kaisa"
+  ]
+ },
+ "Lux": {
+  "name": "Lux",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Caitlyn"
+  ]
+ },
+ "Malphite": {
+  "name": "Malphite",
+  "counters": [
+   "Garen",
+   "Nasus",
+   "Darius"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "JarvanIV"
+  ]
+ },
+ "Malzahar": {
+  "name": "Malzahar",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Maokai": {
+  "name": "Maokai",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "MasterYi": {
+  "name": "Master Yi",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Mel": {
+  "name": "Mel",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Nautilus"
+  ]
+ },
+ "Milio": {
+  "name": "Milio",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Kaisa"
+  ]
+ },
+ "MissFortune": {
+  "name": "Miss Fortune",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "Caitlyn"
+  ],
+  "synergy": [
+   "Leona",
+   "Alistar",
+   "Nautilus"
+  ]
+ },
+ "MonkeyKing": {
+  "name": "Wukong",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Mordekaiser": {
+  "name": "Mordekaiser",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "Amumu",
+   "Orianna"
+  ]
+ },
+ "Morgana": {
+  "name": "Morgana",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "Naafiri": {
+  "name": "Naafiri",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Nami": {
+  "name": "Nami",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Lucian",
+   "Draven",
+   "MissFortune"
+  ]
+ },
+ "Nasus": {
+  "name": "Nasus",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "Amumu",
+   "Orianna"
+  ]
+ },
+ "Nautilus": {
+  "name": "Nautilus",
+  "counters": [
+   "Lulu",
+   "Janna",
+   "Karma"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Samira",
+   "Draven",
+   "MissFortune"
+  ]
+ },
+ "Neeko": {
+  "name": "Neeko",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Kaisa"
+  ]
+ },
+ "Nidalee": {
+  "name": "Nidalee",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Nilah": {
+  "name": "Nilah",
+  "counters": [
+   "Alistar",
+   "Leona",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "Draven",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Thresh",
+   "Nautilus",
+   "Blitzcrank"
+  ]
+ },
+ "Nocturne": {
+  "name": "Nocturne",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Nunu": {
+  "name": "Nunu & Willump",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Olaf": {
+  "name": "Olaf",
+  "counters": [
+   "Trundle",
+   "Khazix",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Vi"
+  ]
+ },
+ "Orianna": {
+  "name": "Orianna",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Ornn": {
+  "name": "Ornn",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Pantheon": {
+  "name": "Pantheon",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Poppy": {
+  "name": "Poppy",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Pyke": {
+  "name": "Pyke",
+  "counters": [
+   "Thresh",
+   "Nautilus",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ]
+ },
+ "Qiyana": {
+  "name": "Qiyana",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Quinn": {
+  "name": "Quinn",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Rakan": {
+  "name": "Rakan",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Xayah",
+   "Kaisa",
+   "Aphelios"
+  ]
+ },
+ "Rammus": {
+  "name": "Rammus",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Olaf"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "RekSai": {
+  "name": "Rek'Sai",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Rell": {
+  "name": "Rell",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ]
+ },
+ "Renata": {
+  "name": "Renata Glasc",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Kaisa"
+  ]
+ },
+ "Renekton": {
+  "name": "Renekton",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Rengar": {
+  "name": "Rengar",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Riven": {
+  "name": "Riven",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Rumble": {
+  "name": "Rumble",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Ryze": {
+  "name": "Ryze",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Talon"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Samira": {
+  "name": "Samira",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "MissFortune",
+   "Draven",
+   "Caitlyn"
+  ],
+  "synergy": [
+   "Alistar",
+   "Nautilus",
+   "Leona"
+  ]
+ },
+ "Sejuani": {
+  "name": "Sejuani",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Senna": {
+  "name": "Senna",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Lucian",
+   "Draven",
+   "MissFortune"
+  ]
+ },
+ "Seraphine": {
+  "name": "Seraphine",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "Sett": {
+  "name": "Sett",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Shaco": {
+  "name": "Shaco",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Shen": {
+  "name": "Shen",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "Orianna",
+   "JarvanIV"
+  ]
+ },
+ "Shyvana": {
+  "name": "Shyvana",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Singed": {
+  "name": "Singed",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "Amumu",
+   "Orianna"
+  ]
+ },
+ "Sion": {
+  "name": "Sion",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Sivir": {
+  "name": "Sivir",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Leona",
+   "Alistar",
+   "Amumu"
+  ]
+ },
+ "Skarner": {
+  "name": "Skarner",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Smolder": {
+  "name": "Smolder",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Bard"
+  ]
+ },
+ "Sona": {
+  "name": "Sona",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Caitlyn"
+  ]
+ },
+ "Soraka": {
+  "name": "Soraka",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Karma",
+   "Zilean",
+   "Lulu"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Caitlyn"
+  ]
+ },
+ "Swain": {
+  "name": "Swain",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "Sylas": {
+  "name": "Sylas",
+  "counters": [
+   "Kassadin",
+   "Galio",
+   "Malzahar"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Syndra": {
+  "name": "Syndra",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "TahmKench": {
+  "name": "Tahm Kench",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Kaisa"
+  ]
+ },
+ "Taliyah": {
+  "name": "Taliyah",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Talon": {
+  "name": "Talon",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Taric": {
+  "name": "Taric",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Kaisa"
+  ]
+ },
+ "Teemo": {
+  "name": "Teemo",
+  "counters": [
+   "Garen",
+   "Malphite",
+   "Sion"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Vi",
+   "Amumu",
+   "Orianna"
+  ]
+ },
+ "Thresh": {
+  "name": "Thresh",
+  "counters": [
+   "Lulu",
+   "Janna",
+   "Karma"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ]
+ },
+ "Tristana": {
+  "name": "Tristana",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Bard"
+  ]
+ },
+ "Trundle": {
+  "name": "Trundle",
+  "counters": [
+   "Khazix",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Tryndamere": {
+  "name": "Tryndamere",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "TwistedFate": {
+  "name": "Twisted Fate",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Twitch": {
+  "name": "Twitch",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Janna"
+  ]
+ },
+ "Udyr": {
+  "name": "Udyr",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Urgot": {
+  "name": "Urgot",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Varus": {
+  "name": "Varus",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Corki"
+  ],
+  "counteredBy": [
+   "Samira",
+   "Draven",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Alistar",
+   "Nautilus",
+   "Leona"
+  ]
+ },
+ "Vayne": {
+  "name": "Vayne",
+  "counters": [
+   "Alistar",
+   "Leona",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Darius",
+   "Renekton",
+   "Ambessa"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Bard"
+  ]
+ },
+ "Veigar": {
+  "name": "Veigar",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Velkoz": {
+  "name": "Vel'Koz",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "Vex": {
+  "name": "Vex",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Vi": {
+  "name": "Vi",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Viego": {
+  "name": "Viego",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Viktor": {
+  "name": "Viktor",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Vladimir": {
+  "name": "Vladimir",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Volibear": {
+  "name": "Volibear",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Fiora",
+   "Vayne",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Warwick": {
+  "name": "Warwick",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Xayah": {
+  "name": "Xayah",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "Draven",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Rakan",
+   "Lulu",
+   "Karma"
+  ]
+ },
+ "Xerath": {
+  "name": "Xerath",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ },
+ "XinZhao": {
+  "name": "Xin Zhao",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Khazix"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Viktor"
+  ]
+ },
+ "Yasuo": {
+  "name": "Yasuo",
+  "counters": [
+   "Malzahar",
+   "Galio",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Gragas",
+   "Amumu"
+  ]
+ },
+ "Yone": {
+  "name": "Yone",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Vex",
+   "Lissandra"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Yorick": {
+  "name": "Yorick",
+  "counters": [
+   "Malphite",
+   "Sion",
+   "Chogath"
+  ],
+  "counteredBy": [
+   "Vayne",
+   "Fiora",
+   "Camille"
+  ],
+  "synergy": [
+   "Orianna",
+   "Vi",
+   "JarvanIV"
+  ]
+ },
+ "Yunara": {
+  "name": "Yunara",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Alistar",
+   "Nautilus",
+   "Leona"
+  ]
+ },
+ "Yuumi": {
+  "name": "Yuumi",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Leona"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Kaisa"
+  ]
+ },
+ "Zaahen": {
+  "name": "Zaahen",
+  "counters": [
+   "Talon",
+   "Zed",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Nautilus"
+  ]
+ },
+ "Zac": {
+  "name": "Zac",
+  "counters": [
+   "Trundle",
+   "Olaf",
+   "Hecarim"
+  ],
+  "counteredBy": [
+   "Rammus",
+   "Amumu",
+   "Gragas"
+  ],
+  "synergy": [
+   "Orianna",
+   "Azir",
+   "Corki"
+  ]
+ },
+ "Zed": {
+  "name": "Zed",
+  "counters": [
+   "Galio",
+   "Malzahar",
+   "Lissandra"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Zeri": {
+  "name": "Zeri",
+  "counters": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ],
+  "counteredBy": [
+   "Samira",
+   "Draven",
+   "MissFortune"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Bard"
+  ]
+ },
+ "Ziggs": {
+  "name": "Ziggs",
+  "counters": [
+   "MissFortune",
+   "Jinx",
+   "Aphelios"
+  ],
+  "counteredBy": [
+   "Draven",
+   "Samira",
+   "Caitlyn"
+  ],
+  "synergy": [
+   "Lulu",
+   "Karma",
+   "Bard"
+  ]
+ },
+ "Zilean": {
+  "name": "Zilean",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Lulu"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Caitlyn"
+  ]
+ },
+ "Zoe": {
+  "name": "Zoe",
+  "counters": [
+   "Fizz",
+   "Kassadin",
+   "Katarina"
+  ],
+  "counteredBy": [
+   "Ahri",
+   "Syndra",
+   "Vex"
+  ],
+  "synergy": [
+   "JarvanIV",
+   "Vi",
+   "Amumu"
+  ]
+ },
+ "Zyra": {
+  "name": "Zyra",
+  "counters": [
+   "Blitzcrank",
+   "Thresh",
+   "Nautilus"
+  ],
+  "counteredBy": [
+   "Soraka",
+   "Karma",
+   "Zilean"
+  ],
+  "synergy": [
+   "Jinx",
+   "Aphelios",
+   "Varus"
+  ]
+ }
+}

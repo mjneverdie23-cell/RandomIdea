@@ -215,6 +215,7 @@ const CSV_COLUMNS = [
   'gameid', 'datacompleteness', 'league', 'year', 'split', 'playoffs', 'date', 'game', 'patch',
   'participantid', 'side', 'position', 'playername', 'playerid', 'teamname', 'teamid', 'champion',
   'ban1', 'ban2', 'ban3', 'ban4', 'ban5', 'gamelength', 'result',
+  'golddiffat10', 'golddiffat15', 'golddiffat20', 'golddiffat25',
 ];
 
 function csvEscape(value: string | number): string {
@@ -328,6 +329,8 @@ function renderGameRows(input: RenderInput): string[] {
   const date = new Date(timestamp).toISOString().replace('T', ' ').slice(0, 19);
   const gameLength = 1500 + rng.int(1500);
 
+  const blueGold = goldCurve(rng, blueWins);
+
   const used = new Set<string>();
   const bluePicks = ROLE_ORDER.map((role) => pickUnique(rng, CHAMPION_POOL[role]!, used));
   const redPicks = ROLE_ORDER.map((role) => pickUnique(rng, CHAMPION_POOL[role]!, used));
@@ -352,8 +355,8 @@ function renderGameRows(input: RenderInput): string[] {
     rows.push([...base, ...tail].map(csvEscape).join(','));
 
   const sides = [
-    { team: blue, picks: bluePicks, bans: blueBans, side: 'Blue', firstId: 1, teamId: 100, win: blueWins },
-    { team: red, picks: redPicks, bans: redBans, side: 'Red', firstId: 6, teamId: 200, win: !blueWins },
+    { team: blue, picks: bluePicks, bans: blueBans, side: 'Blue', firstId: 1, teamId: 100, win: blueWins, gold: blueGold },
+    { team: red, picks: redPicks, bans: redBans, side: 'Red', firstId: 6, teamId: 200, win: !blueWins, gold: blueGold.map((g) => -g) },
   ] as const;
 
   for (const entry of sides) {
@@ -370,6 +373,8 @@ function renderGameRows(input: RenderInput): string[] {
         '', '', '', '', '',
         gameLength,
         entry.win ? 1 : 0,
+        // Gold diff is a team-level read; player rows leave it blank.
+        '', '', '', '',
       ]);
     });
   }
@@ -387,10 +392,35 @@ function renderGameRows(input: RenderInput): string[] {
       ...entry.bans,
       gameLength,
       entry.win ? 1 : 0,
+      ...entry.gold,
     ]);
   }
 
   return rows;
+}
+
+/**
+ * Gold difference at 10/15/20/25 minutes for the blue side.
+ *
+ * The curve drifts toward whoever won, but not monotonically: roughly one game
+ * in six is generated as a lead that got thrown or a deficit that got reversed,
+ * so the demo data actually exercises the predictor's throw and comeback reads
+ * instead of making every team look identical.
+ */
+function goldCurve(rng: Rng, blueWins: boolean): number[] {
+  const winnerSign = blueWins ? 1 : -1;
+  const reversal = rng.next() < 0.17;
+  // A reversal starts on the eventual loser's side of the ledger.
+  const earlySign = reversal ? -winnerSign : winnerSign;
+
+  const marks: number[] = [];
+  let value = earlySign * (400 + rng.int(2600));
+  for (let i = 0; i < 4; i += 1) {
+    marks.push(Math.round(value));
+    const towardWinner = winnerSign * (rng.int(2200) + (reversal ? 900 : 200));
+    value += towardWinner + (rng.next() - 0.5) * 900;
+  }
+  return marks;
 }
 
 function slug(value: string): string {

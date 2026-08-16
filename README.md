@@ -11,6 +11,11 @@ Questions come in two styles: **matchups**, where a drawn series plays out from
 game 1 to its decider the way it was actually played, or **random games**, where
 every question is an unrelated draft.
 
+It also carries a **Predictor**: build any two drafts and get a transparent,
+additive point tally, per-game and series probabilities, behavioural reads and
+scouting notes — computed from the same imported games, with no fitted weights
+and nothing hidden.
+
 Games come from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)
 match-data CSVs, filtered to eight competitions: **LCK, LEC, LCS, LPL, Worlds,
 First Stand, MSI, EWC**.
@@ -196,6 +201,62 @@ reportable. The seed is editable on the setup screen and shown on results.
 
 ---
 
+## Predictor
+
+The **Predictor** tab composes any two drafts and scores them. There are no
+fitted weights: each side's total is a plain sum of labelled line items, and the
+higher total is the predicted winner.
+
+| Line item | What it adds |
+| --- | --- |
+| Win-rate base | The five champions' historical win rates for that team in that role, capped at 1.00 per lane |
+| Meta champions | +1 per champion clearing the pick-rate bar on the newest patches |
+| Pocket picks | 1–2 off-meta picks +1/+2; three or more −2 |
+| Rank edge | +0.5 when GlobalRank differs by 2 or more |
+| Form edge | Up to +1 for the better current-season series record |
+| Fraud penalty | Minus the team's inconsistency rating |
+
+The point margin becomes a per-game probability through a logistic curve, and
+the series and sweep odds follow by counting the ways a best-of can still be
+won from the current score.
+
+### Where its numbers come from
+
+Everything is derived from the seasons you have imported — there is no separate
+data file to build or keep in sync. Two different time scopes are used
+deliberately:
+
+- **Champion win rates** span every enabled season, because how well a team
+  plays a champion is a durable signal and thin samples are the main way this
+  model goes wrong. A team that has never played a champion in the selected
+  competition falls back to its record everywhere, and the report says which
+  scope produced each number.
+- **Standings and behaviour** cover the most recent season only. These are
+  current-form reads; averaging five seasons together would wash out exactly
+  the signal they exist to provide.
+
+### What it reports but does not score
+
+Behavioural reads — recent form, side preference, thrown leads, comebacks,
+bounce-back after a loss, deciders, game-five chokes — are shown as
+plain-language tendencies and deliberately kept out of the score. They are
+context for the reader, not fitted terms. Each is suppressed when its sample is
+too small to mean anything.
+
+Champion counters and synergies annotate the per-lane breakdown, restricted to
+champions actually on the board, and likewise never move a total.
+
+### Optional team ratings
+
+GlobalRank and Fraud are the one input with no equivalent in an Oracle's Elixir
+export. Load a champion-pool CSV (columns `teamName`, `GlobalRank`, `Fraud`) on
+the **Data** tab to enable the rank edge and fraud penalty. Team names are
+matched case- and punctuation-insensitively, so `BNK FEARX` finds `BNK FearX`
+and `GENG` finds `Gen.G`. Without the file those two lines score zero and the
+report states why.
+
+---
+
 ## Patch meta
 
 The **Patch Meta** panel on the quiz screen is computed from the loaded dataset
@@ -299,12 +360,15 @@ src/
                    inference, per-season merging, synthetic demo dataset
   quiz/            seeded RNG, config, matchup grouping, question generation,
                    scoring, session reducer + summary
+  predictor/       prediction engine, model derivation, champion matchup graph,
+                   league formats, optional team ratings
   meta/            patch meta aggregation
   leaderboard/     repository interface + localStorage implementation
   storage/         IndexedDB key-value store, dataset persistence
-  components/      draft board, quiz controls, meta panel, layout
-  pages/           Home, Setup, Quiz, Results, Leaderboard, Data
-  styles/          tokens, base, layout, draft, quiz, pages
+  components/      draft board, quiz controls, meta panel, predictor composer
+                   and report, layout
+  pages/           Home, Setup, Quiz, Results, Predictor, Leaderboard, Data
+  styles/          tokens, base, layout, draft, quiz, predictor, pages
   lib/             display formatting
 ```
 
@@ -313,7 +377,12 @@ Boundaries worth knowing:
 - **Oracle's Elixir column names never leave `src/data/`.** Everything above
   ingestion speaks the domain model in `src/domain/types.ts`.
 - **Scoring, generation and session state are pure** (`src/quiz/`), so they're
-  tested without React and the UI stays a renderer.
+  tested without React and the UI stays a renderer. The same holds for the
+  predictor: `src/predictor/engine.ts` takes a model plus an input and returns
+  structured values, never formatted text.
+- **The predictor has no cache files.** Everything it needs is derived from the
+  seasons already imported, so switching a season off changes its numbers with
+  no rebuild step.
 - **Storage sits behind interfaces.** Swapping the leaderboard for a hosted
   backend means writing one class satisfying `LeaderboardRepository`.
 
@@ -330,8 +399,11 @@ and merging (adding a year, replacing a re-imported year, switches, combining
 only enabled seasons), series/stage inference,
 champion id derivation, scoring in every branch, the session reducer and
 summary, matchup grouping and series ordering, quiz generation (determinism, no
-duplicates, exact counts, impossible configs), patch meta aggregation, and
-leaderboard ranking/filtering.
+duplicates, exact counts, impossible configs), patch meta aggregation,
+leaderboard ranking/filtering, and the predictor (every point rule and its
+boundaries, series/sweep probability against hand-computed values, win-rate
+scope fallback, behaviour narration thresholds, meta derivation, standings and
+series reconstruction, and ratings parsing with fuzzy team matching).
 
 ---
 
@@ -350,6 +422,16 @@ leaderboard ranking/filtering.
   without code changes — at the cost of not always matching the official tag.
 - **The leaderboard is per-device** (localStorage). "Global" means global across
   runs on that device until a backend is attached.
+- **The predictor's rank and fraud terms need a ratings file.** GlobalRank and
+  Fraud are hand-maintained judgements that appear nowhere in an Oracle's Elixir
+  export. Without one, those two lines score zero and the report says so.
+- **Champion counters and synergies are static reference data**
+  (`src/predictor/data/championGraph.json`). They annotate the per-lane
+  breakdown and never move a score. Regenerate with
+  `node scripts/build-champion-graph.mjs <champions_data_enriched.json>`.
+- **Throw and comeback reads need gold-diff columns.** Exports carrying
+  `golddiffat10/15/20/25` get them; older imports and files without those
+  columns simply omit those two lines rather than guessing.
 
 ---
 

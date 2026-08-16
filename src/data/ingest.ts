@@ -25,6 +25,7 @@ import {
   type CompetitionId,
   type DatasetStats,
   type Game,
+  type GoldDiffTrack,
   type IngestWarning,
   type PlayerSlot,
   type Role,
@@ -296,7 +297,26 @@ function buildTeamSide(
     tag: deriveTeamTag(teamName),
     players,
     bans: readBans(teamRow, rows, map),
+    goldDiff: readGoldDiff(teamRow, map),
   };
+}
+
+/**
+ * Collapse the gold-diff checkpoints into the two numbers the predictor uses:
+ * the biggest lead held and the deepest hole dug. Player rows carry per-player
+ * gold diffs, so only the team row is read.
+ */
+function readGoldDiff(teamRow: RawRow | undefined, map: ColumnMap): GoldDiffTrack | null {
+  if (!teamRow || map.goldDiffColumns.length === 0) return null;
+  const values: number[] = [];
+  for (const column of map.goldDiffColumns) {
+    const raw = teamRow[column];
+    if (typeof raw !== 'string' || !raw.trim()) continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) values.push(n);
+  }
+  if (values.length === 0) return null;
+  return { peak: Math.max(...values), trough: Math.min(...values) };
 }
 
 /**
