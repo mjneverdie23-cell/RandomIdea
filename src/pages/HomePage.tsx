@@ -7,7 +7,7 @@ import { toPrompt } from '../domain/types.ts';
 import { leaderboardRepository, personalBest, rankEntries } from '../leaderboard/repository.ts';
 import type { LeaderboardEntry } from '../leaderboard/repository.ts';
 import { formatCount, formatDate, formatPercent, formatScore } from '../lib/format.ts';
-import { MIXED_SOURCE, type QuestionCount } from '../quiz/config.ts';
+import { DEFAULT_MODE, MIXED_SOURCE, type QuestionCount } from '../quiz/config.ts';
 import { eligibleGames } from '../quiz/generator.ts';
 import { createRng, randomSeed } from '../quiz/rng.ts';
 import { MAX_QUESTION_SCORE, QUESTION_TIME_MS } from '../quiz/scoring.ts';
@@ -39,6 +39,7 @@ export function HomePage() {
     start(dataset?.games ?? [], {
       source: MIXED_SOURCE,
       questionCount,
+      mode: DEFAULT_MODE,
       seed: randomSeed(),
     });
     navigate('/quiz');

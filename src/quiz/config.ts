@@ -14,9 +14,34 @@ export type QuestionSource =
   | { kind: 'mixed' }
   | { kind: 'single'; competition: CompetitionId };
 
+/**
+ * How questions are drawn.
+ *
+ * `matchups` plays whole series in order — game 1 through the decider — so
+ * later games carry the context of the earlier ones. `games` is the original
+ * shuffle: every question an unrelated game.
+ */
+export type QuizMode = 'matchups' | 'games';
+export const DEFAULT_MODE: QuizMode = 'matchups';
+
+export const MODE_LABEL: Record<QuizMode, string> = {
+  matchups: 'Matchups',
+  games: 'Random games',
+};
+
+export const MODE_BLURB: Record<QuizMode, string> = {
+  matchups: 'Whole series, game 1 to the decider',
+  games: 'Every question an unrelated game',
+};
+
+export function isQuizMode(value: string): value is QuizMode {
+  return value === 'matchups' || value === 'games';
+}
+
 export interface QuizConfig {
   source: QuestionSource;
   questionCount: QuestionCount;
+  mode: QuizMode;
   /** Reproducibility handle — same seed + same dataset = same questions. */
   seed: string;
 }

@@ -6,7 +6,7 @@ import { competitionShort } from '../domain/competitions.ts';
 import { toPrompt } from '../domain/types.ts';
 import { leaderboardRepository } from '../leaderboard/repository.ts';
 import { formatPercent, formatScore, formatSeconds } from '../lib/format.ts';
-import { sourceKey, sourceLabel } from '../quiz/config.ts';
+import { MODE_LABEL, sourceKey, sourceLabel } from '../quiz/config.ts';
 import { MAX_QUESTION_SCORE } from '../quiz/scoring.ts';
 import { useQuiz } from '../state/QuizContext.tsx';
 import { usePlayerName } from '../state/usePlayerName.ts';
@@ -40,6 +40,7 @@ export function ResultsPage() {
         averageResponseMs: summary.averageResponseMs,
         sourceKey: sourceKey(state.config.source),
         sourceLabel: sourceLabel(state.config.source),
+        mode: state.config.mode,
         date: new Date().toISOString(),
         seed: state.config.seed,
         demoData: isDemo,
@@ -120,7 +121,7 @@ export function ResultsPage() {
         </Link>
         <span className="dim results-seed num">
           Seed {state.config.seed} · {sourceLabel(state.config.source)} ·{' '}
-          {summary.questionCount} questions
+          {MODE_LABEL[state.config.mode]} · {summary.questionCount} questions
         </span>
       </div>
 

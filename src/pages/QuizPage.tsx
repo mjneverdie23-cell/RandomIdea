@@ -81,9 +81,11 @@ export function QuizPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [phase, submit, next]);
 
+  // Matchup context only means something when questions were drawn as series.
+  const showSeries = state?.config.mode === 'matchups';
   const seriesPositions = useMemo(
-    () => (state ? describeSeriesRuns(state.games) : []),
-    [state],
+    () => (state && showSeries ? describeSeriesRuns(state.games) : []),
+    [state, showSeries],
   );
 
   if (!state) {
@@ -106,7 +108,7 @@ export function QuizPage() {
   const revealed = phase === 'reveal';
   const lastAnswer = revealed ? state.answers[state.answers.length - 1] : null;
   const progress = ((state.index + (revealed ? 1 : 0)) / state.games.length) * 100;
-  const position = seriesPositions[state.index] ?? null;
+  const position = showSeries ? (seriesPositions[state.index] ?? null) : null;
 
   return (
     <div className="page quiz-page">

@@ -3,13 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { COMPETITIONS } from '../domain/competitions.ts';
 import { formatCount } from '../lib/format.ts';
 import {
+  DEFAULT_MODE,
   DEFAULT_QUESTION_COUNT,
   MIXED_SOURCE,
+  MODE_BLURB,
+  MODE_LABEL,
   QUESTION_COUNTS,
   sourceKey,
   sourceLabel,
   type QuestionCount,
   type QuestionSource,
+  type QuizMode,
 } from '../quiz/config.ts';
 import { availableFor, QuizGenerationError } from '../quiz/generator.ts';
 import { randomSeed } from '../quiz/rng.ts';
@@ -26,6 +30,7 @@ export function SetupPage() {
 
   const [source, setSource] = useState<QuestionSource>(MIXED_SOURCE);
   const [questionCount, setQuestionCount] = useState<QuestionCount>(DEFAULT_QUESTION_COUNT);
+  const [mode, setMode] = useState<QuizMode>(DEFAULT_MODE);
   const [seed, setSeed] = useState(randomSeed);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +49,7 @@ export function SetupPage() {
   const handleStart = () => {
     setError(null);
     try {
-      start(dataset?.games ?? [], { source, questionCount, seed });
+      start(dataset?.games ?? [], { source, questionCount, mode, seed });
       navigate('/quiz');
     } catch (cause) {
       setError(
@@ -72,9 +77,8 @@ export function SetupPage() {
           <p className="eyebrow">Quiz setup</p>
           <h1>Build your run</h1>
           <p className="page-sub">
-            {QUESTION_TIME_MS / 1000} seconds a draft. Questions come as whole matchups — you play
-            a series from game 1 to its last game. Faster correct calls are worth more; timeouts
-            are worth nothing.
+            {QUESTION_TIME_MS / 1000} seconds a draft. Faster correct calls are worth more;
+            timeouts are worth nothing.
           </p>
         </div>
         {isDemo && (
@@ -135,7 +139,36 @@ export function SetupPage() {
 
       <section className="panel setup-block">
         <div className="panel-header">
-          <h2>2 · Length</h2>
+          <h2>2 · Question style</h2>
+          <span className="dim">{MODE_BLURB[mode]}</span>
+        </div>
+        <div className="panel-pad">
+          <div className="chip-row">
+            {(['matchups', 'games'] as QuizMode[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`chip chip-lg${mode === option ? ' is-active' : ''}`}
+                style={{ ['--chip-accent' as string]: 'var(--violet)' }}
+                aria-pressed={mode === option}
+                onClick={() => setMode(option)}
+                title={MODE_BLURB[option]}
+              >
+                {MODE_LABEL[option]}
+              </button>
+            ))}
+          </div>
+          <p className="field-hint">
+            {mode === 'matchups'
+              ? 'A drawn series plays out in order — game 1 through the decider — with the series score shown as you go.'
+              : 'Every question is an unrelated game, drawn from anywhere in the pool.'}
+          </p>
+        </div>
+      </section>
+
+      <section className="panel setup-block">
+        <div className="panel-header">
+          <h2>3 · Length</h2>
           <span className="dim">{sourceLabel(source)}</span>
         </div>
         <div className="panel-pad">
@@ -169,7 +202,7 @@ export function SetupPage() {
 
       <section className="panel setup-block">
         <div className="panel-header">
-          <h2>3 · Identity</h2>
+          <h2>4 · Identity</h2>
         </div>
         <div className="panel-pad setup-identity">
           <label className="field">
@@ -220,7 +253,8 @@ export function SetupPage() {
           disabled={!canStart}
           onClick={handleStart}
         >
-          Start {questionCount}-question run · {sourceKey(source) === 'MIXED' ? 'Mixed' : sourceLabel(source)}
+          Start {questionCount}-question run ·{' '}
+          {sourceKey(source) === 'MIXED' ? 'Mixed' : sourceLabel(source)} · {MODE_LABEL[mode]}
         </button>
       </div>
     </div>

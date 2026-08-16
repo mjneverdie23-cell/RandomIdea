@@ -69,8 +69,13 @@ describe('teamFileSlug', () => {
 });
 
 describe('teamLogoUrl', () => {
-  it('returns null when no logo has been downloaded', () => {
-    // The committed manifest is empty; `npm run assets` populates it.
-    expect(teamLogoUrl('T1')).toBeNull();
+  it('returns null for a team with no downloaded logo', () => {
+    // Behavioural, so it holds whether or not `npm run assets` has been run.
+    expect(teamLogoUrl('Definitely Not A Real Organization')).toBeNull();
+  });
+
+  it('resolves to a path under the public assets folder when present', () => {
+    const url = teamLogoUrl('T1');
+    if (url !== null) expect(url).toMatch(/^\/assets\/teams\/.+\.png$/);
   });
 });

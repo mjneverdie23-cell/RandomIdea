@@ -4,7 +4,12 @@ import { QUESTION_TIME_MS } from './scoring.ts';
 import { MIXED_SOURCE, type QuizConfig } from './config.ts';
 import type { CompetitionId, Game, Side } from '../domain/types.ts';
 
-const CONFIG: QuizConfig = { source: MIXED_SOURCE, questionCount: 10, seed: 'TEST' };
+const CONFIG: QuizConfig = {
+  source: MIXED_SOURCE,
+  questionCount: 10,
+  mode: 'matchups',
+  seed: 'TEST',
+};
 
 function fakeGame(id: string, winner: Side, competition: CompetitionId = 'LCK'): Game {
   const side = (s: Side, team: string) => ({

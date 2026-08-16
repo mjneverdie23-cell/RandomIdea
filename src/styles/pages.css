@@ -872,3 +872,12 @@ code {
     text-align: center;
   }
 }
+
+.board-mode {
+  margin-left: 6px;
+}
+
+.asset-hint {
+  font-size: 12px;
+  line-height: 1.55;
+}

@@ -100,6 +100,7 @@ describe('generateQuiz — matchup mode', () => {
       const quiz = generateQuiz(dataset.games, {
         source: MIXED_SOURCE,
         questionCount,
+        mode: 'matchups',
         seed: `SERIES-${questionCount}`,
       });
       expect(quiz.games).toHaveLength(questionCount);
@@ -111,6 +112,7 @@ describe('generateQuiz — matchup mode', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
       questionCount: 25,
+      mode: 'matchups',
       seed: 'ORDER',
     });
     const positions = describeSeriesRuns(quiz.games);
@@ -128,6 +130,7 @@ describe('generateQuiz — matchup mode', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
       questionCount: 25,
+      mode: 'matchups',
       seed: 'COUNT',
     });
     expect(quiz.seriesCount).toBeGreaterThan(0);
@@ -139,6 +142,7 @@ describe('generateQuiz — matchup mode', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
       questionCount: 50,
+      mode: 'matchups',
       seed: 'MULTI',
     });
     const positions = describeSeriesRuns(quiz.games);
@@ -146,7 +150,61 @@ describe('generateQuiz — matchup mode', () => {
   });
 
   it('stays reproducible from its seed', () => {
-    const config = { source: MIXED_SOURCE, questionCount: 25, seed: 'REPEAT' } as const;
+    const config = {
+      source: MIXED_SOURCE,
+      questionCount: 25,
+      mode: 'matchups',
+      seed: 'REPEAT',
+    } as const;
+    expect(generateQuiz(dataset.games, config).games.map((g) => g.gameId)).toEqual(
+      generateQuiz(dataset.games, config).games.map((g) => g.gameId),
+    );
+  });
+});
+
+describe('generateQuiz — random games mode', () => {
+  it('returns exactly the requested number of distinct games', () => {
+    const quiz = generateQuiz(dataset.games, {
+      source: MIXED_SOURCE,
+      questionCount: 25,
+      mode: 'games',
+      seed: 'GAMES',
+    });
+    expect(quiz.games).toHaveLength(25);
+    expect(new Set(quiz.games.map((g) => g.gameId)).size).toBe(25);
+  });
+
+  it('does not group questions into series', () => {
+    const quiz = generateQuiz(dataset.games, {
+      source: MIXED_SOURCE,
+      questionCount: 50,
+      mode: 'games',
+      seed: 'SCATTER',
+    });
+    // With ~1,100 games in the pool, adjacent questions landing in the same
+    // series would be a coincidence; matchup mode guarantees it instead.
+    const adjacentPairs = quiz.games.filter(
+      (game, i) => i > 0 && seriesKeyOf(game) === seriesKeyOf(quiz.games[i - 1]!),
+    );
+    expect(adjacentPairs.length).toBeLessThan(5);
+  });
+
+  it('draws a different set than matchup mode for the same seed', () => {
+    const base = { source: MIXED_SOURCE, questionCount: 25, seed: 'SAME' } as const;
+    const grouped = generateQuiz(dataset.games, { ...base, mode: 'matchups' });
+    const scattered = generateQuiz(dataset.games, { ...base, mode: 'games' });
+    expect(grouped.games.map((g) => g.gameId)).not.toEqual(
+      scattered.games.map((g) => g.gameId),
+    );
+  });
+
+  it('stays reproducible from its seed', () => {
+    const config = {
+      source: MIXED_SOURCE,
+      questionCount: 10,
+      mode: 'games',
+      seed: 'STABLE',
+    } as const;
     expect(generateQuiz(dataset.games, config).games.map((g) => g.gameId)).toEqual(
       generateQuiz(dataset.games, config).games.map((g) => g.gameId),
     );

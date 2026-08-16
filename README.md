@@ -4,11 +4,12 @@
 
 A competitive League of Legends prediction quiz. Each question shows one real
 professional game's pre-game state — bans, picks, rosters, tournament, stage,
-patch — and you get **15 seconds** to call which side won. Faster correct calls
+patch — and you get **30 seconds** to call which side won. Faster correct calls
 score more.
 
-Questions arrive as whole matchups: draw T1 vs Gen.G and you play that series
-from game 1 through to its last game, the way it was actually played.
+Questions come in two styles: **matchups**, where a drawn series plays out from
+game 1 to its decider the way it was actually played, or **random games**, where
+every question is an unrelated draft.
 
 Games come from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)
 match-data CSVs, filtered to eight competitions: **LCK, LEC, LCS, LPL, Worlds,
@@ -86,23 +87,30 @@ or 50). Options that the loaded dataset can't satisfy are disabled and labelled
 with the pool size, so an impossible configuration can't be started. Picking a
 thin source auto-trims the length to fit.
 
-**Matchups** — questions are drawn a series at a time, not as unrelated games.
-Series are shuffled, then taken whole while they fit the remaining slots, so a
-best-of-5 contributes all five games in order and the sides swap between them
-exactly as they did live. The requested question count stays exact — the
-leaderboard compares runs of the same length — so when no remaining series fits
-the last few slots, one series is truncated, keeping game 1 onward.
+**Question style** — two modes, chosen on the setup screen.
 
-Later games of a series are the interesting ones: by then you have seen how the
-earlier games went, which is the same information a viewer would have. The quiz
-screen shows the running series score above the draft, counting only games you
-have already answered and had revealed.
+*Matchups* draws a series at a time. Series are shuffled, then taken whole while
+they fit the remaining slots, so a best-of-5 contributes all five games in order
+and the sides swap between them exactly as they did live. Later games are the
+interesting ones: by then you have seen how the earlier games went, which is the
+same information a viewer would have, and the quiz screen shows the running
+series score above the draft — counting only games you have already answered and
+had revealed.
+
+*Random games* is a straight shuffle of the eligible pool, one unrelated game per
+question.
+
+Both modes sample without replacement and honour the requested question count
+exactly — the leaderboard compares runs of the same length — so in matchup mode,
+when no remaining series fits the last few slots, one series is truncated,
+keeping game 1 onward. The mode is recorded with each run and shown on the
+board.
 
 **Question** — the draft board renders with the winner withheld. The quiz screen
 receives a `GamePrompt` (`Omit<Game, 'winner'>`), so the answer is not merely
 hidden in the UI, it isn't in the props at all.
 
-**Timer** — 15 seconds, starting when the question goes live. Remaining time is
+**Timer** — 30 seconds, starting when the question goes live. Remaining time is
 derived from wall-clock deltas rather than accumulated per frame, so a throttled
 tab can't buy extra time. At zero, a timeout is submitted automatically and
 scores 0.
@@ -124,7 +132,8 @@ timeout   = 0
 ```
 
 So a question is worth 100–250 points, and an instant correct call is worth
-roughly twice a last-second one.
+roughly twice a last-second one. The speed bonus is a fraction of the time
+remaining, so it rescales itself if the clock length changes.
 
 **Reveal** — the winning side lights up, the losing side dims, and the points
 breakdown (base + speed + streak) is shown before auto-advancing. `Space`
@@ -202,13 +211,22 @@ treatment a broadcast draft uses. Bans use the square face icon instead,
 desaturated, dimmed and struck through so they read as removed while staying
 recognizable.
 
+Run this **before** `npm run build` if you want the local copies in a production
+bundle — the manifest is read at build time. The Data page shows what is
+currently on disk.
+
 ### Nothing here is required
 
 Assets are a convenience, not a dependency. Champion art falls back to Riot's
 CDN and then to a colored plate with the champion's initials; team logos fall
 back to the team's derived monogram tag. A skipped, partial or failed download
 degrades rather than breaking the draft — which is also why the repo ships with
-an empty manifest and still works.
+an empty manifest and still works. Team logos are the one thing with no remote
+fallback: without the download every team shows its monogram.
+
+Each source also gets a second attempt before the chain moves on. Ten portraits
+load per question, and a single dropped request used to strand that card on its
+initials for the rest of the run, which reads as art randomly failing.
 
 ---
 

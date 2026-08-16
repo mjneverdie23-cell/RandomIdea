@@ -1,10 +1,10 @@
 /**
- * Quiz generation: pick N quiz-worthy games, grouped into matchups.
+ * Quiz generation, in one of two modes.
  *
- * Questions are drawn a series at a time rather than as unrelated games — pick
- * T1 vs Gen.G and you play that series from game 1 to its last game. Sampling
- * is seeded and without replacement, so a quiz never repeats a game and can be
- * reproduced exactly from its seed.
+ * `matchups` draws a series at a time — pick T1 vs Gen.G and you play that
+ * series from game 1 to its last game. `games` draws unrelated games, one per
+ * question. Both sample without replacement from the same eligible pool and
+ * are seeded, so a quiz never repeats a game and can be reproduced exactly.
  *
  * A game only enters the pool when it can actually be answered — both drafts
  * complete, both teams named, a real winner, a usable date.
@@ -12,8 +12,8 @@
 
 import { COMPETITION_IDS } from '../domain/competitions.ts';
 import { ROLES, type CompetitionId, type Game } from '../domain/types.ts';
-import { createRng } from './rng.ts';
-import { groupIntoSeries } from './series.ts';
+import { createRng, type Rng } from './rng.ts';
+import { groupIntoSeries, seriesKeyOf } from './series.ts';
 import type { QuestionSource, QuizConfig } from './config.ts';
 
 /** Bans are nice-to-have; a game without them is still a fair question. */
@@ -107,22 +107,20 @@ export class QuizGenerationError extends Error {
 
 export interface GeneratedQuiz {
   config: QuizConfig;
-  /** Questions in play order: whole matchups, each game 1 → last game. */
+  /** Questions in play order. In `matchups` mode, whole series game 1 → last. */
   games: Game[];
   /** Size of the pool the questions were drawn from. */
   poolSize: number;
-  /** How many matchups the questions span. */
+  /** How many matchups the questions span (equals the count in `games` mode). */
   seriesCount: number;
 }
 
 /**
- * Build a quiz from whole matchups.
+ * Build a quiz in the configured mode.
  *
- * Series are shuffled, then taken whole while they fit in the remaining
- * question slots — so a best-of-5 contributes all five games, in order. The
- * requested question count is exact (the leaderboard compares runs of the same
- * length), so if no remaining series fits the last few slots, one series is
- * truncated from the front, keeping game 1 onward.
+ * Both modes sample without replacement from the same eligible pool and both
+ * honour the requested question count exactly, so runs stay comparable on the
+ * leaderboard.
  */
 export function generateQuiz(games: readonly Game[], config: QuizConfig): GeneratedQuiz {
   const pool = filterBySource(eligibleGames(games), config.source);
@@ -136,8 +134,37 @@ export function generateQuiz(games: readonly Game[], config: QuizConfig): Genera
 
   // Sort before sampling so the seed maps to the same questions regardless of
   // the dataset's incoming row order.
+  const rng = createRng(
+    `${config.seed}:${config.mode}:${config.source.kind}:${config.questionCount}`,
+  );
+
+  const picked =
+    config.mode === 'games' ? pickGames(pool, config, rng) : pickMatchups(pool, config, rng);
+
+  return {
+    config,
+    games: picked,
+    poolSize: pool.length,
+    seriesCount: config.mode === 'games' ? picked.length : countSeries(picked),
+  };
+}
+
+/** Unrelated games, shuffled — the original behaviour. */
+function pickGames(pool: readonly Game[], config: QuizConfig, rng: Rng): Game[] {
+  const ordered = [...pool].sort((a, b) => a.gameId.localeCompare(b.gameId));
+  return rng.sample(ordered, config.questionCount);
+}
+
+/**
+ * Whole series, in play order.
+ *
+ * Series are shuffled, then taken whole while they fit in the remaining
+ * question slots — so a best-of-5 contributes all five games, in order. If no
+ * remaining series fits the last few slots, one is truncated, keeping game 1
+ * onward, so the question count still lands exactly.
+ */
+function pickMatchups(pool: readonly Game[], config: QuizConfig, rng: Rng): Game[] {
   const allSeries = groupIntoSeries(pool).sort((a, b) => a.key.localeCompare(b.key));
-  const rng = createRng(`${config.seed}:${config.source.kind}:${config.questionCount}`);
   const shuffled = rng.shuffle(allSeries);
 
   const picked: Game[] = [];
@@ -155,17 +182,22 @@ export function generateQuiz(games: readonly Game[], config: QuizConfig): Genera
   // Every leftover series is longer than the slots left; trim one to finish.
   if (remaining > 0) {
     const filler = shuffled.find((series) => !used.has(series.key));
-    if (filler) {
-      picked.push(...filler.games.slice(0, remaining));
-      used.add(filler.key);
-      remaining = 0;
+    if (filler) picked.push(...filler.games.slice(0, remaining));
+  }
+  return picked;
+}
+
+function countSeries(games: readonly Game[]): number {
+  let count = 0;
+  for (let i = 0; i < games.length; i += 1) {
+    const previous = i > 0 ? games[i - 1]! : null;
+    if (
+      previous === null ||
+      seriesKeyOf(previous) !== seriesKeyOf(games[i]!) ||
+      games[i]!.gameNumber <= previous.gameNumber
+    ) {
+      count += 1;
     }
   }
-
-  return {
-    config,
-    games: picked,
-    poolSize: pool.length,
-    seriesCount: used.size,
-  };
+  return count;
 }

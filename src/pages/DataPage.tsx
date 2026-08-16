@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { assetStats } from '../assets/manifest.ts';
 import { COMPETITIONS } from '../domain/competitions.ts';
 import { CsvParseError } from '../data/parseCsv.ts';
 import { IngestError } from '../data/ingest.ts';
@@ -192,6 +193,8 @@ export function DataPage() {
           </div>
         </section>
 
+        <ImageAssetsCard />
+
         <section className="panel">
           <div className="panel-header">
             <h2>Competition filter</h2>
@@ -250,6 +253,58 @@ export function DataPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+/**
+ * Whether champion art and team logos are on disk.
+ *
+ * Without the download the app still works — champion art comes from Riot's
+ * CDN and teams fall back to a monogram — but "why are there no logos?" is a
+ * reasonable question, so it gets answered here rather than only in the README.
+ */
+function ImageAssetsCard() {
+  const assets = assetStats();
+  const hasChampions = assets.champions > 0;
+  const hasTeams = assets.teams > 0;
+
+  return (
+    <section className="panel">
+      <div className="panel-header">
+        <h2>Image assets</h2>
+        {hasChampions && hasTeams ? (
+          <span className="badge badge-strong">Downloaded</span>
+        ) : (
+          <span className="badge badge-demo">Not downloaded</span>
+        )}
+      </div>
+      <div className="panel-pad">
+        <dl className="kv">
+          <div>
+            <dt>Champions</dt>
+            <dd className="num">
+              {hasChampions
+                ? `${assets.champions} local${assets.version ? ` · patch ${assets.version}` : ''}`
+                : 'none — loading from Riot’s CDN'}
+            </dd>
+          </div>
+          <div>
+            <dt>Team logos</dt>
+            <dd className="num">
+              {hasTeams ? `${assets.teams} local` : 'none — showing team monograms'}
+            </dd>
+          </div>
+        </dl>
+
+        {!(hasChampions && hasTeams) && (
+          <p className="dim asset-hint">
+            Run <code>npm run assets</code> to download champion art from Data Dragon and team
+            logos from Leaguepedia into <code>public/assets/</code>, then restart the dev server
+            (or rebuild). Team logos have no CDN fallback, so they only appear after this step.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

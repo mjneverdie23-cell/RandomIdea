@@ -7,6 +7,7 @@
  * touches storage directly.
  */
 
+import type { QuizMode } from '../quiz/config.ts';
 import type { CompetitionId } from '../domain/types.ts';
 
 export interface LeaderboardEntry {
@@ -25,6 +26,8 @@ export interface LeaderboardEntry {
   /** `MIXED` or a `CompetitionId`. */
   sourceKey: string;
   sourceLabel: string;
+  /** How questions were drawn. Absent on runs recorded before modes existed. */
+  mode?: QuizMode;
   /** ISO timestamp of when the run finished. */
   date: string;
   /** Quiz seed, so a run can be replayed. */

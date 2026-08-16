@@ -73,6 +73,7 @@ describe('generateQuiz', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
       questionCount: 25,
+      mode: 'matchups',
       seed: 'ABC123',
     });
     expect(quiz.games).toHaveLength(25);
@@ -80,7 +81,12 @@ describe('generateQuiz', () => {
   });
 
   it('is reproducible from its seed', () => {
-    const config = { source: MIXED_SOURCE, questionCount: 10, seed: 'SEED-1' } as const;
+    const config = {
+      source: MIXED_SOURCE,
+      questionCount: 10,
+      mode: 'matchups',
+      seed: 'SEED-1',
+    } as const;
     const a = generateQuiz(dataset.games, config);
     const b = generateQuiz(dataset.games, config);
     expect(a.games.map((g) => g.gameId)).toEqual(b.games.map((g) => g.gameId));
@@ -90,11 +96,13 @@ describe('generateQuiz', () => {
     const a = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
       questionCount: 10,
+      mode: 'matchups',
       seed: 'SEED-1',
     });
     const b = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
       questionCount: 10,
+      mode: 'matchups',
       seed: 'SEED-2',
     });
     expect(a.games.map((g) => g.gameId)).not.toEqual(b.games.map((g) => g.gameId));
@@ -104,6 +112,7 @@ describe('generateQuiz', () => {
     const quiz = generateQuiz(dataset.games, {
       source: { kind: 'single', competition: 'WORLDS' },
       questionCount: 10,
+      mode: 'matchups',
       seed: 'W',
     });
     expect(quiz.games.every((game) => game.competition === 'WORLDS')).toBe(true);
@@ -112,7 +121,7 @@ describe('generateQuiz', () => {
   it('refuses configurations the pool cannot satisfy', () => {
     const tiny = dataset.games.slice(0, 4);
     expect(() =>
-      generateQuiz(tiny, { source: MIXED_SOURCE, questionCount: 10, seed: 'X' }),
+      generateQuiz(tiny, { source: MIXED_SOURCE, questionCount: 10, mode: 'matchups', seed: 'X' }),
     ).toThrow(QuizGenerationError);
   });
 });

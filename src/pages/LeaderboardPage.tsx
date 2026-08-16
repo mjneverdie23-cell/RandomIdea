@@ -9,7 +9,7 @@ import {
   type LeaderboardFilters,
 } from '../leaderboard/repository.ts';
 import { formatPercent, formatRelative, formatScore, formatSeconds } from '../lib/format.ts';
-import { QUESTION_COUNTS } from '../quiz/config.ts';
+import { MODE_LABEL, QUESTION_COUNTS } from '../quiz/config.ts';
 import { usePlayerName } from '../state/usePlayerName.ts';
 
 export function LeaderboardPage() {
@@ -171,6 +171,9 @@ export function LeaderboardPage() {
                     <td className="board-num num">{entry.bestStreak}</td>
                     <td>
                       <span className="badge">{entry.sourceLabel}</span>
+                      {entry.mode && (
+                        <span className="badge board-mode">{MODE_LABEL[entry.mode]}</span>
+                      )}
                     </td>
                     <td className="dim">{formatRelative(entry.date)}</td>
                   </tr>
