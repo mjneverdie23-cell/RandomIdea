@@ -57,9 +57,10 @@ export function HomePage() {
             Call the winner.
           </h1>
           <p className="hero-sub">
-            Real professional games from the LCK, LEC, LCS, LPL, Worlds, First Stand, MSI and EWC.
-            You get the bans, the picks, the rosters and the patch — and{' '}
-            {QUESTION_TIME_MS / 1000} seconds to call it. Answer faster, score higher.
+            Real professional games from the LCK, LEC, LCS, LPL, Worlds, First Stand, MSI and EWC,
+            served as whole matchups — game 1 through the decider. You get the bans, the picks, the
+            rosters and the patch, and {QUESTION_TIME_MS / 1000} seconds to call it. Answer faster,
+            score higher.
           </p>
 
           <div className="hero-actions">

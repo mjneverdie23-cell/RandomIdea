@@ -4,8 +4,11 @@
 
 A competitive League of Legends prediction quiz. Each question shows one real
 professional game's pre-game state — bans, picks, rosters, tournament, stage,
-patch — and you get **10 seconds** to call which side won. Faster correct calls
+patch — and you get **15 seconds** to call which side won. Faster correct calls
 score more.
+
+Questions arrive as whole matchups: draw T1 vs Gen.G and you play that series
+from game 1 through to its last game, the way it was actually played.
 
 Games come from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)
 match-data CSVs, filtered to eight competitions: **LCK, LEC, LCS, LPL, Worlds,
@@ -83,14 +86,32 @@ or 50). Options that the loaded dataset can't satisfy are disabled and labelled
 with the pool size, so an impossible configuration can't be started. Picking a
 thin source auto-trims the length to fit.
 
+**Matchups** — questions are drawn a series at a time, not as unrelated games.
+Series are shuffled, then taken whole while they fit the remaining slots, so a
+best-of-5 contributes all five games in order and the sides swap between them
+exactly as they did live. The requested question count stays exact — the
+leaderboard compares runs of the same length — so when no remaining series fits
+the last few slots, one series is truncated, keeping game 1 onward.
+
+Later games of a series are the interesting ones: by then you have seen how the
+earlier games went, which is the same information a viewer would have. The quiz
+screen shows the running series score above the draft, counting only games you
+have already answered and had revealed.
+
 **Question** — the draft board renders with the winner withheld. The quiz screen
 receives a `GamePrompt` (`Omit<Game, 'winner'>`), so the answer is not merely
 hidden in the UI, it isn't in the props at all.
 
-**Timer** — 10 seconds, starting when the question mounts. Remaining time is
+**Timer** — 15 seconds, starting when the question goes live. Remaining time is
 derived from wall-clock deltas rather than accumulated per frame, so a throttled
 tab can't buy extra time. At zero, a timeout is submitted automatically and
 scores 0.
+
+The clock's start time is decided in the same render that switches question, not
+from an effect afterwards. Deriving it a commit later meant a freshly mounted
+countdown briefly held the *previous* question's start time; after a timeout
+that value was already expired, so the next question was instantly ruled a
+timeout too.
 
 **Scoring** — transparent and printed on the setup screen:
 
@@ -217,8 +238,8 @@ src/
   domain/          types, competition registry, champion + team identity/art
   data/            Oracle's Elixir schema, CSV parsing, ingestion, stage
                    inference, synthetic demo dataset
-  quiz/            seeded RNG, config, question generation, scoring,
-                   session reducer + summary
+  quiz/            seeded RNG, config, matchup grouping, question generation,
+                   scoring, session reducer + summary
   meta/            patch meta aggregation
   leaderboard/     repository interface + localStorage implementation
   storage/         IndexedDB key-value store, dataset persistence
@@ -247,8 +268,9 @@ Covers competition matching (aliases, casing, season labels, academy-league
 exclusion), CSV ingestion (row grouping, role assignment, ban reading, winner
 resolution, header normalization, rejection accounting), series/stage inference,
 champion id derivation, scoring in every branch, the session reducer and
-summary, quiz generation (determinism, no duplicates, impossible configs), patch
-meta aggregation, and leaderboard ranking/filtering.
+summary, matchup grouping and series ordering, quiz generation (determinism, no
+duplicates, exact counts, impossible configs), patch meta aggregation, and
+leaderboard ranking/filtering.
 
 ---
 

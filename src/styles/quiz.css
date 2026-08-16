@@ -606,3 +606,60 @@
     gap: 8px;
   }
 }
+
+/* Series status strip ------------------------------------------------ */
+
+.series-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--violet);
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, rgba(167, 139, 250, 0.1), var(--panel) 60%);
+  font-size: 12px;
+}
+
+.series-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.18);
+  color: #c9b6ff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.series-teams {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.series-teams strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.series-score {
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.series-score strong {
+  color: var(--text);
+}
+
+@media (max-width: 620px) {
+  .series-score {
+    margin-left: 0;
+  }
+}

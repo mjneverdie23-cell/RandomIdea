@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 const RADIUS = 34;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 /** Below this many milliseconds the ring turns red and pulses. */
-const URGENT_MS = 3500;
+const URGENT_MS = 5000;
 
 interface CountdownProps {
   /** `performance.now()` timestamp of when this question went live. */

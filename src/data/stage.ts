@@ -142,46 +142,58 @@ export interface SeriesMember {
   timestamp: number;
 }
 
+/** Two games more than this far apart belong to different series. */
+const SERIES_GAP_MS = 12 * 60 * 60 * 1000;
+
 /**
- * Group games into series and return each game's series length.
+ * Cut a flat list of games into series runs.
  *
  * Two teams meet many times per split, so a shared team pair is not enough.
  * Games are ordered by time inside a pair and cut into a new series whenever
  * the `game` counter stops increasing, or when more than 12 hours pass between
  * consecutive games.
+ *
+ * This is the single definition of "a series" — ingestion uses it to infer the
+ * best-of, and quiz generation uses it to serve a matchup's games in order.
  */
-export function computeSeriesLengths(members: SeriesMember[]): Map<string, number> {
-  const SERIES_GAP_MS = 12 * 60 * 60 * 1000;
-  const byKey = new Map<string, SeriesMember[]>();
+export function partitionSeries<T extends SeriesMember>(members: readonly T[]): T[][] {
+  const byKey = new Map<string, T[]>();
   for (const member of members) {
     const bucket = byKey.get(member.seriesKey);
     if (bucket) bucket.push(member);
     else byKey.set(member.seriesKey, [member]);
   }
 
-  const lengths = new Map<string, number>();
+  const runs: T[][] = [];
   for (const bucket of byKey.values()) {
     bucket.sort((a, b) => a.timestamp - b.timestamp || a.gameNumber - b.gameNumber);
 
-    let current: SeriesMember[] = [];
-    let previous: SeriesMember | null = null;
-    const flush = () => {
-      if (!current.length) return;
-      const size = Math.max(current.length, ...current.map((m) => m.gameNumber));
-      for (const member of current) lengths.set(member.gameId, size);
-      current = [];
-    };
-
+    let current: T[] = [];
+    let previous: T | null = null;
     for (const member of bucket) {
       const newSeries =
         previous !== null &&
         (member.gameNumber <= previous.gameNumber ||
           member.timestamp - previous.timestamp > SERIES_GAP_MS);
-      if (newSeries) flush();
+      if (newSeries && current.length) {
+        runs.push(current);
+        current = [];
+      }
       current.push(member);
       previous = member;
     }
-    flush();
+    if (current.length) runs.push(current);
+  }
+  return runs;
+}
+
+/** Each game's series length, keyed by game id. */
+export function computeSeriesLengths(members: SeriesMember[]): Map<string, number> {
+  const lengths = new Map<string, number>();
+  for (const run of partitionSeries(members)) {
+    // A sweep can leave fewer rows than the highest game number; trust the max.
+    const size = Math.max(run.length, ...run.map((m) => m.gameNumber));
+    for (const member of run) lengths.set(member.gameId, size);
   }
   return lengths;
 }

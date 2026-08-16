@@ -15,8 +15,8 @@
 
 import type { Side } from '../domain/types.ts';
 
-/** Time budget per question. The countdown starts when the question mounts. */
-export const QUESTION_TIME_MS = 10_000;
+/** Time budget per question. The countdown starts when the question goes live. */
+export const QUESTION_TIME_MS = 15_000;
 
 export const SCORING = {
   base: 100,

@@ -72,7 +72,9 @@ export function SetupPage() {
           <p className="eyebrow">Quiz setup</p>
           <h1>Build your run</h1>
           <p className="page-sub">
-            Ten seconds a draft. Faster correct calls are worth more. Timeouts are worth nothing.
+            {QUESTION_TIME_MS / 1000} seconds a draft. Questions come as whole matchups — you play
+            a series from game 1 to its last game. Faster correct calls are worth more; timeouts
+            are worth nothing.
           </p>
         </div>
         {isDemo && (

@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DraftBoard } from '../components/draft/DraftBoard.tsx';
 import { GameContextBar } from '../components/GameContextBar.tsx';
 import { PatchMetaPanel } from '../components/meta/PatchMetaPanel.tsx';
 import { Countdown } from '../components/quiz/Countdown.tsx';
 import { PredictionBar } from '../components/quiz/PredictionBar.tsx';
+import { SeriesStatus } from '../components/quiz/SeriesStatus.tsx';
 import { toPrompt, type Side } from '../domain/types.ts';
 import { formatScore, formatSeconds } from '../lib/format.ts';
 import { QUESTION_TIME_MS } from '../quiz/scoring.ts';
+import { describeSeriesRuns } from '../quiz/series.ts';
 import { currentGame } from '../quiz/session.ts';
 import { useDataset } from '../state/DatasetContext.tsx';
 import { useQuiz } from '../state/QuizContext.tsx';
@@ -20,27 +22,30 @@ export function QuizPage() {
   const { metaIndex } = useDataset();
   const { state, answer, next } = useQuiz();
 
-  // `performance.now()` at the moment the live question became answerable.
-  const [questionStart, setQuestionStart] = useState(() => performance.now());
-  const answeredRef = useRef(false);
-
   const index = state?.index ?? 0;
   const phase = state?.phase ?? 'question';
 
-  // Restart the clock whenever a new question goes live.
-  useEffect(() => {
-    if (phase !== 'question') return;
-    answeredRef.current = false;
-    setQuestionStart(performance.now());
-  }, [index, phase]);
+  /*
+   * The clock's start time has to be decided in the same render that switches
+   * to a new question. Setting it from an effect left it one commit stale, and
+   * because the countdown remounts with the new question, it would mount
+   * holding the *previous* question's start time — already expired — and fire
+   * an instant timeout. Adjusting state during render (React's documented
+   * pattern for deriving state from props) keeps the two in lockstep.
+   */
+  const [timing, setTiming] = useState(() => ({ index: 0, startedAt: performance.now() }));
+  if (phase === 'question' && timing.index !== index) {
+    setTiming({ index, startedAt: performance.now() });
+  }
 
   const submit = useCallback(
     (prediction: Side | null) => {
-      if (answeredRef.current) return;
-      answeredRef.current = true;
-      answer(prediction, performance.now() - questionStart);
+      // The reducer ignores answers outside the question phase, so a late
+      // timer tick racing a click can't double-submit.
+      if (phase !== 'question') return;
+      answer(prediction, performance.now() - timing.startedAt);
     },
-    [answer, questionStart],
+    [answer, phase, timing.startedAt],
   );
 
   // Auto-advance after the reveal, with a manual override on the button.
@@ -76,6 +81,11 @@ export function QuizPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [phase, submit, next]);
 
+  const seriesPositions = useMemo(
+    () => (state ? describeSeriesRuns(state.games) : []),
+    [state],
+  );
+
   if (!state) {
     return (
       <div className="page">
@@ -96,6 +106,7 @@ export function QuizPage() {
   const revealed = phase === 'reveal';
   const lastAnswer = revealed ? state.answers[state.answers.length - 1] : null;
   const progress = ((state.index + (revealed ? 1 : 0)) / state.games.length) * 100;
+  const position = seriesPositions[state.index] ?? null;
 
   return (
     <div className="page quiz-page">
@@ -112,6 +123,15 @@ export function QuizPage() {
               <span className="hud-total">/{state.games.length}</span>
             </span>
           </div>
+          {position && (
+            <div className="stat">
+              <span className="stat-label">Matchup</span>
+              <span className="stat-value">
+                {position.seriesIndex}
+                <span className="hud-total">/{position.seriesCount}</span>
+              </span>
+            </div>
+          )}
           <div className="stat">
             <span className="stat-label">Score</span>
             <span className="stat-value">{formatScore(state.totalScore)}</span>
@@ -127,8 +147,8 @@ export function QuizPage() {
 
         <div className="hud-timer">
           <Countdown
-            key={`${state.index}-${questionStart}`}
-            startedAt={questionStart}
+            key={timing.startedAt}
+            startedAt={timing.startedAt}
             durationMs={QUESTION_TIME_MS}
             frozen={revealed}
             onExpire={() => submit(null)}
@@ -140,6 +160,10 @@ export function QuizPage() {
       </header>
 
       <GameContextBar game={toPrompt(game)} />
+
+      {position && (
+        <SeriesStatus games={state.games} positions={seriesPositions} index={state.index} />
+      )}
 
       <DraftBoard
         key={game.gameId}
