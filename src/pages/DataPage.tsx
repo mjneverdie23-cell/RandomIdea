@@ -4,17 +4,29 @@ import { COMPETITIONS } from '../domain/competitions.ts';
 import { CsvParseError } from '../data/parseCsv.ts';
 import { IngestError } from '../data/ingest.ts';
 import { formatCount, formatDate, formatDateTime } from '../lib/format.ts';
-import { useDataset, type ImportProgress } from '../state/DatasetContext.tsx';
-import type { DatasetStats } from '../domain/types.ts';
+import { YearBar } from '../components/data/YearBar.tsx';
+import type { StorageBackend } from '../storage/datasetStore.ts';
+import type { YearDataset } from '../domain/types.ts';
+import { useDataset, type ImportProgress, type ImportResult } from '../state/DatasetContext.tsx';
 
 type ImportState =
   | { kind: 'idle' }
   | { kind: 'busy'; progress: ImportProgress | null }
-  | { kind: 'done'; stats: DatasetStats; label: string }
+  | { kind: 'done'; result: ImportResult }
   | { kind: 'error'; message: string; detail?: string };
 
 export function DataPage() {
-  const { dataset, isDemo, importFiles, resetToDemo, persisted } = useDataset();
+  const {
+    dataset,
+    isDemo,
+    years,
+    importFiles,
+    setYearEnabled,
+    removeYear,
+    resetToDemo,
+    backend,
+    persisted,
+  } = useDataset();
   const [state, setState] = useState<ImportState>({ kind: 'idle' });
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,10 +40,10 @@ export function DataPage() {
       }
       setState({ kind: 'busy', progress: null });
       try {
-        const next = await importFiles(csvFiles, (progress) =>
+        const result = await importFiles(csvFiles, (progress) =>
           setState({ kind: 'busy', progress }),
         );
-        setState({ kind: 'done', stats: next.stats, label: next.source.label });
+        setState({ kind: 'done', result });
       } catch (cause) {
         if (cause instanceof IngestError || cause instanceof CsvParseError) {
           setState({ kind: 'error', message: cause.message, detail: cause.detail });
@@ -54,8 +66,9 @@ export function DataPage() {
           <p className="eyebrow">Data</p>
           <h1>Oracle’s Elixir import</h1>
           <p className="page-sub">
-            Drop a yearly match-data CSV straight in. Rows are grouped into games, filtered to the
-            eight configured competitions, and normalized — nothing else needs configuring.
+            Drop yearly match-data CSVs straight in — 2022 through the current partial season.
+            Each import is filtered to the eight configured competitions and merged into its own
+            season, so files add up instead of replacing each other.
           </p>
         </div>
       </header>
@@ -108,8 +121,8 @@ export function DataPage() {
           <>
             <h2>Drop CSV files here</h2>
             <p className="dim">
-              Multiple years can be imported at once. Files are read in your browser — nothing is
-              uploaded anywhere.
+              Several years at once is fine. Files are read in your browser — nothing is uploaded
+              anywhere — and each season is saved separately.
             </p>
             <button type="button" className="btn btn-primary" onClick={() => inputRef.current?.click()}>
               Choose files
@@ -125,12 +138,19 @@ export function DataPage() {
         </div>
       )}
 
-      {state.kind === 'done' && <ImportReport stats={state.stats} label={state.label} />}
+      {state.kind === 'done' && <ImportReport result={state.result} />}
+
+      <SeasonList
+        years={years}
+        backend={backend}
+        onToggle={setYearEnabled}
+        onRemove={removeYear}
+      />
 
       {!persisted && (
         <p className="error-box">
-          The dataset is loaded for this session but could not be saved to browser storage — it
-          will need re-importing after a reload.
+          The import is loaded for this session but could not be saved — it will need re-importing
+          after a reload. Browser storage may be full or blocked.
         </p>
       )}
 
@@ -308,60 +328,141 @@ function ImageAssetsCard() {
   );
 }
 
-function ImportReport({ stats, label }: { stats: DatasetStats; label: string }) {
+/**
+ * Seasons currently stored, each with a switch.
+ *
+ * Also states where the data is being kept: the project folder when the dev
+ * server is serving the app, browser storage otherwise. That distinction
+ * matters — it is the difference between data that survives clearing site data
+ * and data that doesn't.
+ */
+function SeasonList({
+  years,
+  backend,
+  onToggle,
+  onRemove,
+}: {
+  years: YearDataset[];
+  backend: StorageBackend;
+  onToggle: (year: string, enabled: boolean) => void;
+  onRemove: (year: string) => Promise<void>;
+}) {
+  const enabled = years.filter((year) => year.enabled);
+  const enabledGames = enabled.reduce((sum, year) => sum + year.games.length, 0);
+
+  return (
+    <section className="panel">
+      <div className="panel-header">
+        <h2>Seasons</h2>
+        <span className="dim">
+          {years.length === 0
+            ? 'Nothing imported yet'
+            : `${enabled.length} of ${years.length} on · ${enabledGames.toLocaleString()} games in the pool`}
+        </span>
+      </div>
+
+      {years.length === 0 ? (
+        <p className="meta-empty">
+          Import a CSV above and its games appear here, one bar per season, each with a switch.
+        </p>
+      ) : (
+        <>
+          <div className="year-list">
+            {years.map((year) => (
+              <YearBar
+                key={year.year}
+                year={year}
+                onToggle={(value) => onToggle(year.year, value)}
+                onRemove={() => {
+                  if (window.confirm(`Delete the ${year.year} games? Re-importing brings them back.`)) {
+                    void onRemove(year.year);
+                  }
+                }}
+              />
+            ))}
+          </div>
+          <footer className="year-foot dim">
+            {backend === 'folder' ? (
+              <>
+                Saved to <code>data/&lt;year&gt;.json</code> in the project folder, and mirrored to
+                browser storage.
+              </>
+            ) : backend === 'indexeddb' ? (
+              <>
+                Saved to browser storage. Run the app with <code>npm run dev</code> to also write{' '}
+                <code>data/&lt;year&gt;.json</code> into the project folder.
+              </>
+            ) : (
+              <>Held in memory for this session only — no storage backend accepted the data.</>
+            )}
+          </footer>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ImportReport({ result }: { result: ImportResult }) {
   return (
     <section className="panel import-report">
       <div className="panel-header">
         <h2>Import complete</h2>
-        <span className="dim">{label}</span>
+        <span className="dim">{result.label}</span>
       </div>
       <div className="panel-pad">
         <div className="stat-grid">
           <div className="stat">
             <span className="stat-label">Rows read</span>
-            <span className="stat-value">{stats.rowsParsed.toLocaleString()}</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Games found</span>
-            <span className="stat-value">{stats.gamesBuilt.toLocaleString()}</span>
+            <span className="stat-value">{result.rowsParsed.toLocaleString()}</span>
           </div>
           <div className="stat">
             <span className="stat-label">Games kept</span>
-            <span className="stat-value tone-green">{stats.gamesKept.toLocaleString()}</span>
+            <span className="stat-value tone-green">{result.gamesKept.toLocaleString()}</span>
           </div>
           <div className="stat">
             <span className="stat-label">Filtered out</span>
-            <span className="stat-value">{stats.rejectedByCompetition.toLocaleString()}</span>
+            <span className="stat-value">{result.rejectedByCompetition.toLocaleString()}</span>
             <span className="stat-sub dim">other competitions</span>
           </div>
           <div className="stat">
             <span className="stat-label">Incomplete</span>
-            <span className="stat-value tone-amber">{stats.rejectedIncomplete.toLocaleString()}</span>
+            <span className="stat-value tone-amber">
+              {result.rejectedIncomplete.toLocaleString()}
+            </span>
             <span className="stat-sub dim">draft or winner missing</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">Seasons</span>
+            <span className="stat-value">{result.years.length}</span>
+            <span className="stat-sub dim">{result.years.map((y) => y.year).join(', ')}</span>
           </div>
         </div>
 
         <div className="report-comps">
-          {Object.entries(stats.perCompetition)
-            .sort((a, b) => b[1] - a[1])
-            .map(([competition, count]) => (
-              <span key={competition} className="badge badge-strong">
-                {competition} <span className="num">{count.toLocaleString()}</span>
-              </span>
-            ))}
+          {result.years.map((year) => (
+            <span key={year.year} className="badge badge-strong">
+              {year.year} <span className="num">{year.games.length.toLocaleString()}</span>
+            </span>
+          ))}
         </div>
 
-        {stats.warnings.length > 0 && (
+        {result.years.some((year) => year.stats.warnings.length > 0) && (
           <details className="warnings">
-            <summary>{formatCount(stats.warnings.length, 'warning')}</summary>
+            <summary>
+              {formatCount(
+                result.years.reduce((sum, year) => sum + year.stats.warnings.length, 0),
+                'warning',
+              )}
+            </summary>
             <ul>
-              {stats.warnings.map((warning) => (
-                <li key={`${warning.code}-${warning.message}`}>
-                  <span className="badge">{warning.code}</span> {warning.message}{' '}
-                  <span className="dim num">×{warning.count}</span>
-                  {warning.sample && <span className="dim"> (e.g. {warning.sample})</span>}
-                </li>
-              ))}
+              {result.years.flatMap((year) =>
+                year.stats.warnings.map((warning) => (
+                  <li key={`${year.year}-${warning.code}-${warning.message}`}>
+                    <span className="badge">{warning.code}</span> {warning.message}{' '}
+                    <span className="dim num">×{warning.count}</span>
+                  </li>
+                )),
+              )}
             </ul>
           </details>
         )}

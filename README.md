@@ -40,14 +40,44 @@ Riot's CDN until you download it locally with `npm run assets`.
 
 ## Loading real data
 
-1. Download a yearly match-data CSV from Oracle's Elixir.
-2. Open **Data** in the app and drop the file in (several years at once is fine).
-3. That's it — the file is parsed in your browser, normalized, filtered and
-   saved to IndexedDB. Nothing is uploaded anywhere.
+1. Download the yearly match-data CSVs from Oracle's Elixir — 2022 through the
+   current partial season.
+2. Open **Data** in the app and drop them in, together or one at a time.
+3. That's it — each file is parsed in your browser, filtered, and merged into
+   its own season. Nothing is uploaded anywhere.
 
-The import report tells you exactly what happened to the file: rows read, games
-found, games kept, how many were dropped for being outside the eight
-competitions, how many had incomplete drafts, plus collapsed warnings.
+The import report tells you exactly what happened: rows read, games kept, how
+many were dropped for being outside the eight competitions, how many had
+incomplete drafts, and which seasons the file contributed to.
+
+### Seasons
+
+**Imports accumulate.** Games are bucketed by the season *in the data* — a file
+that spans a year boundary lands in both — so loading 2024 doesn't disturb 2023.
+Re-importing a year replaces just that year, which is what you want when
+Oracle's Elixir revises rows or a partial season grows.
+
+Each season gets a bar on the Data page with a **switch**: on means its games
+feed the quiz, off means they don't. Switching off isn't deleting — the games
+stay stored, so you can focus a session on 2025 without re-importing everything
+to get the rest back. The switch state is saved with the data.
+
+### Where seasons are stored
+
+Two backends, picked at runtime:
+
+| | |
+| --- | --- |
+| **Project folder** | `data/<year>.json`, written by the dev/preview server (`scripts/vite-data-folder.mjs`). Used whenever it's available, and it's the copy that survives clearing browser storage or moving to another machine. |
+| **IndexedDB** | The fallback for a statically served build, and the offline mirror. |
+
+Both hold the same normalized, competition-filtered games — never the source
+CSV. The Data page says which one is in use. The folder is gitignored; it's
+derived data, and a full season is a couple of MB of JSON.
+
+If you already had a dataset stored from before seasons existed, it's split
+into per-year buckets on first load rather than discarded, and pushed up to the
+folder if that's available.
 
 ### What the parser expects
 
@@ -83,7 +113,7 @@ hardcodes a league name.
 ## How the quiz works
 
 **Setup** — pick a source (Mixed, or a single competition) and a length (10, 25
-or 50). Options that the loaded dataset can't satisfy are disabled and labelled
+or 50). Only the seasons switched on in the Data tab are in the pool. Options that the loaded dataset can't satisfy are disabled and labelled
 with the pool size, so an impossible configuration can't be started. Picking a
 thin source auto-trims the length to fit.
 
@@ -259,13 +289,14 @@ mode" branch anywhere downstream.
 ## Project structure
 
 ```
+data/              imported seasons, one JSON per year (gitignored)
 public/assets/     champion art + team logos (populated by `npm run assets`)
-scripts/           asset downloader + the team list it reads
+scripts/           asset downloader, team list, data-folder dev middleware
 src/
   assets/          local-asset manifest
   domain/          types, competition registry, champion + team identity/art
   data/            Oracle's Elixir schema, CSV parsing, ingestion, stage
-                   inference, synthetic demo dataset
+                   inference, per-season merging, synthetic demo dataset
   quiz/            seeded RNG, config, matchup grouping, question generation,
                    scoring, session reducer + summary
   meta/            patch meta aggregation
@@ -294,7 +325,9 @@ npm test
 
 Covers competition matching (aliases, casing, season labels, academy-league
 exclusion), CSV ingestion (row grouping, role assignment, ban reading, winner
-resolution, header normalization, rejection accounting), series/stage inference,
+resolution, header normalization, rejection accounting), per-season bucketing
+and merging (adding a year, replacing a re-imported year, switches, combining
+only enabled seasons), series/stage inference,
 champion id derivation, scoring in every branch, the session reducer and
 summary, matchup grouping and series ordering, quiz generation (determinism, no
 duplicates, exact counts, impossible configs), patch meta aggregation, and

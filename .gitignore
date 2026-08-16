@@ -8,3 +8,6 @@ coverage/
 
 # Match data isn't checked in — drop CSVs in through the Data page instead.
 *.csv
+
+# Imported datasets written by the app (derived from Oracle's Elixir CSVs).
+/data/

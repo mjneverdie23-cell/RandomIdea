@@ -132,6 +132,37 @@ export interface Dataset {
   stats: DatasetStats;
 }
 
+/**
+ * One season's worth of imported games.
+ *
+ * Oracle's Elixir publishes a file per year, and players usually want several
+ * of them loaded at once — so imports accumulate into per-year buckets rather
+ * than replacing each other. Each year can be switched out of the quiz pool
+ * without deleting it.
+ */
+export interface YearDataset {
+  /** Four-digit season, e.g. `2024`. */
+  year: string;
+  /** File name(s) the games came from. */
+  label: string;
+  games: Game[];
+  stats: DatasetStats;
+  importedAt: string;
+  /** Whether this year feeds the quiz pool. */
+  enabled: boolean;
+}
+
+/** Per-year metadata without the games, for listings and index files. */
+export interface YearSummary {
+  year: string;
+  label: string;
+  games: number;
+  importedAt: string;
+  enabled: boolean;
+  dateRange: { from: string; to: string } | null;
+  perCompetition: Record<string, number>;
+}
+
 export interface DatasetSource {
   kind: 'demo' | 'csv';
   /** File names that were imported, or `Development dataset` for demo. */

@@ -1002,3 +1002,182 @@ code {
 .placement.is-record strong {
   color: var(--gold);
 }
+
+/* Seasons ------------------------------------------------------------ */
+
+.year-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.year-bar {
+  display: grid;
+  grid-template-columns: auto 116px minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--line);
+  transition: opacity var(--dur-fast), background var(--dur-fast);
+}
+
+.year-bar:first-child {
+  border-top: 0;
+}
+
+.year-bar:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.year-bar.is-off {
+  opacity: 0.45;
+}
+
+/* Switch ------------------------------------------------------------- */
+
+.year-switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.year-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.year-switch-track {
+  display: block;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-deep);
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+}
+
+.year-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast);
+}
+
+.year-switch input:checked + .year-switch-track {
+  background: color-mix(in srgb, var(--green) 28%, var(--bg-deep));
+  border-color: var(--green);
+}
+
+.year-switch input:checked + .year-switch-track .year-switch-thumb {
+  transform: translateX(18px);
+  background: var(--green);
+}
+
+.year-switch input:focus-visible + .year-switch-track {
+  outline: 2px solid var(--blue-bright);
+  outline-offset: 2px;
+}
+
+/* Row content -------------------------------------------------------- */
+
+.year-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.year-number {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.year-count {
+  font-size: 11px;
+}
+
+.year-comps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.year-comp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.year-comp .num {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.year-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  min-width: 0;
+}
+
+.year-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.year-remove {
+  justify-self: end;
+}
+
+.year-foot {
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .year-bar {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      'switch id remove'
+      'switch comps comps'
+      'switch meta meta';
+    row-gap: 8px;
+  }
+
+  .year-switch {
+    grid-area: switch;
+  }
+
+  .year-id {
+    grid-area: id;
+  }
+
+  .year-comps {
+    grid-area: comps;
+  }
+
+  .year-meta {
+    grid-area: meta;
+  }
+
+  .year-remove {
+    grid-area: remove;
+  }
+}
