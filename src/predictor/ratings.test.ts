@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   RatingsParseError,
+  bundledRatings,
   lookupRating,
   parseRatingsCsv,
   ratingKeys,
@@ -76,6 +77,45 @@ describe('parseRatingsCsv', () => {
     }
   });
 
+  it('reads rank and fraud even when they sit on different rows', () => {
+    // Real pool files do this: the rank lands on the first player's line and
+    // the fraud rating on the blank separator row that closes the block.
+    const split = [
+      HEADER,
+      'LCK,Hanwha Life Esports,Zeus,top,,3',
+      ',,Kanavi,jng,,',
+      ',,Zeka,mid,,',
+      ',,,,0.75,',
+      'LCK,KT Rolster,PerfecT,top,,5',
+    ].join('\n');
+    const { ratings } = parseRatingsCsv(split);
+    expect(lookupRating(ratings, 'Hanwha Life Esports')).toMatchObject({
+      globalRank: 3,
+      fraud: 0.75,
+    });
+    // The next team's block must not absorb the previous team's values.
+    expect(lookupRating(ratings, 'KT Rolster')).toMatchObject({ globalRank: 5, fraud: 0 });
+  });
+
+  it('keeps the first value when a block repeats a column', () => {
+    const repeated = [
+      HEADER,
+      'LCK,T1,Doran,top,0.5,2',
+      ',,Oner,jng,1,9',
+      ',,,,0.25,',
+    ].join('\n');
+    const { ratings } = parseRatingsCsv(repeated);
+    expect(lookupRating(ratings, 'T1')).toMatchObject({ globalRank: 2, fraud: 0.5 });
+  });
+
+  it('accepts fractional fraud ratings', () => {
+    const { ratings } = parseRatingsCsv(
+      [HEADER, 'LCK,T1,Doran,top,0.25,2', 'LCK,Gen.G,Kiin,top,0.75,1'].join('\n'),
+    );
+    expect(lookupRating(ratings, 'T1')?.fraud).toBe(0.25);
+    expect(lookupRating(ratings, 'Gen.G')?.fraud).toBe(0.75);
+  });
+
   it('reports a file that has the columns but no values', () => {
     const { teamsRead, warnings } = parseRatingsCsv([HEADER, 'LCK,T1,Doran,top,,'].join('\n'));
     expect(teamsRead).toBe(0);
@@ -103,5 +143,26 @@ describe('round trip through storage', () => {
 
   it('yields an empty map when nothing is stored', () => {
     expect(ratingsFromStored(null).size).toBe(0);
+  });
+});
+
+describe('bundled ratings', () => {
+  it('ships a table so the rank and fraud terms work before any import', () => {
+    const shipped = bundledRatings();
+    expect(shipped.bundled).toBe(true);
+    expect(shipped.teams.length).toBeGreaterThan(20);
+    expect(shipped.teams.some((team) => team.fraud !== 0)).toBe(true);
+    expect(shipped.teams.some((team) => team.globalRank !== null)).toBe(true);
+  });
+
+  it('is indexed by the same widening keys as an imported file', () => {
+    const ratings = ratingsFromStored(bundledRatings());
+    const first = bundledRatings().teams[0]!;
+    expect(lookupRating(ratings, first.team.toUpperCase())).not.toBeNull();
+  });
+
+  it('carries no duplicate teams', () => {
+    const teams = bundledRatings().teams.map((team) => team.team.toLowerCase());
+    expect(new Set(teams).size).toBe(teams.length);
   });
 });

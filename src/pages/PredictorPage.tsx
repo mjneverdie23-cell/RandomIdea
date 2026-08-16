@@ -5,6 +5,7 @@ import { usePredictor } from '../state/PredictorContext.tsx';
 import { DraftComposer } from '../components/predictor/DraftComposer.tsx';
 import { PredictionReport } from '../components/predictor/PredictionReport.tsx';
 import { predict } from '../predictor/engine.ts';
+import { lookupRating } from '../predictor/ratings.ts';
 import { PREDICTABLE_STAGES, STAGE_LABEL, formatFor } from '../predictor/formats.ts';
 import { gameNumberOf, swapDraftSides, type DraftSide } from '../predictor/draft.ts';
 import { COMPETITIONS } from '../domain/competitions.ts';
@@ -55,6 +56,15 @@ export function PredictorPage() {
   );
 
   const ready = blue.team !== null && red.team !== null;
+
+  /** Teams in this matchup the ratings table has no entry for. */
+  const unratedTeams = useMemo(
+    () =>
+      [blue.team, red.team].filter(
+        (team): team is string => team !== null && lookupRating(model.ratings, team) === null,
+      ),
+    [blue.team, red.team, model.ratings],
+  );
 
   const prediction = useMemo(() => {
     if (!ready) return null;
@@ -312,7 +322,8 @@ export function PredictorPage() {
           redTeam={red.team ?? ''}
           showSweep={winRequirement === 'sweep'}
           formSeason={model.formSeason}
-          hasRatings={ratings !== null}
+          ratingsLabel={ratings.label}
+          unratedTeams={unratedTeams}
         />
       ) : (
         <div className="empty-state">

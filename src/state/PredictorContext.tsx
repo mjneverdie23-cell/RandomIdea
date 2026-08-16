@@ -13,6 +13,7 @@ import { useDataset } from './DatasetContext.tsx';
 import { buildPredictorModel, emptyPredictorModel } from '../predictor/derive.ts';
 import {
   RatingsParseError,
+  bundledRatings,
   parseRatingsCsv,
   ratingsFromStored,
   ratingsToStored,
@@ -48,8 +49,8 @@ export interface PredictorContextValue {
   draft: PredictorDraft;
   setDraft: (update: PredictorDraft | ((current: PredictorDraft) => PredictorDraft)) => void;
   resetDraft: () => void;
-  /** Metadata for the loaded ratings file, or `null` when none is loaded. */
-  ratings: StoredRatings | null;
+  /** The ratings in force — an imported file, or the table shipped with the app. */
+  ratings: StoredRatings;
   ratingsStatus: 'loading' | 'ready';
   importRatings: (file: File) => Promise<RatingsImportReport>;
   clearRatings: () => Promise<void>;
@@ -59,7 +60,7 @@ const PredictorContext = createContext<PredictorContextValue | null>(null);
 
 export function PredictorProvider({ children }: { children: ReactNode }) {
   const { dataset } = useDataset();
-  const [ratings, setRatings] = useState<StoredRatings | null>(null);
+  const [ratings, setRatings] = useState<StoredRatings>(bundledRatings);
   const [ratingsStatus, setRatingsStatus] = useState<'loading' | 'ready'>('loading');
   // Read straight from storage on first render, so the page never paints a
   // blank board before a restore effect runs.
@@ -85,7 +86,8 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void loadStoredRatings().then((stored) => {
       if (cancelled) return;
-      setRatings(stored);
+      // An imported file wins; otherwise the shipped table stays in place.
+      if (stored) setRatings(stored);
       setRatingsStatus('ready');
     });
     return () => {
@@ -135,9 +137,10 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /** Drop an imported file and fall back to the table shipped with the app. */
   const clearRatings = useCallback(async () => {
     await clearStoredRatings();
-    setRatings(null);
+    setRatings(bundledRatings());
   }, []);
 
   const value = useMemo<PredictorContextValue>(

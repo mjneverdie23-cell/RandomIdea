@@ -1,0 +1,261 @@
+{
+ "label": "Team_and_champpool_full.csv",
+ "generatedAt": "2026-08-16",
+ "teams": [
+  {
+   "team": "Anyone's Legend",
+   "globalRank": 6,
+   "fraud": 0.25
+  },
+  {
+   "team": "Bilibili Gaming",
+   "globalRank": 4,
+   "fraud": 1
+  },
+  {
+   "team": "BNK FEARX",
+   "globalRank": 13,
+   "fraud": 0.5
+  },
+  {
+   "team": "Cloud9",
+   "globalRank": 19,
+   "fraud": 1
+  },
+  {
+   "team": "CTBC Flying Oyster",
+   "globalRank": 8,
+   "fraud": 0
+  },
+  {
+   "team": "Deep Cross Gaming",
+   "globalRank": 17,
+   "fraud": 0
+  },
+  {
+   "team": "DetonatioN FocusMe",
+   "globalRank": 53,
+   "fraud": 0
+  },
+  {
+   "team": "Dignitas",
+   "globalRank": 52,
+   "fraud": 0
+  },
+  {
+   "team": "Disguised",
+   "globalRank": 46,
+   "fraud": 1
+  },
+  {
+   "team": "DN SOOPers",
+   "globalRank": 30,
+   "fraud": 0
+  },
+  {
+   "team": "Dplus Kia",
+   "globalRank": 13,
+   "fraud": 1
+  },
+  {
+   "team": "DRX",
+   "globalRank": 34,
+   "fraud": 0
+  },
+  {
+   "team": "EDward Gaming",
+   "globalRank": 29,
+   "fraud": 0.5
+  },
+  {
+   "team": "FlyQuest",
+   "globalRank": 11,
+   "fraud": 0
+  },
+  {
+   "team": "Fnatic",
+   "globalRank": 32,
+   "fraud": 1
+  },
+  {
+   "team": "Fukuoka SoftBank HAWKS gaming",
+   "globalRank": 35,
+   "fraud": 0
+  },
+  {
+   "team": "G2 Esports",
+   "globalRank": 7,
+   "fraud": 1
+  },
+  {
+   "team": "GAM Esports",
+   "globalRank": 21,
+   "fraud": 0
+  },
+  {
+   "team": "Gen.G",
+   "globalRank": 1,
+   "fraud": 0.5
+  },
+  {
+   "team": "GiantX",
+   "globalRank": 36,
+   "fraud": 0
+  },
+  {
+   "team": "Ground Zero Gaming",
+   "globalRank": 46,
+   "fraud": 0
+  },
+  {
+   "team": "HANJIN BRION",
+   "globalRank": 40,
+   "fraud": 0.5
+  },
+  {
+   "team": "Hanwha Life Esports",
+   "globalRank": 3,
+   "fraud": 0.75
+  },
+  {
+   "team": "Invictus Gaming",
+   "globalRank": 17,
+   "fraud": 1
+  },
+  {
+   "team": "JD Gaming",
+   "globalRank": 9,
+   "fraud": 1
+  },
+  {
+   "team": "Karmine Corp",
+   "globalRank": 15,
+   "fraud": 0.25
+  },
+  {
+   "team": "Karmine Corp Blue",
+   "globalRank": null,
+   "fraud": 1
+  },
+  {
+   "team": "KT Rolster",
+   "globalRank": 5,
+   "fraud": 0
+  },
+  {
+   "team": "LGD Gaming",
+   "globalRank": 38,
+   "fraud": 0.5
+  },
+  {
+   "team": "LNG Esports",
+   "globalRank": 25,
+   "fraud": 0.5
+  },
+  {
+   "team": "LYON",
+   "globalRank": 27,
+   "fraud": 0
+  },
+  {
+   "team": "Movistar KOI",
+   "globalRank": 20,
+   "fraud": 1
+  },
+  {
+   "team": "MVK Esports",
+   "globalRank": 24,
+   "fraud": 0
+  },
+  {
+   "team": "Natus Vincere",
+   "globalRank": 51,
+   "fraud": 0
+  },
+  {
+   "team": "Ninjas in Pyjamas",
+   "globalRank": 23,
+   "fraud": 1
+  },
+  {
+   "team": "Nongshim RedForce",
+   "globalRank": 26,
+   "fraud": 0
+  },
+  {
+   "team": "Oh My God",
+   "globalRank": 44,
+   "fraud": 1
+  },
+  {
+   "team": "Sentinels",
+   "globalRank": 41,
+   "fraud": 1
+  },
+  {
+   "team": "Shifters",
+   "globalRank": 43,
+   "fraud": 0
+  },
+  {
+   "team": "Shopify Rebellion",
+   "globalRank": 45,
+   "fraud": 0
+  },
+  {
+   "team": "SK Gaming",
+   "globalRank": 55,
+   "fraud": 1
+  },
+  {
+   "team": "T1",
+   "globalRank": 2,
+   "fraud": 1
+  },
+  {
+   "team": "Team Heretics",
+   "globalRank": 50,
+   "fraud": 1
+  },
+  {
+   "team": "Team Liquid",
+   "globalRank": 22,
+   "fraud": 1
+  },
+  {
+   "team": "Team Secret Whales",
+   "globalRank": 16,
+   "fraud": 0
+  },
+  {
+   "team": "Team Vitality",
+   "globalRank": 30,
+   "fraud": 0
+  },
+  {
+   "team": "Team WE",
+   "globalRank": 28,
+   "fraud": 1
+  },
+  {
+   "team": "ThunderTalk Gaming",
+   "globalRank": 49,
+   "fraud": 0.5
+  },
+  {
+   "team": "Top Esports",
+   "globalRank": 10,
+   "fraud": 1
+  },
+  {
+   "team": "Ultra Prime",
+   "globalRank": 54,
+   "fraud": 0.5
+  },
+  {
+   "team": "Weibo Gaming",
+   "globalRank": 12,
+   "fraud": 1
+  }
+ ]
+}

@@ -1,11 +1,14 @@
 /**
- * Optional team ratings: GlobalRank and Fraud.
+ * Team ratings: GlobalRank and Fraud.
  *
  * These are the one predictor input with no equivalent anywhere in an Oracle's
  * Elixir export — they are hand-maintained judgements about how strong a team
- * is and how reliably it plays to that strength. The original app kept them in
- * a champion-pool CSV alongside rosters; here that file stays optional, and
- * without it the engine simply awards no rank edge and no fraud penalty.
+ * is and how reliably it plays to that strength, and they come from the same
+ * champion-pool CSV the original app used for rosters.
+ *
+ * A default table ships with the app (`data/teamRatings.json`) so the rank edge
+ * and fraud penalty work immediately; importing a file on the Data tab replaces
+ * it. Teams the table doesn't list score neither term, which the report says.
  *
  * The file is small (a few hundred rows), so it is parsed in one pass rather
  * than streamed like the match exports.
@@ -13,6 +16,7 @@
 
 import Papa from 'papaparse';
 import type { TeamRating } from './types.ts';
+import bundled from './data/teamRatings.json';
 
 /** Columns that identify a champion-pool file rather than a match export. */
 export const RATINGS_REQUIRED_COLUMNS = ['teamName', 'GlobalRank', 'Fraud'] as const;
@@ -99,26 +103,52 @@ export function parseRatingsCsv(text: string): RatingsImport {
   const rankColumn = columnFor('GlobalRank')!;
   const fraudColumn = columnFor('Fraud')!;
 
-  const ratings = new Map<string, TeamRating>();
-  const warnings: string[] = [];
+  /**
+   * Collect each column independently across a team's block of rows.
+   *
+   * The two values do not reliably share a row: a team can carry its rank on
+   * the first player's line and its fraud rating further down, or on the blank
+   * separator row that closes the block. Reading both from whichever row
+   * happened to be seen first silently dropped the other one, which is how a
+   * team with a real fraud rating ended up scoring a zero penalty. First
+   * non-blank value per column wins, so the order they appear in stops
+   * mattering.
+   */
+  const blocks = new Map<string, { team: string; rank: number | null; fraud: number | null }>();
+  const order: string[] = [];
   let currentTeam = '';
-  let teamsRead = 0;
 
   for (const row of parsed.data) {
     const teamCell = (row[teamColumn] ?? '').trim();
     if (teamCell) currentTeam = teamCell;
     if (!currentTeam) continue;
 
-    const rank = toNumber(row[rankColumn]);
-    const fraud = toNumber(row[fraudColumn]);
-    // Only the team's header row carries these; blanks below it are expected.
-    if (rank === null && fraud === null) continue;
+    const key = ratingKeys(currentTeam)[0]!;
+    let block = blocks.get(key);
+    if (!block) {
+      block = { team: currentTeam, rank: null, fraud: null };
+      blocks.set(key, block);
+      order.push(key);
+    }
 
-    const keys = ratingKeys(currentTeam);
-    if (ratings.has(keys[0]!)) continue;
+    if (block.rank === null) block.rank = toNumber(row[rankColumn]);
+    if (block.fraud === null) block.fraud = toNumber(row[fraudColumn]);
+  }
 
-    const rating: TeamRating = { team: currentTeam, globalRank: rank, fraud: fraud ?? 0 };
-    for (const key of keys) ratings.set(key, rating);
+  const ratings = new Map<string, TeamRating>();
+  const warnings: string[] = [];
+  let teamsRead = 0;
+
+  for (const key of order) {
+    const block = blocks.get(key)!;
+    // A block with neither value is just a roster listing, not a rating.
+    if (block.rank === null && block.fraud === null) continue;
+    const rating: TeamRating = {
+      team: block.team,
+      globalRank: block.rank,
+      fraud: block.fraud ?? 0,
+    };
+    for (const alias of ratingKeys(block.team)) ratings.set(alias, rating);
     teamsRead += 1;
   }
 
@@ -137,6 +167,24 @@ export interface StoredRatings {
   label: string;
   importedAt: string;
   teams: TeamRating[];
+  /** True for the table shipped with the app rather than one the user imported. */
+  bundled?: boolean;
+}
+
+/**
+ * The ratings the app ships with, so the rank edge and fraud penalty do
+ * something on a fresh install instead of quietly scoring zero until someone
+ * discovers the optional import. Regenerate with
+ * `node scripts/build-team-ratings.mjs <champpool.csv>`; an imported file
+ * replaces this table wholesale.
+ */
+export function bundledRatings(): StoredRatings {
+  return {
+    label: `${bundled.label} (shipped default)`,
+    importedAt: bundled.generatedAt,
+    teams: bundled.teams as TeamRating[],
+    bundled: true,
+  };
 }
 
 export function ratingsToStored(

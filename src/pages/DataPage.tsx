@@ -287,11 +287,12 @@ export function DataPage() {
  * reasonable question, so it gets answered here rather than only in the README.
  */
 /**
- * The predictor's optional ratings file.
+ * The predictor's team-ratings table.
  *
  * GlobalRank and Fraud are hand-maintained judgements that appear nowhere in an
- * Oracle's Elixir export, so this stays optional: without it the predictor
- * simply awards no rank edge and no fraud penalty, and says so in its output.
+ * Oracle's Elixir export. A default table ships with the app so both terms work
+ * immediately; importing a champion-pool CSV here replaces it, and removing the
+ * import falls back to the shipped one.
  */
 function TeamRatingsCard() {
   const { ratings, importRatings, clearRatings } = usePredictor();
@@ -310,17 +311,16 @@ function TeamRatingsCard() {
     <section className="panel ratings-card">
       <div className="panel-header">
         <h2>Team ratings</h2>
-        {ratings ? (
-          <span className="badge badge-strong">{ratings.teams.length} teams</span>
-        ) : (
-          <span className="badge">Optional</span>
-        )}
+        <span className={ratings.bundled ? 'badge' : 'badge badge-strong'}>
+          {ratings.teams.length} teams{ratings.bundled ? ' · shipped default' : ''}
+        </span>
       </div>
       <div className="panel-pad">
         <p className="dim">
           A champion-pool CSV with <code>teamName</code>, <code>GlobalRank</code> and{' '}
           <code>Fraud</code> columns. The predictor uses it for the rank edge and the fraud
-          penalty; every other number it reports comes from the imported seasons.
+          penalty; every other number it reports comes from the imported seasons. Rankings go
+          stale as teams rise and fall, so import a fresh file whenever yours changes.
         </p>
 
         <div className="ratings-summary">
@@ -330,24 +330,23 @@ function TeamRatingsCard() {
             disabled={busy}
             onClick={() => inputRef.current?.click()}
           >
-            {busy ? 'Reading…' : ratings ? 'Replace file' : 'Choose file'}
+            {busy ? 'Reading…' : 'Replace file'}
           </button>
-          {ratings && (
-            <>
-              <span className="dim">
-                {ratings.label} · imported {formatDate(ratings.importedAt)}
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => {
-                  void clearRatings();
-                  setReport(null);
-                }}
-              >
-                Remove
-              </button>
-            </>
+          <span className="dim">
+            {ratings.label} · {ratings.bundled ? 'generated' : 'imported'}{' '}
+            {formatDate(ratings.importedAt)}
+          </span>
+          {!ratings.bundled && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => {
+                void clearRatings();
+                setReport(null);
+              }}
+            >
+              Revert to default
+            </button>
           )}
           <input
             ref={inputRef}
@@ -368,7 +367,7 @@ function TeamRatingsCard() {
           </p>
         )}
 
-        {ratings && ratings.teams.length > 0 && (
+        {ratings.teams.length > 0 && (
           <table className="ratings-table">
             <thead>
               <tr>
@@ -388,7 +387,7 @@ function TeamRatingsCard() {
             </tbody>
           </table>
         )}
-        {ratings && ratings.teams.length > 12 && (
+        {ratings.teams.length > 12 && (
           <p className="dim">…and {ratings.teams.length - 12} more.</p>
         )}
       </div>

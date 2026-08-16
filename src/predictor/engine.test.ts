@@ -4,6 +4,7 @@ import {
   META_POINT,
   MOTIVATION_POINTS,
   POCKET_MANY_PENALTY,
+  POCKET_POINT,
   RANK_BONUS,
   anywhereKey,
   behaviorTendencies,
@@ -53,6 +54,15 @@ function withRecords(
   const map = new Map<string, { wins: number; games: number }>();
   ROLES.forEach((role, index) => {
     map.set(recordKey(competition, team, role, draft[index]!.id), { wins, games });
+  });
+  return map;
+}
+
+/** Mark the first `count` of blue's picks as meta, leaving the rest off-meta. */
+function metaFor(count: number): Map<Role, Set<string>> {
+  const map = new Map<Role, Set<string>>();
+  ROLES.forEach((role, index) => {
+    map.set(role, index < count ? new Set([DRAFT_A[index]!.id]) : new Set());
   });
   return map;
 }
@@ -153,21 +163,38 @@ describe('predict — point tally', () => {
   });
 
   it('rewards one or two pocket picks and punishes more than two', () => {
-    const metaFor = (count: number): Map<Role, Set<string>> => {
-      const map = new Map<Role, Set<string>>();
-      ROLES.forEach((role, index) => {
-        map.set(role, index < count ? new Set([DRAFT_A[index]!.id]) : new Set());
-      });
-      return map;
-    };
-
     // Four meta picks leaves one off-meta pick: a pocket pick.
-    expect(predict(model({ metaByRole: metaFor(4) }), input()).blue.pocketBonus).toBe(1);
-    expect(predict(model({ metaByRole: metaFor(3) }), input()).blue.pocketBonus).toBe(2);
+    expect(predict(model({ metaByRole: metaFor(4) }), input()).blue.pocketBonus).toBe(POCKET_POINT);
+    expect(predict(model({ metaByRole: metaFor(3) }), input()).blue.pocketBonus).toBe(
+      2 * POCKET_POINT,
+    );
     // Three off-meta picks tips over into chaos.
     expect(predict(model({ metaByRole: metaFor(2) }), input()).blue.pocketBonus).toBe(
       POCKET_MANY_PENALTY,
     );
+  });
+
+  it('prices a pocket pick above a meta pick', () => {
+    // An off-meta champion forfeits its meta bonus, so at parity the two
+    // cancelled and a pocket pick was worth exactly nothing in the total.
+    expect(POCKET_POINT).toBeGreaterThan(META_POINT);
+
+    const allMeta = predict(model({ metaByRole: metaFor(5) }), input()).blue;
+    const onePocket = predict(model({ metaByRole: metaFor(4) }), input()).blue;
+    expect(allMeta.metaBonus + allMeta.pocketBonus).toBe(5);
+    expect(onePocket.metaBonus + onePocket.pocketBonus).toBeCloseTo(4 + POCKET_POINT, 10);
+    expect(onePocket.total).toBeGreaterThan(allMeta.total);
+  });
+
+  it('makes a second pocket pick worth more than the first, then falls off a cliff', () => {
+    const draftValue = (metaCount: number): number => {
+      const score = predict(model({ metaByRole: metaFor(metaCount) }), input()).blue;
+      return score.metaBonus + score.pocketBonus;
+    };
+    expect(draftValue(3)).toBeGreaterThan(draftValue(4));
+    expect(draftValue(4)).toBeGreaterThan(draftValue(5));
+    // A third off-meta pick is chaos, not a plan.
+    expect(draftValue(2)).toBeLessThan(draftValue(5));
   });
 
   it('gives the rank edge only when the gap clears the threshold', () => {
@@ -341,7 +368,21 @@ describe('predict — notices', () => {
     const motivation = notices.find((n) => n.kind === 'motivation');
     expect(motivation?.warning).toBe(true);
     expect(motivation?.side).toBe('red');
-    expect(motivation?.text).toContain('-1');
+    expect(motivation?.text).toContain('−1');
+  });
+
+  it('reports fractional point values without rounding them away', () => {
+    // A +1.5 pocket bonus used to print as "+2" and a 0.25 fraud rating as "-0".
+    const pocket = predict(model({ metaByRole: metaFor(4) }), input()).notices.find(
+      (n) => n.kind === 'draft' && n.side === 'blue',
+    );
+    expect(pocket?.text).toContain('+1.5');
+
+    const ratings = new Map([['red team', { team: 'Red Team', globalRank: null, fraud: 0.25 }]]);
+    const fraud = predict(model({ ratings }), input()).notices.find(
+      (n) => n.kind === 'reliability',
+    );
+    expect(fraud?.text).toContain('−0.25');
   });
 
   it('says nothing about motivation for a normal game', () => {

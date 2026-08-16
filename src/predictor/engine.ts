@@ -6,7 +6,7 @@
  *
  *   win-rate base   the 5 champions' historical win rates for that team + role
  *   meta bonus      +1 per meta champion (meta = pick frequency, computed live)
- *   pocket picks    1-2 off-meta picks -> +1 / +2 ; more than 2 -> -2
+ *   pocket picks    1-2 off-meta picks -> +1.5 each ; more than 2 -> -2
  *   rank edge       +0.5 to the stronger team when GlobalRank differs by >= 2
  *   form edge       up to +1 for the better current-season series record
  *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
@@ -44,8 +44,25 @@ import {
 /* ------------------------------------------------------------------ */
 
 export const META_POINT = 1.0;
-export const POCKET_POINTS: Record<number, number> = { 1: 1.0, 2: 2.0 };
+
+/**
+ * What one off-meta pick is worth, and why it beats a meta pick.
+ *
+ * An off-meta champion earns no meta bonus, so at parity with `META_POINT` the
+ * two cancelled out exactly: four meta picks plus one pocket pick scored the
+ * same as five meta picks, and the surprise factor the term exists to reward
+ * was invisible in the total. Pricing a pocket pick above a meta pick makes it
+ * a real edge rather than a wash.
+ */
+export const POCKET_POINT = 1.5;
+/** Off-meta picks a team can take before the draft reads as chaos, not a plan. */
+export const POCKET_MAX = 2;
 export const POCKET_MANY_PENALTY = -2.0;
+
+export function pocketBonusFor(offMetaCount: number): number {
+  if (offMetaCount <= 0) return 0;
+  return offMetaCount <= POCKET_MAX ? offMetaCount * POCKET_POINT : POCKET_MANY_PENALTY;
+}
 export const RANK_DIFF_THRESHOLD = 2;
 export const RANK_BONUS = 0.5;
 /** Logistic scale converting a point margin into a per-game probability. */
@@ -237,8 +254,7 @@ function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput)
   winRateBase = Math.min(winRateBase, ROLES.length);
 
   const offMetaCount = picks.length - metaCount;
-  const pocketBonus =
-    offMetaCount === 0 ? 0 : offMetaCount <= 2 ? (POCKET_POINTS[offMetaCount] ?? 0) : POCKET_MANY_PENALTY;
+  const pocketBonus = pocketBonusFor(offMetaCount);
 
   const fraudPenalty = lookupRating(model.ratings, input.team)?.fraud ?? 0;
 
@@ -460,7 +476,7 @@ function buildNotices(
   for (const side of ['blue', 'red'] as const) {
     const entry = input[side];
     if (entry.motivation === 'normal') continue;
-    const points = signedPrecise(MOTIVATION_POINTS[entry.motivation]);
+    const points = signed(MOTIVATION_POINTS[entry.motivation]);
     if (entry.motivation === 'tank incentive') {
       notices.push({
         kind: 'motivation',
@@ -504,13 +520,17 @@ function buildNotices(
   return notices;
 }
 
+/**
+ * Signed point value for prose.
+ *
+ * Several terms carry quarter- and half-points — a 1.5 pocket bonus, a 0.25
+ * fraud rating — so this keeps whatever precision the number actually has
+ * rather than rounding it. Rounding to whole points reported a +1.5 bonus as
+ * "+2" and a 0.25 penalty as "-0".
+ */
 function signed(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(0)}`;
-}
-
-/** Same, but keeps the half-points the motivation scale uses. */
-function signedPrecise(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value}`;
+  const rounded = Math.round(value * 100) / 100;
+  return `${rounded >= 0 ? '+' : '−'}${Math.abs(rounded)}`;
 }
 
 /* ------------------------------------------------------------------ */

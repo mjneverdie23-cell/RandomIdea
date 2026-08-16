@@ -211,7 +211,7 @@ higher total is the predicted winner.
 | --- | --- |
 | Win-rate base | The five champions' historical win rates for that team in that role, capped at 1.00 per lane |
 | Meta champions | +1 per champion clearing the pick-rate bar on the newest patches |
-| Pocket picks | 1–2 off-meta picks +1/+2; three or more −2 |
+| Pocket picks | +1.5 per off-meta pick, up to two; three or more −2 |
 | Rank edge | +0.5 when GlobalRank differs by 2 or more |
 | Form edge | Up to +1 for the better current-season series record |
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive |
@@ -220,6 +220,11 @@ higher total is the predicted winner.
 The point margin becomes a per-game probability through a logistic curve, and
 the series and sweep odds follow by counting the ways a best-of can still be
 won from the current score.
+
+A pocket pick is priced above a meta pick on purpose. An off-meta champion
+earns no meta bonus, so while the two were equal they cancelled exactly: four
+meta picks plus a pocket pick scored the same as five meta picks, and the
+surprise factor the term exists to reward was invisible in the total.
 
 Motivation is the one term the data cannot supply — nothing in a results export
 knows a team is already eliminated or would rather draw a softer bracket — so
@@ -258,14 +263,26 @@ too small to mean anything.
 Champion counters and synergies annotate the per-lane breakdown, restricted to
 champions actually on the board, and likewise never move a total.
 
-### Optional team ratings
+### Team ratings
 
 GlobalRank and Fraud are the one input with no equivalent in an Oracle's Elixir
-export. Load a champion-pool CSV (columns `teamName`, `GlobalRank`, `Fraud`) on
-the **Data** tab to enable the rank edge and fraud penalty. Team names are
-matched case- and punctuation-insensitively, so `BNK FEARX` finds `BNK FearX`
-and `GENG` finds `Gen.G`. Without the file those two lines score zero and the
-report states why.
+export — they are hand-maintained judgements about how strong a team is and how
+reliably it plays to that strength.
+
+A default table ships with the app, so the rank edge and fraud penalty work
+immediately. Replace it by importing a champion-pool CSV (columns `teamName`,
+`GlobalRank`, `Fraud`) on the **Data** tab; **Revert to default** drops the
+import again. Team names are matched case- and punctuation-insensitively, so
+`BNK FEARX` finds `BNK FearX` and `GENG` finds `Gen.G`, and the report names
+which table it used plus any team in the matchup that isn't in it.
+
+Rank and fraud are read per column across each team's block of rows, because
+the two do not reliably share a row — a team can carry its rank on the first
+player's line and its fraud rating on the separator row that closes the block.
+
+Rankings go stale as teams rise and fall. Refresh them by importing a new file,
+or regenerate the shipped table with
+`node scripts/build-team-ratings.mjs <champpool.csv>`.
 
 ---
 
@@ -434,9 +451,10 @@ series reconstruction, and ratings parsing with fuzzy team matching).
   without code changes — at the cost of not always matching the official tag.
 - **The leaderboard is per-device** (localStorage). "Global" means global across
   runs on that device until a backend is attached.
-- **The predictor's rank and fraud terms need a ratings file.** GlobalRank and
-  Fraud are hand-maintained judgements that appear nowhere in an Oracle's Elixir
-  export. Without one, those two lines score zero and the report says so.
+- **The predictor's rank and fraud terms come from a hand-maintained table.**
+  GlobalRank and Fraud appear nowhere in an Oracle's Elixir export. A default
+  table ships with the app and can be replaced on the Data tab; teams it does
+  not list score zero on both lines, which the report states.
 - **Champion counters and synergies are static reference data**
   (`src/predictor/data/championGraph.json`). They annotate the per-lane
   breakdown and never move a score. Regenerate with

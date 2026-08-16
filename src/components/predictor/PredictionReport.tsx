@@ -12,7 +12,10 @@ interface PredictionReportProps {
   showSweep: boolean;
   /** Season the standings and behaviour reads describe. */
   formSeason: string | null;
-  hasRatings: boolean;
+  /** Where the rank and fraud numbers came from. */
+  ratingsLabel: string;
+  /** Teams in this matchup that the ratings table doesn't list. */
+  unratedTeams: string[];
 }
 
 export function PredictionReport({
@@ -21,7 +24,8 @@ export function PredictionReport({
   redTeam,
   showSweep,
   formSeason,
-  hasRatings,
+  ratingsLabel,
+  unratedTeams,
 }: PredictionReportProps) {
   const { favourite, margin } = prediction;
   const leader = favourite === 'blue' ? blueTeam : favourite === 'red' ? redTeam : null;
@@ -80,12 +84,24 @@ export function PredictionReport({
         </div>
         <footer className="tally-notes">
           <p>
-            <span className="dim">Rank edge:</span> {prediction.rankNote}
-            {!hasRatings && ' — load a team-ratings file on the Data tab to enable it'}.
+            <span className="dim">Rank edge:</span> {prediction.rankNote}.
           </p>
           <p>
             <span className="dim">Form edge:</span> {prediction.formNote}
             {formSeason ? ` (${formSeason} season)` : ''}.
+          </p>
+          <p>
+            <span className="dim">Rank &amp; fraud source:</span> {ratingsLabel}
+            {unratedTeams.length > 0 && (
+              <>
+                {' — '}
+                {unratedTeams.join(' and ')}{' '}
+                {unratedTeams.length === 1 ? 'is' : 'are'} not listed in it, so{' '}
+                {unratedTeams.length === 1 ? 'that team scores' : 'those teams score'} no rank edge
+                and no fraud penalty
+              </>
+            )}
+            .
           </p>
         </footer>
       </section>
@@ -173,7 +189,7 @@ function ProbabilityBar({ label, blue, red, blueTeam, redTeam, independent }: Pr
 const TALLY_ROWS = [
   { key: 'winRateBase', label: 'Win-rate base', hint: '5 lanes, capped at 1.00 each' },
   { key: 'metaBonus', label: 'Meta champions', hint: '+1 each' },
-  { key: 'pocketBonus', label: 'Pocket picks', hint: '1–2 off-meta +1/+2, more −2' },
+  { key: 'pocketBonus', label: 'Pocket picks', hint: '+1.5 each for 1–2 off-meta, more −2' },
   { key: 'rankBonus', label: 'Rank edge', hint: '+0.5 when ranks differ by 2+' },
   { key: 'formEdge', label: 'Form edge', hint: 'from the current-season record' },
   { key: 'motivationBonus', label: 'Motivation', hint: 'must-win +0.5, coasting −0.5, tanking −1' },
