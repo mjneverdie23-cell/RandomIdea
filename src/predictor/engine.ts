@@ -9,6 +9,7 @@
  *   pocket picks    1-2 off-meta picks -> +1 / +2 ; more than 2 -> -2
  *   rank edge       +0.5 to the stronger team when GlobalRank differs by >= 2
  *   form edge       up to +1 for the better current-season series record
+ *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
  *   fraud penalty   minus the team's inconsistency rating
  *
  * The point margin becomes a per-game probability through a logistic curve,
@@ -30,6 +31,7 @@ import {
   type Prediction,
   type PredictionInput,
   type PredictorModel,
+  type Motivation,
   type SideInput,
   type SideScore,
   type StandingRow,
@@ -54,6 +56,23 @@ export const FORM_SCALE = 2.0;
 export const FORM_CAP = 1.0;
 /** A record below this many series is not trusted for the form edge. */
 export const MIN_FORM_SERIES = 3;
+
+/**
+ * What a team's situation is worth.
+ *
+ * This is the one term the data cannot supply — nothing in a results export
+ * knows a team is already eliminated or would rather draw a softer bracket, so
+ * the user states it and the model takes them at their word. The values are
+ * scaled against the form edge (max ±1.00) rather than the meta bonus, because
+ * a stated circumstance should be able to tip a close matchup without ever
+ * outweighing what the teams actually drafted.
+ */
+export const MOTIVATION_POINTS: Record<Motivation, number> = {
+  normal: 0,
+  'must win': 0.5,
+  'nothing to play for': -0.5,
+  'tank incentive': -1.0,
+};
 
 /** Win rate used when a team has never played the champion in that role. */
 export const NEUTRAL_WIN_RATE = 0.5;
@@ -233,6 +252,7 @@ function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput)
     pocketBonus,
     rankBonus: 0,
     formEdge: 0,
+    motivationBonus: MOTIVATION_POINTS[input.motivation] ?? 0,
     fraudPenalty,
     total: 0,
   };
@@ -244,7 +264,8 @@ function finalizeTotal(score: SideScore): number {
     score.metaBonus +
     score.pocketBonus +
     score.rankBonus +
-    score.formEdge -
+    score.formEdge +
+    score.motivationBonus -
     score.fraudPenalty
   );
 }
@@ -438,21 +459,27 @@ function buildNotices(
 
   for (const side of ['blue', 'red'] as const) {
     const entry = input[side];
+    if (entry.motivation === 'normal') continue;
+    const points = signedPrecise(MOTIVATION_POINTS[entry.motivation]);
     if (entry.motivation === 'tank incentive') {
       notices.push({
         kind: 'motivation',
         side,
         warning: true,
-        text: `${entry.team}: tank incentive — winning may draw a harder next opponent.`,
+        text: `${entry.team}: tank incentive — winning may draw a harder next opponent (${points}).`,
       });
     } else if (entry.motivation === 'must win') {
-      notices.push({ kind: 'motivation', side, text: `${entry.team}: must-win — expect full effort.` });
-    } else if (entry.motivation === 'nothing to play for') {
+      notices.push({
+        kind: 'motivation',
+        side,
+        text: `${entry.team}: must-win — expect full effort (${points}).`,
+      });
+    } else {
       notices.push({
         kind: 'motivation',
         side,
         warning: true,
-        text: `${entry.team}: little to play for — coasting risk.`,
+        text: `${entry.team}: little to play for — coasting risk (${points}).`,
       });
     }
   }
@@ -479,6 +506,11 @@ function buildNotices(
 
 function signed(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(0)}`;
+}
+
+/** Same, but keeps the half-points the motivation scale uses. */
+function signedPrecise(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value}`;
 }
 
 /* ------------------------------------------------------------------ */

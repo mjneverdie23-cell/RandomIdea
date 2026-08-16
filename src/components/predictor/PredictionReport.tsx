@@ -176,6 +176,7 @@ const TALLY_ROWS = [
   { key: 'pocketBonus', label: 'Pocket picks', hint: '1–2 off-meta +1/+2, more −2' },
   { key: 'rankBonus', label: 'Rank edge', hint: '+0.5 when ranks differ by 2+' },
   { key: 'formEdge', label: 'Form edge', hint: 'from the current-season record' },
+  { key: 'motivationBonus', label: 'Motivation', hint: 'must-win +0.5, coasting −0.5, tanking −1' },
 ] as const;
 
 function TallyColumn({ score, side, winner }: { score: SideScore; side: Side; winner: boolean }) {

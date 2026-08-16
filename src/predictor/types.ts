@@ -174,6 +174,8 @@ export interface SideScore {
   pocketBonus: number;
   rankBonus: number;
   formEdge: number;
+  /** What the stated motivation is worth; zero for a normal game. */
+  motivationBonus: number;
   fraudPenalty: number;
   total: number;
 }

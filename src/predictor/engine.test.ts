@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FORM_CAP,
   META_POINT,
+  MOTIVATION_POINTS,
   POCKET_MANY_PENALTY,
   RANK_BONUS,
   anywhereKey,
@@ -222,6 +223,50 @@ describe('predict — point tally', () => {
     expect(result.red.formEdge).toBe(0);
   });
 
+  it('scores the stated motivation', () => {
+    const level = predict(model(), input());
+    expect(level.blue.motivationBonus).toBe(0);
+    expect(level.margin).toBe(0);
+
+    const mustWin = predict(
+      model(),
+      input({ blue: { ...input().blue, motivation: 'must win' } }),
+    );
+    expect(mustWin.blue.motivationBonus).toBe(MOTIVATION_POINTS['must win']);
+    expect(mustWin.margin).toBeCloseTo(0.5, 10);
+    expect(mustWin.favourite).toBe('blue');
+
+    const tanking = predict(
+      model(),
+      input({ blue: { ...input().blue, motivation: 'tank incentive' } }),
+    );
+    expect(tanking.blue.motivationBonus).toBe(-1);
+    expect(tanking.favourite).toBe('red');
+  });
+
+  it('lets motivation decide an otherwise level matchup', () => {
+    const result = predict(
+      model(),
+      input({
+        blue: { ...input().blue, motivation: 'must win' },
+        red: { ...input().red, motivation: 'nothing to play for' },
+      }),
+    );
+    // +0.5 against -0.5 is a full point of swing.
+    expect(result.margin).toBeCloseTo(1, 10);
+    expect(result.gameProbBlue).toBeGreaterThan(0.6);
+  });
+
+  it('never lets motivation outweigh the draft itself', () => {
+    // A team with a perfect record on every pick, but tanking, still leads a
+    // team with no history at all.
+    const result = predict(
+      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 10, 10) }),
+      input({ blue: { ...input().blue, motivation: 'tank incentive' } }),
+    );
+    expect(result.favourite).toBe('blue');
+  });
+
   it('sums every line item into the total', () => {
     const metaByRole = new Map<Role, Set<string>>();
     ROLES.forEach((role, index) => metaByRole.set(role, new Set([DRAFT_A[index]!.id])));
@@ -231,7 +276,13 @@ describe('predict — point tally', () => {
     );
     const { blue } = result;
     expect(blue.total).toBeCloseTo(
-      blue.winRateBase + blue.metaBonus + blue.pocketBonus + blue.rankBonus + blue.formEdge - blue.fraudPenalty,
+      blue.winRateBase +
+        blue.metaBonus +
+        blue.pocketBonus +
+        blue.rankBonus +
+        blue.formEdge +
+        blue.motivationBonus -
+        blue.fraudPenalty,
       10,
     );
   });
@@ -282,7 +333,7 @@ describe('predict — notices', () => {
     expect(notices.find((n) => n.kind === 'series')?.text).toContain('Blue Team on match point');
   });
 
-  it('surfaces a tank incentive as a warning', () => {
+  it('surfaces a tank incentive as a warning, with its cost', () => {
     const notices = predict(
       model(),
       input({ red: { ...input().red, motivation: 'tank incentive' } }),
@@ -290,6 +341,11 @@ describe('predict — notices', () => {
     const motivation = notices.find((n) => n.kind === 'motivation');
     expect(motivation?.warning).toBe(true);
     expect(motivation?.side).toBe('red');
+    expect(motivation?.text).toContain('-1');
+  });
+
+  it('says nothing about motivation for a normal game', () => {
+    expect(predict(model(), input()).notices.filter((n) => n.kind === 'motivation')).toHaveLength(0);
   });
 });
 

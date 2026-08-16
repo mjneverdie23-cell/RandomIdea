@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useDataset } from '../state/DatasetContext.tsx';
 import { usePredictor } from '../state/PredictorContext.tsx';
@@ -6,46 +6,19 @@ import { DraftComposer } from '../components/predictor/DraftComposer.tsx';
 import { PredictionReport } from '../components/predictor/PredictionReport.tsx';
 import { predict } from '../predictor/engine.ts';
 import { PREDICTABLE_STAGES, STAGE_LABEL, formatFor } from '../predictor/formats.ts';
+import { gameNumberOf, swapDraftSides, type DraftSide } from '../predictor/draft.ts';
 import { COMPETITIONS } from '../domain/competitions.ts';
-import { ROLES, type Champion, type CompetitionId, type StageKind } from '../domain/types.ts';
-import {
-  SERIES_TARGET,
-  type Motivation,
-  type SeriesLength,
-  type WinRequirement,
-} from '../predictor/types.ts';
+import type { CompetitionId, Side, StageKind } from '../domain/types.ts';
+import { SERIES_TARGET, type SeriesLength, type WinRequirement } from '../predictor/types.ts';
 import { formatCount } from '../lib/format.ts';
 
 const SERIES_LENGTHS: SeriesLength[] = ['BO1', 'BO3', 'BO5'];
-const EMPTY_DRAFT: (Champion | null)[] = ROLES.map(() => null);
-
-interface SideState {
-  competition: CompetitionId | null;
-  team: string | null;
-  champions: (Champion | null)[];
-  motivation: Motivation;
-}
-
-const BLANK_SIDE: SideState = {
-  competition: null,
-  team: null,
-  champions: EMPTY_DRAFT,
-  motivation: 'normal',
-};
 
 export function PredictorPage() {
   const { dataset, isDemo } = useDataset();
-  const { model, ratings } = usePredictor();
-
-  const [blue, setBlue] = useState<SideState>(BLANK_SIDE);
-  const [red, setRed] = useState<SideState>(BLANK_SIDE);
-  const [stage, setStage] = useState<StageKind>('regular');
-  const [seriesLength, setSeriesLength] = useState<SeriesLength>('BO3');
-  const [seriesTouched, setSeriesTouched] = useState(false);
-  const [gameNumber, setGameNumber] = useState(1);
-  const [scoreBlue, setScoreBlue] = useState(0);
-  const [scoreRed, setScoreRed] = useState(0);
-  const [winRequirement, setWinRequirement] = useState<WinRequirement>('series');
+  const { model, ratings, draft, setDraft, resetDraft } = usePredictor();
+  const { blue, red, stage, seriesLength, seriesTouched, scoreBlue, scoreRed, winRequirement } =
+    draft;
 
   /** Competitions that actually have games loaded. */
   const availableCompetitions = useMemo(
@@ -57,20 +30,23 @@ export function PredictorPage() {
   // overrides it themselves, after which their choice stands.
   useEffect(() => {
     if (seriesTouched) return;
-    setSeriesLength(formatFor(blue.competition, stage).series);
-  }, [blue.competition, stage, seriesTouched]);
+    const suggested = formatFor(blue.competition, stage).series;
+    setDraft((current) =>
+      current.seriesTouched || current.seriesLength === suggested
+        ? current
+        : { ...current, seriesLength: suggested },
+    );
+  }, [blue.competition, stage, seriesTouched, setDraft]);
 
   const target = SERIES_TARGET[seriesLength];
+  const gameNumber = gameNumberOf(draft);
 
-  // A score can't survive a change of format: 2-1 is impossible in a Bo1.
-  useEffect(() => {
-    setScoreBlue((value) => Math.min(value, target - 1));
-    setScoreRed((value) => Math.min(value, target - 1));
-  }, [target]);
-
-  useEffect(() => {
-    setGameNumber(scoreBlue + scoreRed + 1);
-  }, [scoreBlue, scoreRed]);
+  const updateSide = useCallback(
+    (side: Side, change: (current: DraftSide) => DraftSide) => {
+      setDraft((current) => ({ ...current, [side]: change(current[side]) }));
+    },
+    [setDraft],
+  );
 
   const teamsFor = useCallback(
     (competition: CompetitionId | null): string[] =>
@@ -83,8 +59,18 @@ export function PredictorPage() {
   const prediction = useMemo(() => {
     if (!ready) return null;
     return predict(model, {
-      blue: { competition: blue.competition, team: blue.team!, champions: blue.champions, motivation: blue.motivation },
-      red: { competition: red.competition, team: red.team!, champions: red.champions, motivation: red.motivation },
+      blue: {
+        competition: blue.competition,
+        team: blue.team!,
+        champions: blue.champions,
+        motivation: blue.motivation,
+      },
+      red: {
+        competition: red.competition,
+        team: red.team!,
+        champions: red.champions,
+        motivation: red.motivation,
+      },
       stage,
       seriesLength,
       gameNumber,
@@ -93,24 +79,18 @@ export function PredictorPage() {
       previousWinner: null,
       winRequirement,
     });
-  }, [ready, model, blue, red, stage, seriesLength, gameNumber, scoreBlue, scoreRed, winRequirement]);
-
-  const reset = () => {
-    setBlue(BLANK_SIDE);
-    setRed(BLANK_SIDE);
-    setStage('regular');
-    setSeriesTouched(false);
-    setScoreBlue(0);
-    setScoreRed(0);
-    setWinRequirement('series');
-  };
-
-  const swapSides = () => {
-    setBlue(red);
-    setRed(blue);
-    setScoreBlue(scoreRed);
-    setScoreRed(scoreBlue);
-  };
+  }, [
+    ready,
+    model,
+    blue,
+    red,
+    stage,
+    seriesLength,
+    gameNumber,
+    scoreBlue,
+    scoreRed,
+    winRequirement,
+  ]);
 
   if (!dataset || dataset.games.length === 0) {
     return (
@@ -134,14 +114,20 @@ export function PredictorPage() {
           <p className="dim">
             Build a draft and read the point tally. Every number below comes from the{' '}
             {formatCount(model.gamesAnalyzed, 'game')} you have loaded
-            {model.metaPatches.length > 0 && `, with meta taken from patch ${model.metaPatches.join(' and ')}`}.
+            {model.metaPatches.length > 0 &&
+              `, with meta taken from patch ${model.metaPatches.join(' and ')}`}
+            .
           </p>
         </div>
         <div className="page-head-actions">
-          <button type="button" className="btn btn-sm" onClick={swapSides}>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => setDraft(swapDraftSides)}
+          >
             Swap sides
           </button>
-          <button type="button" className="btn btn-sm" onClick={reset}>
+          <button type="button" className="btn btn-sm" onClick={resetDraft}>
             Reset
           </button>
         </div>
@@ -162,7 +148,7 @@ export function PredictorPage() {
             value={blue.competition ?? ''}
             onChange={(event) => {
               const value = (event.target.value || null) as CompetitionId | null;
-              setBlue((side) => ({ ...side, competition: value, team: null }));
+              updateSide('blue', (side) => ({ ...side, competition: value, team: null }));
             }}
           >
             <option value="">All competitions</option>
@@ -181,7 +167,7 @@ export function PredictorPage() {
             value={red.competition ?? ''}
             onChange={(event) => {
               const value = (event.target.value || null) as CompetitionId | null;
-              setRed((side) => ({ ...side, competition: value, team: null }));
+              updateSide('red', (side) => ({ ...side, competition: value, team: null }));
             }}
           >
             <option value="">All competitions</option>
@@ -198,7 +184,9 @@ export function PredictorPage() {
           <select
             className="select"
             value={stage}
-            onChange={(event) => setStage(event.target.value as StageKind)}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, stage: event.target.value as StageKind }))
+            }
           >
             {PREDICTABLE_STAGES.map((kind) => (
               <option key={kind} value={kind}>
@@ -213,10 +201,13 @@ export function PredictorPage() {
           <select
             className="select"
             value={seriesLength}
-            onChange={(event) => {
-              setSeriesLength(event.target.value as SeriesLength);
-              setSeriesTouched(true);
-            }}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                seriesLength: event.target.value as SeriesLength,
+                seriesTouched: true,
+              }))
+            }
           >
             {SERIES_LENGTHS.map((length) => (
               <option key={length} value={length}>
@@ -229,9 +220,21 @@ export function PredictorPage() {
         <div className="field">
           <span className="field-label">Series score</span>
           <div className="score-input">
-            <ScoreStepper label="Blue score" value={scoreBlue} max={target - 1} onChange={setScoreBlue} tone="blue" />
+            <ScoreStepper
+              label="Blue score"
+              value={scoreBlue}
+              max={target - 1}
+              tone="blue"
+              onChange={(value) => setDraft((current) => ({ ...current, scoreBlue: value }))}
+            />
             <span className="score-dash">–</span>
-            <ScoreStepper label="Red score" value={scoreRed} max={target - 1} onChange={setScoreRed} tone="red" />
+            <ScoreStepper
+              label="Red score"
+              value={scoreRed}
+              max={target - 1}
+              tone="red"
+              onChange={(value) => setDraft((current) => ({ ...current, scoreRed: value }))}
+            />
           </div>
         </div>
 
@@ -245,7 +248,12 @@ export function PredictorPage() {
           <select
             className="select"
             value={winRequirement}
-            onChange={(event) => setWinRequirement(event.target.value as WinRequirement)}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                winRequirement: event.target.value as WinRequirement,
+              }))
+            }
           >
             <option value="series">Series odds</option>
             <option value="sweep">Series + sweep odds</option>
@@ -263,14 +271,14 @@ export function PredictorPage() {
           opposingChampions={red.champions}
           motivation={blue.motivation}
           teamOptions={teamsFor(blue.competition)}
-          onTeamChange={(team) => setBlue((side) => ({ ...side, team }))}
+          onTeamChange={(team) => updateSide('blue', (side) => ({ ...side, team }))}
           onChampionChange={(index, champion) =>
-            setBlue((side) => ({
+            updateSide('blue', (side) => ({
               ...side,
               champions: side.champions.map((entry, i) => (i === index ? champion : entry)),
             }))
           }
-          onMotivationChange={(motivation) => setBlue((side) => ({ ...side, motivation }))}
+          onMotivationChange={(motivation) => updateSide('blue', (side) => ({ ...side, motivation }))}
         />
 
         <div className="composer-divider">
@@ -286,14 +294,14 @@ export function PredictorPage() {
           opposingChampions={blue.champions}
           motivation={red.motivation}
           teamOptions={teamsFor(red.competition)}
-          onTeamChange={(team) => setRed((side) => ({ ...side, team }))}
+          onTeamChange={(team) => updateSide('red', (side) => ({ ...side, team }))}
           onChampionChange={(index, champion) =>
-            setRed((side) => ({
+            updateSide('red', (side) => ({
               ...side,
               champions: side.champions.map((entry, i) => (i === index ? champion : entry)),
             }))
           }
-          onMotivationChange={(motivation) => setRed((side) => ({ ...side, motivation }))}
+          onMotivationChange={(motivation) => updateSide('red', (side) => ({ ...side, motivation }))}
         />
       </div>
 

@@ -214,11 +214,23 @@ higher total is the predicted winner.
 | Pocket picks | 1–2 off-meta picks +1/+2; three or more −2 |
 | Rank edge | +0.5 when GlobalRank differs by 2 or more |
 | Form edge | Up to +1 for the better current-season series record |
+| Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive |
 | Fraud penalty | Minus the team's inconsistency rating |
 
 The point margin becomes a per-game probability through a logistic curve, and
 the series and sweep odds follow by counting the ways a best-of can still be
 won from the current score.
+
+Motivation is the one term the data cannot supply — nothing in a results export
+knows a team is already eliminated or would rather draw a softer bracket — so
+you state it and the model takes you at your word. It is scaled against the
+form edge rather than the meta bonus, so it can tip a close matchup without
+ever outweighing what the teams actually drafted.
+
+### The draft is kept
+
+The composition survives switching tabs, and a reload or a closed browser. Use
+**Reset** to clear it; that forgets the saved copy too.
 
 ### Where its numbers come from
 

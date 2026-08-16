@@ -23,6 +23,14 @@ import {
   loadStoredRatings,
   saveStoredRatings,
 } from '../storage/ratingsStore.ts';
+import {
+  BLANK_DRAFT,
+  clampScores,
+  clearSavedDraft,
+  loadDraft,
+  saveDraft,
+  type PredictorDraft,
+} from '../predictor/draft.ts';
 import type { PredictorModel } from '../predictor/types.ts';
 
 export interface RatingsImportReport {
@@ -33,6 +41,13 @@ export interface RatingsImportReport {
 
 export interface PredictorContextValue {
   model: PredictorModel;
+  /**
+   * The composition in progress. Held here rather than in the page so that
+   * navigating to another tab doesn't discard it.
+   */
+  draft: PredictorDraft;
+  setDraft: (update: PredictorDraft | ((current: PredictorDraft) => PredictorDraft)) => void;
+  resetDraft: () => void;
   /** Metadata for the loaded ratings file, or `null` when none is loaded. */
   ratings: StoredRatings | null;
   ratingsStatus: 'loading' | 'ready';
@@ -46,6 +61,25 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
   const { dataset } = useDataset();
   const [ratings, setRatings] = useState<StoredRatings | null>(null);
   const [ratingsStatus, setRatingsStatus] = useState<'loading' | 'ready'>('loading');
+  // Read straight from storage on first render, so the page never paints a
+  // blank board before a restore effect runs.
+  const [draft, setDraftState] = useState<PredictorDraft>(loadDraft);
+
+  const setDraft = useCallback(
+    (update: PredictorDraft | ((current: PredictorDraft) => PredictorDraft)) => {
+      setDraftState((current) => {
+        const next = clampScores(typeof update === 'function' ? update(current) : update);
+        saveDraft(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const resetDraft = useCallback(() => {
+    clearSavedDraft();
+    setDraftState(BLANK_DRAFT);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,8 +141,17 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<PredictorContextValue>(
-    () => ({ model, ratings, ratingsStatus, importRatings, clearRatings }),
-    [model, ratings, ratingsStatus, importRatings, clearRatings],
+    () => ({
+      model,
+      draft,
+      setDraft,
+      resetDraft,
+      ratings,
+      ratingsStatus,
+      importRatings,
+      clearRatings,
+    }),
+    [model, draft, setDraft, resetDraft, ratings, ratingsStatus, importRatings, clearRatings],
   );
 
   return <PredictorContext.Provider value={value}>{children}</PredictorContext.Provider>;
