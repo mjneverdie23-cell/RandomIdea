@@ -2,14 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { COMPETITIONS } from '../domain/competitions.ts';
 import {
+  categoryKey,
   filterEntries,
   leaderboardRepository,
   rankEntries,
+  summarizeCategories,
+  LEADERBOARD_CATEGORIES,
+  type LeaderboardCategory,
   type LeaderboardEntry,
   type LeaderboardFilters,
 } from '../leaderboard/repository.ts';
 import { formatPercent, formatRelative, formatScore, formatSeconds } from '../lib/format.ts';
-import { MODE_LABEL, QUESTION_COUNTS } from '../quiz/config.ts';
+import { MODE_LABEL, QUESTION_COUNTS, type QuizMode } from '../quiz/config.ts';
+import { MAX_QUESTION_SCORE } from '../quiz/scoring.ts';
 import { usePlayerName } from '../state/usePlayerName.ts';
 
 export function LeaderboardPage() {
@@ -17,6 +22,7 @@ export function LeaderboardPage() {
   const [filters, setFilters] = useState<LeaderboardFilters>({
     questionCount: null,
     sourceKey: null,
+    mode: null,
   });
   const [name] = usePlayerName();
 
@@ -31,6 +37,21 @@ export function LeaderboardPage() {
     [entries, filters],
   );
 
+  const categories = useMemo(
+    () => summarizeCategories(entries ?? [], LEADERBOARD_CATEGORIES, name),
+    [entries, name],
+  );
+
+  /* Scores only compare within one style and one length. */
+  const scoped = filters.mode !== null && filters.questionCount !== null;
+
+  const selectCategory = (category: LeaderboardCategory) =>
+    setFilters((current) => ({
+      ...current,
+      mode: category.mode,
+      questionCount: category.questionCount,
+    }));
+
   const clearAll = () => {
     if (!window.confirm('Delete every saved run from this device?')) return;
     void leaderboardRepository.clear().then(load);
@@ -43,8 +64,9 @@ export function LeaderboardPage() {
           <p className="eyebrow">Global ranking</p>
           <h1>Leaderboard</h1>
           <p className="page-sub">
-            Every completed run, ranked by score. Ties break on accuracy, then on the faster
-            average answer.
+            Every style and length keeps its own board — a 50-question run can score five times
+            what a 10-question run can, so they are never ranked against each other. Within a
+            board, ties break on accuracy, then on the faster average answer.
           </p>
         </div>
         {entries !== null && entries.length > 0 && (
@@ -54,7 +76,82 @@ export function LeaderboardPage() {
         )}
       </header>
 
+      <section className="panel">
+        <div className="panel-header">
+          <h2>Records</h2>
+          <span className="dim">Best run in each style and length</span>
+        </div>
+        <div className="panel-pad record-grid">
+          {categories.map((summary) => {
+            const key = categoryKey(summary.category);
+            const active =
+              filters.mode === summary.category.mode &&
+              filters.questionCount === summary.category.questionCount;
+            return (
+              <button
+                key={key}
+                type="button"
+                className={`record-card${active ? ' is-active' : ''}`}
+                onClick={() => selectCategory(summary.category)}
+                aria-pressed={active}
+              >
+                <span className="record-head">
+                  <span className="record-mode">{MODE_LABEL[summary.category.mode]}</span>
+                  <span className="record-length num">{summary.category.questionCount}Q</span>
+                </span>
+
+                {summary.leader ? (
+                  <>
+                    <span className="record-score num">{formatScore(summary.leader.score)}</span>
+                    <span className="record-holder">{summary.leader.username}</span>
+                    <span className="record-meta dim num">
+                      {formatPercent(summary.leader.accuracy)} ·{' '}
+                      {formatSeconds(summary.leader.averageResponseMs)} · max{' '}
+                      {formatScore(summary.category.questionCount * MAX_QUESTION_SCORE)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="record-score record-empty">—</span>
+                    <span className="record-holder dim">Unclaimed</span>
+                    <span className="record-meta dim">Be the first to set a score</span>
+                  </>
+                )}
+
+                <span className="record-you dim">
+                  {summary.personal
+                    ? `You: ${formatScore(summary.personal.score)} · #${summary.personalRank} of ${summary.runs}`
+                    : `${summary.runs} run${summary.runs === 1 ? '' : 's'} recorded`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="panel filter-bar">
+        <div className="filter-group">
+          <span className="stat-label">Style</span>
+          <div className="chip-row">
+            <FilterChip
+              active={filters.mode === null}
+              onClick={() => setFilters((f) => ({ ...f, mode: null }))}
+            >
+              Any
+            </FilterChip>
+            {(['matchups', 'games'] as QuizMode[]).map((mode) => (
+              <FilterChip
+                key={mode}
+                active={filters.mode === mode}
+                accent="var(--violet)"
+                onClick={() => setFilters((f) => ({ ...f, mode }))}
+              >
+                {MODE_LABEL[mode]}
+              </FilterChip>
+            ))}
+          </div>
+        </div>
+
         <div className="filter-group">
           <span className="stat-label">Length</span>
           <div className="chip-row">
@@ -122,66 +219,81 @@ export function LeaderboardPage() {
           </Link>
         </div>
       ) : (
-        <div className="panel board-wrap">
-          <table className="board">
-            <thead>
-              <tr>
-                <th scope="col" className="board-rank">
-                  #
-                </th>
-                <th scope="col">Player</th>
-                <th scope="col" className="board-num">
-                  Score
-                </th>
-                <th scope="col" className="board-num">
-                  Length
-                </th>
-                <th scope="col" className="board-num">
-                  Accuracy
-                </th>
-                <th scope="col" className="board-num">
-                  Avg time
-                </th>
-                <th scope="col" className="board-num">
-                  Streak
-                </th>
-                <th scope="col">Source</th>
-                <th scope="col">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((entry, index) => {
-                const isMe = entry.username.toLowerCase() === name.trim().toLowerCase();
-                return (
-                  <tr
-                    key={entry.id}
-                    className={`${index < 3 ? `board-top board-top-${index + 1}` : ''}${isMe ? ' is-me' : ''}`}
-                  >
-                    <td className="board-rank num">{index + 1}</td>
-                    <td>
-                      <span className="board-player">{entry.username}</span>
-                      {entry.demoData && (
-                        <span className="badge badge-demo board-demo">Demo</span>
-                      )}
-                    </td>
-                    <td className="board-num num board-score">{formatScore(entry.score)}</td>
-                    <td className="board-num num">{entry.questionCount}</td>
-                    <td className="board-num num">{formatPercent(entry.accuracy)}</td>
-                    <td className="board-num num">{formatSeconds(entry.averageResponseMs)}</td>
-                    <td className="board-num num">{entry.bestStreak}</td>
-                    <td>
-                      <span className="badge">{entry.sourceLabel}</span>
-                      {entry.mode && (
-                        <span className="badge board-mode">{MODE_LABEL[entry.mode]}</span>
-                      )}
-                    </td>
-                    <td className="dim">{formatRelative(entry.date)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {!scoped && (
+            <p className="board-note">
+              Showing runs across{' '}
+              {filters.mode === null && filters.questionCount === null
+                ? 'every style and length'
+                : filters.mode === null
+                  ? 'both styles'
+                  : 'all lengths'}
+              . Positions here mix categories that aren’t comparable — pick a record card above
+              for a true ranking.
+            </p>
+          )}
+          <div className="panel board-wrap">
+            <table className="board">
+              <thead>
+                <tr>
+                  <th scope="col" className="board-rank">
+                    #
+                  </th>
+                  <th scope="col">Player</th>
+                  <th scope="col" className="board-num">
+                    Score
+                  </th>
+                  <th scope="col">Style</th>
+                  <th scope="col" className="board-num">
+                    Length
+                  </th>
+                  <th scope="col" className="board-num">
+                    Accuracy
+                  </th>
+                  <th scope="col" className="board-num">
+                    Avg time
+                  </th>
+                  <th scope="col" className="board-num">
+                    Streak
+                  </th>
+                  <th scope="col">Source</th>
+                  <th scope="col">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((entry, index) => {
+                  const isMe = entry.username.toLowerCase() === name.trim().toLowerCase();
+                  return (
+                    <tr
+                      key={entry.id}
+                      className={`${index < 3 ? `board-top board-top-${index + 1}` : ''}${isMe ? ' is-me' : ''}`}
+                    >
+                      <td className="board-rank num">{index + 1}</td>
+                      <td>
+                        <span className="board-player">{entry.username}</span>
+                        {entry.demoData && (
+                          <span className="badge badge-demo board-demo">Demo</span>
+                        )}
+                      </td>
+                      <td className="board-num num board-score">{formatScore(entry.score)}</td>
+                      <td>
+                        <span className="badge">{entry.mode ? MODE_LABEL[entry.mode] : '—'}</span>
+                      </td>
+                      <td className="board-num num">{entry.questionCount}</td>
+                      <td className="board-num num">{formatPercent(entry.accuracy)}</td>
+                      <td className="board-num num">{formatSeconds(entry.averageResponseMs)}</td>
+                      <td className="board-num num">{entry.bestStreak}</td>
+                      <td>
+                        <span className="badge">{entry.sourceLabel}</span>
+                      </td>
+                      <td className="dim">{formatRelative(entry.date)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

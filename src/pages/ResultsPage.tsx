@@ -4,7 +4,11 @@ import { DraftBoard } from '../components/draft/DraftBoard.tsx';
 import { GameContextBar } from '../components/GameContextBar.tsx';
 import { competitionShort } from '../domain/competitions.ts';
 import { toPrompt } from '../domain/types.ts';
-import { leaderboardRepository } from '../leaderboard/repository.ts';
+import {
+  entriesInCategory,
+  leaderboardRepository,
+  type LeaderboardCategory,
+} from '../leaderboard/repository.ts';
 import { formatPercent, formatScore, formatSeconds } from '../lib/format.ts';
 import { MODE_LABEL, sourceKey, sourceLabel } from '../quiz/config.ts';
 import { MAX_QUESTION_SCORE } from '../quiz/scoring.ts';
@@ -18,6 +22,8 @@ export function ResultsPage() {
   const { isDemo } = useDataset();
   const [name] = usePlayerName();
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** Where this run landed on the board for its own style + length. */
+  const [placement, setPlacement] = useState<{ rank: number; of: number } | null>(null);
 
   // Record the run exactly once, when the results screen first renders.
   // The ref does the real guarding: `submitted` is state, so it hasn't
@@ -44,6 +50,15 @@ export function ResultsPage() {
         date: new Date().toISOString(),
         seed: state.config.seed,
         demoData: isDemo,
+      })
+      .then(async (saved) => {
+        const category: LeaderboardCategory = {
+          mode: state.config.mode,
+          questionCount: summary.questionCount,
+        };
+        const board = entriesInCategory(await leaderboardRepository.list(), category);
+        const rank = board.findIndex((entry) => entry.id === saved.id);
+        if (rank >= 0) setPlacement({ rank: rank + 1, of: board.length });
       })
       .catch(() => setSaveError('Could not save this run to the leaderboard.'));
   }, [state, summary, submitted, markSubmitted, name, isDemo]);
@@ -119,6 +134,13 @@ export function ResultsPage() {
         <Link className="btn btn-lg" to="/leaderboard">
           View leaderboard
         </Link>
+        {placement && (
+          <span className={`placement${placement.rank === 1 ? ' is-record' : ''}`}>
+            {placement.rank === 1 ? 'New record · ' : ''}
+            <strong className="num">#{placement.rank}</strong> of {placement.of} ·{' '}
+            {MODE_LABEL[state.config.mode]} · {summary.questionCount} questions
+          </span>
+        )}
         <span className="dim results-seed num">
           Seed {state.config.seed} · {sourceLabel(state.config.source)} ·{' '}
           {MODE_LABEL[state.config.mode]} · {summary.questionCount} questions

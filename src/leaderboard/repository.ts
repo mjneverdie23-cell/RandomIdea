@@ -7,7 +7,7 @@
  * touches storage directly.
  */
 
-import type { QuizMode } from '../quiz/config.ts';
+import { QUESTION_COUNTS, type QuizMode } from '../quiz/config.ts';
 import type { CompetitionId } from '../domain/types.ts';
 
 export interface LeaderboardEntry {
@@ -139,9 +139,15 @@ export interface LeaderboardFilters {
   questionCount: number | null;
   /** `null` = any source; otherwise `MIXED` or a `CompetitionId`. */
   sourceKey: string | null;
+  /** `null` = any style. */
+  mode: QuizMode | null;
 }
 
-export const ALL_FILTERS: LeaderboardFilters = { questionCount: null, sourceKey: null };
+export const ALL_FILTERS: LeaderboardFilters = {
+  questionCount: null,
+  sourceKey: null,
+  mode: null,
+};
 
 export function filterEntries(
   entries: readonly LeaderboardEntry[],
@@ -152,6 +158,9 @@ export function filterEntries(
       return false;
     }
     if (filters.sourceKey !== null && entry.sourceKey !== filters.sourceKey) return false;
+    // Runs recorded before styles existed have no mode; they only appear under
+    // "any style" rather than being guessed into one bucket.
+    if (filters.mode !== null && entry.mode !== filters.mode) return false;
     return true;
   });
 }
@@ -160,13 +169,94 @@ export function rankEntries(entries: readonly LeaderboardEntry[]): LeaderboardEn
   return [...entries].sort(compareEntries);
 }
 
-/** Personal-best score per source, for the "your best" row on the dashboard. */
+/* ------------------------------------------------------------------ */
+/* Categories                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A board is only meaningful within one style and one length.
+ *
+ * A 50-question run can score five times what a 10-question run can, so
+ * ranking them against each other by raw score just sorts by length. Every
+ * ranking in the UI is scoped to a category for that reason.
+ */
+export interface LeaderboardCategory {
+  mode: QuizMode;
+  questionCount: number;
+}
+
+/** Every style × length combination, in display order. */
+export const LEADERBOARD_CATEGORIES: LeaderboardCategory[] = (
+  ['matchups', 'games'] as QuizMode[]
+).flatMap((mode) => QUESTION_COUNTS.map((questionCount) => ({ mode, questionCount })));
+
+export function categoryKey(category: LeaderboardCategory): string {
+  return `${category.mode}:${category.questionCount}`;
+}
+
+/** The category a run belongs to, or `null` for pre-style runs. */
+export function categoryOf(entry: LeaderboardEntry): LeaderboardCategory | null {
+  return entry.mode ? { mode: entry.mode, questionCount: entry.questionCount } : null;
+}
+
+export function inCategory(entry: LeaderboardEntry, category: LeaderboardCategory): boolean {
+  return entry.mode === category.mode && entry.questionCount === category.questionCount;
+}
+
+export function entriesInCategory(
+  entries: readonly LeaderboardEntry[],
+  category: LeaderboardCategory,
+): LeaderboardEntry[] {
+  return rankEntries(entries.filter((entry) => inCategory(entry, category)));
+}
+
+export interface CategorySummary {
+  category: LeaderboardCategory;
+  /** Runs recorded in this category. */
+  runs: number;
+  /** Highest-ranked run, or `null` when nobody has played it. */
+  leader: LeaderboardEntry | null;
+  /** The named player's best run here, or `null`. */
+  personal: LeaderboardEntry | null;
+  /** 1-based position of `personal` within the category. */
+  personalRank: number | null;
+}
+
+/** Per-category standings, for the records grid on the leaderboard page. */
+export function summarizeCategories(
+  entries: readonly LeaderboardEntry[],
+  categories: readonly LeaderboardCategory[],
+  username: string,
+): CategorySummary[] {
+  const name = username.trim().toLowerCase();
+  return categories.map((category) => {
+    const ranked = entriesInCategory(entries, category);
+    const personalIndex = ranked.findIndex((entry) => entry.username.toLowerCase() === name);
+    return {
+      category,
+      runs: ranked.length,
+      leader: ranked[0] ?? null,
+      personal: personalIndex >= 0 ? ranked[personalIndex]! : null,
+      personalRank: personalIndex >= 0 ? personalIndex + 1 : null,
+    };
+  });
+}
+
+/**
+ * Best run for a player, optionally within one category.
+ *
+ * Without a category this is "highest score anywhere", which in practice means
+ * their longest run — fine for a headline number, not for comparing players.
+ */
 export function personalBest(
   entries: readonly LeaderboardEntry[],
   username: string,
+  category?: LeaderboardCategory,
 ): LeaderboardEntry | null {
+  const name = username.trim().toLowerCase();
   const mine = entries.filter(
-    (entry) => entry.username.toLowerCase() === username.trim().toLowerCase(),
+    (entry) =>
+      entry.username.toLowerCase() === name && (!category || inCategory(entry, category)),
   );
   return rankEntries(mine)[0] ?? null;
 }

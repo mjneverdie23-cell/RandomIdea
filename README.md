@@ -144,9 +144,19 @@ average and fastest answer, best streak, best competition, a per-competition
 breakdown, and a question-by-question review that expands to the full draft with
 the winner marked.
 
-**Leaderboard** — every completed run is recorded automatically. Ranked by
-score, ties broken by accuracy then by the faster average answer, filterable by
-length and source.
+**Leaderboard** — every completed run is recorded automatically, and **each
+style and length keeps its own board**. A 50-question run can score five times
+what a 10-question run can, so ranking them together would just sort by length;
+instead the page opens on a records grid — one card per style × length — showing
+that board's leader, the maximum possible score, and where you sit in it.
+Selecting a card scopes the table to that board. Within a board, ties break on
+accuracy, then on the faster average answer. Source is a further filter on top.
+
+The results screen reports where a finished run landed on its own board
+("#2 of 7 · Matchups · 25 questions"), and calls out a new record.
+
+Runs recorded before question styles existed have no style attached; they show
+under "any style" rather than being guessed into a bucket.
 
 ### Reproducibility
 

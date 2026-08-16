@@ -7,7 +7,7 @@ import { toPrompt } from '../domain/types.ts';
 import { leaderboardRepository, personalBest, rankEntries } from '../leaderboard/repository.ts';
 import type { LeaderboardEntry } from '../leaderboard/repository.ts';
 import { formatCount, formatDate, formatPercent, formatScore } from '../lib/format.ts';
-import { DEFAULT_MODE, MIXED_SOURCE, type QuestionCount } from '../quiz/config.ts';
+import { DEFAULT_MODE, MIXED_SOURCE, MODE_LABEL, type QuestionCount } from '../quiz/config.ts';
 import { eligibleGames } from '../quiz/generator.ts';
 import { createRng, randomSeed } from '../quiz/rng.ts';
 import { MAX_QUESTION_SCORE, QUESTION_TIME_MS } from '../quiz/scoring.ts';
@@ -177,7 +177,10 @@ export function HomePage() {
                 <div className="stat">
                   <span className="stat-label">Run</span>
                   <span className="stat-value">{best.questionCount}</span>
-                  <span className="stat-sub dim">{best.sourceLabel}</span>
+                  <span className="stat-sub dim">
+                    {best.mode ? `${MODE_LABEL[best.mode]} · ` : ''}
+                    {best.sourceLabel}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -187,9 +190,10 @@ export function HomePage() {
             )}
             {topRun && (
               <p className="top-run dim">
-                Board leader: <strong>{topRun.username}</strong> with{' '}
-                <span className="num">{formatScore(topRun.score)}</span> ({topRun.questionCount}{' '}
-                questions, {topRun.sourceLabel})
+                Highest score recorded: <strong>{topRun.username}</strong> with{' '}
+                <span className="num">{formatScore(topRun.score)}</span> over{' '}
+                {topRun.questionCount} questions. Each style and length has its own board —{' '}
+                <Link to="/leaderboard">see the records</Link>.
               </p>
             )}
           </div>

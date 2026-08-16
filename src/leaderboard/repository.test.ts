@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   compareEntries,
+  entriesInCategory,
   filterEntries,
+  LEADERBOARD_CATEGORIES,
   personalBest,
   rankEntries,
+  summarizeCategories,
   type LeaderboardEntry,
 } from './repository.ts';
 
@@ -21,6 +24,7 @@ function entry(overrides: Partial<LeaderboardEntry>): LeaderboardEntry {
     averageResponseMs: 3000,
     sourceKey: 'MIXED',
     sourceLabel: 'All competitions',
+    mode: 'matchups',
     date: '2025-06-01T00:00:00.000Z',
     seed: 'AAA',
     demoData: true,
@@ -72,20 +76,50 @@ describe('filterEntries', () => {
   ];
 
   it('passes everything through with empty filters', () => {
-    expect(filterEntries(rows, { questionCount: null, sourceKey: null })).toHaveLength(3);
+    expect(filterEntries(rows, { questionCount: null, sourceKey: null, mode: null })).toHaveLength(3);
   });
 
   it('filters by question count', () => {
-    expect(filterEntries(rows, { questionCount: 25, sourceKey: null })).toHaveLength(1);
+    expect(filterEntries(rows, { questionCount: 25, sourceKey: null, mode: null })).toHaveLength(1);
   });
 
   it('filters by source', () => {
-    expect(filterEntries(rows, { questionCount: null, sourceKey: 'LCK' })).toHaveLength(2);
+    expect(filterEntries(rows, { questionCount: null, sourceKey: 'LCK', mode: null })).toHaveLength(2);
   });
 
-  it('combines both filters', () => {
-    expect(filterEntries(rows, { questionCount: 50, sourceKey: 'LCK' })).toHaveLength(1);
-    expect(filterEntries(rows, { questionCount: 10, sourceKey: 'LCK' })).toHaveLength(0);
+  it('filters by style', () => {
+    const mixedStyles = [
+      entry({ mode: 'matchups' }),
+      entry({ mode: 'games' }),
+      entry({ mode: 'games' }),
+    ];
+    expect(
+      filterEntries(mixedStyles, { questionCount: null, sourceKey: null, mode: 'games' }),
+    ).toHaveLength(2);
+  });
+
+  it('leaves pre-style runs out of a style-filtered view', () => {
+    const legacy = entry({});
+    delete legacy.mode;
+    const rowsWithLegacy = [legacy, entry({ mode: 'matchups' })];
+    expect(
+      filterEntries(rowsWithLegacy, { questionCount: null, sourceKey: null, mode: 'matchups' }),
+    ).toHaveLength(1);
+    expect(
+      filterEntries(rowsWithLegacy, { questionCount: null, sourceKey: null, mode: null }),
+    ).toHaveLength(2);
+  });
+
+  it('combines every filter', () => {
+    expect(
+      filterEntries(rows, { questionCount: 50, sourceKey: 'LCK', mode: 'matchups' }),
+    ).toHaveLength(1);
+    expect(
+      filterEntries(rows, { questionCount: 10, sourceKey: 'LCK', mode: 'matchups' }),
+    ).toHaveLength(0);
+    expect(
+      filterEntries(rows, { questionCount: 50, sourceKey: 'LCK', mode: 'games' }),
+    ).toHaveLength(0);
   });
 });
 
@@ -102,5 +136,69 @@ describe('personalBest', () => {
 
   it('returns null when the player has no runs', () => {
     expect(personalBest(rows, 'Nobody')).toBeNull();
+  });
+});
+
+
+describe('categories', () => {
+  it('covers every style and length combination', () => {
+    expect(LEADERBOARD_CATEGORIES).toHaveLength(6);
+    expect(LEADERBOARD_CATEGORIES.map((c) => `${c.mode}:${c.questionCount}`)).toEqual([
+      'matchups:10',
+      'matchups:25',
+      'matchups:50',
+      'games:10',
+      'games:25',
+      'games:50',
+    ]);
+  });
+
+  it('ranks only runs of the same style and length', () => {
+    const rows = [
+      entry({ mode: 'matchups', questionCount: 10, score: 1200 }),
+      entry({ mode: 'matchups', questionCount: 50, score: 9000 }),
+      entry({ mode: 'games', questionCount: 10, score: 1800 }),
+      entry({ mode: 'matchups', questionCount: 10, score: 1500 }),
+    ];
+    const board = entriesInCategory(rows, { mode: 'matchups', questionCount: 10 });
+    expect(board.map((e) => e.score)).toEqual([1500, 1200]);
+  });
+
+  it('never lets a longer run outrank a shorter one in its own board', () => {
+    const rows = [
+      entry({ mode: 'matchups', questionCount: 10, score: 2000 }),
+      entry({ mode: 'matchups', questionCount: 50, score: 11000 }),
+    ];
+    const short = entriesInCategory(rows, { mode: 'matchups', questionCount: 10 });
+    expect(short).toHaveLength(1);
+    expect(short[0]!.score).toBe(2000);
+  });
+
+  it('summarizes leader, personal best and rank per category', () => {
+    const rows = [
+      entry({ username: 'Ava', mode: 'matchups', questionCount: 10, score: 2000 }),
+      entry({ username: 'Bo', mode: 'matchups', questionCount: 10, score: 1500 }),
+      entry({ username: 'Bo', mode: 'games', questionCount: 25, score: 4000 }),
+    ];
+    const summaries = summarizeCategories(rows, LEADERBOARD_CATEGORIES, 'Bo');
+    const m10 = summaries.find((s) => s.category.mode === 'matchups' && s.category.questionCount === 10)!;
+    expect(m10.runs).toBe(2);
+    expect(m10.leader?.username).toBe('Ava');
+    expect(m10.personal?.score).toBe(1500);
+    expect(m10.personalRank).toBe(2);
+
+    const empty = summaries.find((s) => s.category.mode === 'games' && s.category.questionCount === 50)!;
+    expect(empty.runs).toBe(0);
+    expect(empty.leader).toBeNull();
+    expect(empty.personalRank).toBeNull();
+  });
+
+  it('scopes a personal best to a category when asked', () => {
+    const rows = [
+      entry({ username: 'Ava', mode: 'matchups', questionCount: 50, score: 9000 }),
+      entry({ username: 'Ava', mode: 'matchups', questionCount: 10, score: 1900 }),
+    ];
+    expect(personalBest(rows, 'Ava')?.score).toBe(9000);
+    expect(personalBest(rows, 'Ava', { mode: 'matchups', questionCount: 10 })?.score).toBe(1900);
   });
 });
