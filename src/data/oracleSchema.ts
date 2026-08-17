@@ -11,7 +11,7 @@
  * Bans live on the team rows; picks live on the player rows.
  */
 
-import { ROLES, type Role, type Side } from '../domain/types.ts';
+import { GOLD_CHECKPOINTS, ROLES, type GoldCheckpoint, type Role, type Side } from '../domain/types.ts';
 
 /** Header key after normalization: lowercased, alphanumerics only. */
 export type ColumnKey = string;
@@ -83,7 +83,12 @@ export type RawRow = Record<ColumnKey, string>;
 export type ColumnMap = Partial<Record<LogicalField, ColumnKey>> & {
   banColumns: ColumnKey[];
   pickColumns: ColumnKey[];
-  goldDiffColumns: ColumnKey[];
+  /**
+   * Gold-diff columns paired with the minute they describe. Keyed rather than
+   * positional: a file missing `golddiffat20` would otherwise shift every later
+   * value onto the wrong mark.
+   */
+  goldDiffColumns: { minute: GoldCheckpoint; column: ColumnKey }[];
 };
 
 /** Fields whose aliases are a list of sibling columns, not preference order. */
@@ -107,7 +112,10 @@ export function buildColumnMap(headers: string[]): ColumnMap {
 
   map.banColumns = columnsFor(COLUMN_ALIASES.bans);
   map.pickColumns = columnsFor(COLUMN_ALIASES.picks);
-  map.goldDiffColumns = columnsFor(COLUMN_ALIASES.goldDiff);
+  map.goldDiffColumns = GOLD_CHECKPOINTS.map((minute) => ({
+    minute,
+    column: normalizeHeader(`golddiffat${minute}`),
+  })).filter((entry) => present.has(entry.column));
   return map;
 }
 

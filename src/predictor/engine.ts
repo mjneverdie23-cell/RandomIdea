@@ -14,9 +14,9 @@
  *
  * The point margin becomes a per-game probability through a logistic curve,
  * and the series/sweep probabilities follow from that by counting the ways a
- * best-of can still be won. Behaviour (throws, comebacks, deciders) is
- * reported as plain-language tendencies and deliberately does not move the
- * score — it is context for the reader, not a fitted term.
+ * best-of can still be won. Behaviour (throws, comebacks, deciders) and
+ * early-game gold tempo are reported as plain language and deliberately do not
+ * move the score — they are context for the reader, not fitted terms.
  *
  * Pure: no I/O, no React, no dates. Everything it knows arrives in the model.
  */
@@ -26,6 +26,8 @@ import { relevantEdges } from './championGraph.ts';
 import { lookupRating } from './ratings.ts';
 import {
   SERIES_TARGET,
+  type GoldTempo,
+  type GoldTempoPoint,
   type Notice,
   type PickLine,
   type Prediction,
@@ -93,6 +95,16 @@ export const MOTIVATION_POINTS: Record<Motivation, number> = {
 
 /** Win rate used when a team has never played the champion in that role. */
 export const NEUTRAL_WIN_RATE = 0.5;
+
+/**
+ * Side credited with first pick in the draft notice.
+ *
+ * Standard tournament draft gives blue the opening pick and red the last one,
+ * so this is set against the rulebook on purpose — it matches the predictor
+ * this was ported from, which is what the app's users expect to read. One
+ * constant so the notice can be flipped without hunting through prose.
+ */
+export const FIRST_PICK_SIDE: Side = 'red';
 
 /* ------------------------------------------------------------------ */
 /* Probability                                                         */
@@ -358,6 +370,91 @@ export function behaviorTendencies(behavior: TeamBehavior | undefined): string[]
 /* Scouting notices                                                    */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Early-game gold tempo                                               */
+/* ------------------------------------------------------------------ */
+
+/** Average gold swing below which a team is just even, not early-game strong. */
+export const TEMPO_NOTABLE_GOLD = 200;
+/** Share of games ahead that separates a habit from an even split. */
+export const TEMPO_NOTABLE_RATE = 0.56;
+/** Gap between two teams' averages worth calling out as an edge. */
+export const TEMPO_EDGE_GOLD = 300;
+
+const goldText = (value: number): string => {
+  const rounded = Math.round(value);
+  return `${rounded >= 0 ? '+' : '−'}${Math.abs(rounded).toLocaleString('en-US')}g`;
+};
+
+/** The mark that best describes the early game, preferring 10 minutes. */
+export function earlyPoint(tempo: GoldTempo | undefined): GoldTempoPoint | null {
+  if (!tempo || tempo.length === 0) return null;
+  return tempo.find((point) => point.minute === 10) ?? tempo[0] ?? null;
+}
+
+function describeTempo(team: string, point: GoldTempoPoint): string {
+  const head = `${team}: ${goldText(point.averageDiff)} on average at ${point.minute} min, ahead in ${pct(
+    point.aheadRate,
+  )} of ${point.sample} games`;
+
+  const strongLead = point.averageDiff >= TEMPO_NOTABLE_GOLD && point.aheadRate >= TEMPO_NOTABLE_RATE;
+  const strongDeficit =
+    point.averageDiff <= -TEMPO_NOTABLE_GOLD && point.aheadRate <= 1 - TEMPO_NOTABLE_RATE;
+
+  if (strongLead) return `${head} — tend to lead early.`;
+  if (strongDeficit) return `${head} — tend to fall behind early.`;
+  // A big average with a middling ahead-rate is a few blowouts, not a pattern.
+  if (Math.abs(point.averageDiff) >= TEMPO_NOTABLE_GOLD) {
+    return `${head} — swingy starts rather than a consistent one.`;
+  }
+  return `${head} — even out of the gate.`;
+}
+
+/**
+ * Per-team early-game gold reads, plus the head-to-head edge between them.
+ *
+ * Reported, never scored: this describes how a team usually opens, not how the
+ * draft on screen will open, and folding it into the tally would double-count
+ * the strength already priced into the win-rate base.
+ */
+function goldTempoNotices(model: PredictorModel, input: PredictionInput): Notice[] {
+  const notices: Notice[] = [];
+  const points: Partial<Record<Side, GoldTempoPoint>> = {};
+
+  for (const side of ['blue', 'red'] as const) {
+    const entry = input[side];
+    const point = earlyPoint(model.goldTempo.get(entry.team.toLowerCase()));
+    if (!point) continue;
+    points[side] = point;
+    notices.push({
+      kind: 'gold',
+      side,
+      text: describeTempo(entry.team, point),
+      warning: point.averageDiff <= -TEMPO_NOTABLE_GOLD && point.aheadRate <= 1 - TEMPO_NOTABLE_RATE,
+    });
+  }
+
+  const bluePoint = points.blue;
+  const redPoint = points.red;
+  if (bluePoint && redPoint && bluePoint.minute === redPoint.minute) {
+    const gap = bluePoint.averageDiff - redPoint.averageDiff;
+    if (Math.abs(gap) >= TEMPO_EDGE_GOLD) {
+      const faster = gap > 0 ? input.blue.team : input.red.team;
+      notices.push({
+        kind: 'gold',
+        side: gap > 0 ? 'blue' : 'red',
+        text:
+          `Early game at ${bluePoint.minute} min: ${input.blue.team} ${goldText(bluePoint.averageDiff)} vs ` +
+          `${input.red.team} ${goldText(redPoint.averageDiff)} — ${faster} open ${goldText(
+            Math.abs(gap),
+          ).replace('+', '')} stronger.`,
+      });
+    }
+  }
+
+  return notices;
+}
+
 function buildNotices(
   model: PredictorModel,
   input: PredictionInput,
@@ -368,15 +465,30 @@ function buildNotices(
   const blueBehavior = model.behavior.get(input.blue.team.toLowerCase());
   const redBehavior = model.behavior.get(input.red.team.toLowerCase());
 
-  // Blue side has first pick in the standard competitive draft; red closes it.
-  const blueWr = blueBehavior?.blueWinRate;
+  // Which side is credited with first pick is a deliberate product choice, not
+  // a reading of the rulebook: standard tournament draft gives blue the opening
+  // pick and red the last one. This app credits red, matching the predictor it
+  // was ported from. Flip `FIRST_PICK_SIDE` to change it everywhere.
+  const firstPick = FIRST_PICK_SIDE;
+  const lastPick: Side = firstPick === 'red' ? 'blue' : 'red';
+  const firstPickTeam = input[firstPick].team;
+  const lastPickTeam = input[lastPick].team;
+  const firstPickBehavior = firstPick === 'blue' ? blueBehavior : redBehavior;
+  const sideWinRate =
+    firstPick === 'blue' ? firstPickBehavior?.blueWinRate : firstPickBehavior?.redWinRate;
+
   notices.push({
     kind: 'first-pick',
-    side: 'blue',
+    side: firstPick,
     text:
-      `First pick belongs to ${input.blue.team} on blue side; ${input.red.team} have last pick on red.` +
-      (blueWr !== null && blueWr !== undefined ? ` ${input.blue.team} win ${pct(blueWr)} on blue.` : ''),
+      `First pick belongs to ${firstPickTeam} on ${firstPick} side; ` +
+      `${lastPickTeam} have last pick on ${lastPick}.` +
+      (sideWinRate !== null && sideWinRate !== undefined
+        ? ` ${firstPickTeam} win ${pct(sideWinRate)} on ${firstPick}.`
+        : ''),
   });
+
+  notices.push(...goldTempoNotices(model, input));
 
   for (const side of ['blue', 'red'] as const) {
     const entry = input[side];

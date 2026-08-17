@@ -1,15 +1,14 @@
 /**
  * CSV reading.
  *
- * Oracle's Elixir yearly exports are large (hundreds of thousands of rows,
- * ~130 columns), so files are streamed in chunks off the main thread and each
- * row is immediately slimmed down to the ~20 columns this app actually uses.
- * Keeping whole rows would cost an order of magnitude more memory for no gain.
+ * Oracle's Elixir yearly exports are large — the 2026 file is 58 MB, 90k rows
+ * and 165 columns — so files are read incrementally and each row is immediately
+ * slimmed down to the ~25 columns this app actually uses. Keeping whole rows
+ * would cost an order of magnitude more memory for no gain.
  *
- * Note on headers: papaparse's worker mode posts its config to the worker with
- * `structuredClone`, so function options like `transformHeader` cannot be used
- * there. Header normalization therefore happens on this side, memoized per raw
- * header name so it costs one lookup per cell rather than a regex.
+ * Headers are normalized here rather than through papaparse's `transformHeader`
+ * hook, memoized per raw header name so it costs one map lookup per cell rather
+ * than a regex.
  */
 
 import Papa from 'papaparse';
@@ -87,27 +86,34 @@ export function parseCsvText(text: string): ParsedCsv {
 }
 
 /**
+ * Bytes read and parsed per turn of the event loop.
+ *
+ * papaparse defaults to 10 MB for a local file, which parses in one long
+ * synchronous burst and visibly freezes the page several times during a big
+ * import. Smaller chunks cost a little throughput and buy a UI that keeps
+ * painting its progress bar the whole way through.
+ */
+const CHUNK_BYTES = 2 * 1024 * 1024;
+
+/**
  * Stream a `File` from an `<input type="file">` / drop event.
  *
- * Tries a worker first so a 200 MB import doesn't freeze the page; if workers
- * are unavailable (CSP, older browsers) it transparently retries on the main
- * thread, which still reads the file in chunks.
+ * Deliberately parses on the main thread rather than in a worker. papaparse
+ * builds its worker by stringifying its own module factory
+ * (`moduleFactory.toString()`) into a blob URL, and a bundler's minifier
+ * rewrites that factory so the copy running in the worker no longer matches the
+ * scope it was compiled against. On a real 58 MB Oracle's Elixir export it died
+ * inside papaparse's own header handling with `charCodeAt is not a function` —
+ * and because an uncaught throw inside the worker reaches neither the `error`
+ * nor the `complete` callback, the import spinner ran forever with nothing to
+ * report. Measured on that file: worker path 26.8s (with a stall watchdog to
+ * escape the hang), main thread 16.7s and no error at all.
+ *
+ * The file is still read incrementally, so memory stays flat and progress is
+ * reported throughout.
  */
-export async function parseCsvFile(
+export function parseCsvFile(
   file: File,
-  onProgress?: (progress: ParseProgress) => void,
-): Promise<ParsedCsv> {
-  try {
-    return await streamCsv(file, true, onProgress);
-  } catch (cause) {
-    if (cause instanceof CsvParseError && cause.fatal) throw cause;
-    return streamCsv(file, false, onProgress);
-  }
-}
-
-function streamCsv(
-  file: File,
-  useWorker: boolean,
   onProgress?: (progress: ParseProgress) => void,
 ): Promise<ParsedCsv> {
   return new Promise((resolve, reject) => {
@@ -125,8 +131,12 @@ function streamCsv(
       Papa.parse<Record<string, unknown>>(file, {
         header: true,
         skipEmptyLines: 'greedy',
-        worker: useWorker,
+        chunkSize: CHUNK_BYTES,
         chunk: (results, parser) => {
+          if (settled) {
+            parser.abort();
+            return;
+          }
           if (!headers.length && results.meta.fields) {
             headers = results.meta.fields.map(normalizeHeader);
           }
@@ -135,15 +145,12 @@ function streamCsv(
             rows: rows.length,
             fraction: file.size > 0 ? Math.min(1, results.meta.cursor / file.size) : null,
           });
-          if (settled) parser.abort();
         },
         error: (error: Error) => fail(new CsvParseError('Could not read the CSV file.', error.message)),
         complete: () => {
           if (settled) return;
           if (!headers.length) {
-            fail(
-              new FatalCsvParseError('The file appears to be empty or has no header row.'),
-            );
+            fail(new FatalCsvParseError('The file appears to be empty or has no header row.'));
             return;
           }
           settled = true;

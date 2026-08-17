@@ -252,11 +252,27 @@ deliberately:
   current-form reads; averaging five seasons together would wash out exactly
   the signal they exist to provide.
 
+### Early-game gold tempo
+
+Oracle's Elixir records each team's gold difference at the 10, 15, 20 and 25
+minute marks (there is no 5-minute bucket). The predictor averages those per
+team and reports the pattern in the notices — "Gen.G: +421g on average at 10
+min, ahead in 62% of 100 games — tend to lead early", against "DN SOOPers:
+−379g … — tend to fall behind early" — plus a head-to-head line when the two
+open more than 300g apart.
+
+Two guards keep it honest. The average is paired with the share of games the
+team was actually ahead, so a single 8k stomp can't masquerade as a habit — a
+lopsided average with a middling ahead-rate is reported as "swingy starts"
+instead. And a mark a game never reached contributes nothing rather than
+counting as zero, so teams that win fast aren't dragged toward neutral at the
+20 and 25 minute marks.
+
 ### What it reports but does not score
 
 Behavioural reads — recent form, side preference, thrown leads, comebacks,
-bounce-back after a loss, deciders, game-five chokes — are shown as
-plain-language tendencies and deliberately kept out of the score. They are
+bounce-back after a loss, deciders, game-five chokes — and the gold tempo above
+are shown as plain language and deliberately kept out of the score. They are
 context for the reader, not fitted terms. Each is suppressed when its sample is
 too small to mean anything.
 
@@ -459,9 +475,20 @@ series reconstruction, and ratings parsing with fuzzy team matching).
   (`src/predictor/data/championGraph.json`). They annotate the per-lane
   breakdown and never move a score. Regenerate with
   `node scripts/build-champion-graph.mjs <champions_data_enriched.json>`.
-- **Throw and comeback reads need gold-diff columns.** Exports carrying
-  `golddiffat10/15/20/25` get them; older imports and files without those
-  columns simply omit those two lines rather than guessing.
+- **Big imports parse on the main thread, not in a worker.** papaparse builds
+  its worker by stringifying its own module factory into a blob, which a
+  bundler's minifier rewrites into something that throws — and an uncaught
+  worker error reaches neither its `error` nor its `complete` callback, so the
+  import spinner ran forever. Reading incrementally on the main thread is both
+  correct and faster here (10s versus a hang on the 58 MB 2026 export).
+- **Gold reads need the gold-diff columns.** Exports carrying
+  `golddiffat10/15/20/25` get the throw, comeback and early-tempo lines; files
+  without them, and seasons imported before those columns were captured, simply
+  omit those lines rather than guessing. Re-import a season to pick them up.
+- **The first-pick notice credits red side.** Standard tournament draft gives
+  blue the opening pick and red the last one, so this is set against the
+  rulebook deliberately, matching the predictor this was ported from. Flip
+  `FIRST_PICK_SIDE` in `src/predictor/engine.ts` to change it.
 
 ---
 

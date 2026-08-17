@@ -21,9 +21,18 @@
 
 import { comparePatches } from '../data/ingest.ts';
 import { makeSeriesKey, partitionSeries } from '../data/stage.ts';
-import { ROLES, type Champion, type CompetitionId, type Game, type Role, type Side } from '../domain/types.ts';
+import {
+  GOLD_CHECKPOINTS,
+  ROLES,
+  type Champion,
+  type CompetitionId,
+  type Game,
+  type Role,
+  type Side,
+} from '../domain/types.ts';
 import { anywhereKey, recordKey } from './engine.ts';
 import type {
+  GoldTempo,
   PredictorModel,
   StandingRow,
   TeamBehavior,
@@ -475,6 +484,72 @@ function deriveBehavior(games: readonly Game[], runs: readonly SeriesRun[]): Map
 }
 
 /* ------------------------------------------------------------------ */
+/* Early-game gold tempo                                               */
+/* ------------------------------------------------------------------ */
+
+/** Games at a mark below which a tempo read is not worth reporting. */
+export const MIN_TEMPO_SAMPLE = 5;
+
+/**
+ * How far ahead or behind each team usually is at every minute mark.
+ *
+ * Averaged rather than summed, because teams play different numbers of games,
+ * and paired with the share of games spent ahead so a lopsided stomp can't
+ * pass for a habit. Marks a game never reached contribute nothing — a 22-minute
+ * win is silent about the 25-minute mark rather than counting as a zero, which
+ * would drag every fast-winning team toward neutral.
+ */
+function deriveGoldTempo(games: readonly Game[]): Map<string, GoldTempo> {
+  interface Bucket {
+    total: number;
+    ahead: number;
+    sample: number;
+  }
+  const perTeam = new Map<string, Map<number, Bucket>>();
+
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      const checkpoints = side.goldDiff?.checkpoints;
+      if (!checkpoints) continue;
+
+      const key = side.teamName.toLowerCase();
+      let marks = perTeam.get(key);
+      if (!marks) {
+        marks = new Map();
+        perTeam.set(key, marks);
+      }
+
+      GOLD_CHECKPOINTS.forEach((minute, index) => {
+        const diff = checkpoints[index];
+        if (diff === null || diff === undefined) return;
+        const bucket = marks.get(minute) ?? { total: 0, ahead: 0, sample: 0 };
+        bucket.total += diff;
+        if (diff > 0) bucket.ahead += 1;
+        bucket.sample += 1;
+        marks.set(minute, bucket);
+      });
+    }
+  }
+
+  const tempo = new Map<string, GoldTempo>();
+  for (const [team, marks] of perTeam) {
+    const points: GoldTempo = [];
+    for (const minute of GOLD_CHECKPOINTS) {
+      const bucket = marks.get(minute);
+      if (!bucket || bucket.sample < MIN_TEMPO_SAMPLE) continue;
+      points.push({
+        minute,
+        sample: bucket.sample,
+        averageDiff: bucket.total / bucket.sample,
+        aheadRate: bucket.ahead / bucket.sample,
+      });
+    }
+    if (points.length) tempo.set(team, points);
+  }
+  return tempo;
+}
+
+/* ------------------------------------------------------------------ */
 /* Rosters, teams, champion pools                                      */
 /* ------------------------------------------------------------------ */
 
@@ -589,6 +664,7 @@ export function buildPredictorModel(
     metaPatches: patches,
     metaPickRateThreshold: META_PICK_RATE,
     behavior: deriveBehavior(formGames, runs),
+    goldTempo: deriveGoldTempo(formGames),
     standingsByCompetition,
     standingsOverall,
     formSeason,
@@ -616,6 +692,7 @@ export function emptyPredictorModel(): PredictorModel {
     metaPatches: [],
     metaPickRateThreshold: META_PICK_RATE,
     behavior: new Map(),
+    goldTempo: new Map(),
     standingsByCompetition: new Map(),
     standingsOverall: new Map(),
     formSeason: null,

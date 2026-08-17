@@ -20,6 +20,7 @@ import {
 } from '../domain/competitions.ts';
 import { makeChampion } from '../domain/champions.ts';
 import {
+  GOLD_CHECKPOINTS,
   ROLES,
   type Champion,
   type CompetitionId,
@@ -302,21 +303,30 @@ function buildTeamSide(
 }
 
 /**
- * Collapse the gold-diff checkpoints into the two numbers the predictor uses:
- * the biggest lead held and the deepest hole dug. Player rows carry per-player
- * gold diffs, so only the team row is read.
+ * Read the gold-diff checkpoints from a team row.
+ *
+ * Both shapes are kept: the per-minute series, which is what the early-game
+ * tempo read needs, and the peak/trough summary the throw and comeback reads
+ * use. A mark is `null` when the game ended before it — roughly one game in
+ * twelve finishes inside 25 minutes — so a missing entry means "not reached",
+ * never zero. Player rows carry per-player gold diffs, so only the team row is
+ * read.
  */
 function readGoldDiff(teamRow: RawRow | undefined, map: ColumnMap): GoldDiffTrack | null {
   if (!teamRow || map.goldDiffColumns.length === 0) return null;
-  const values: number[] = [];
-  for (const column of map.goldDiffColumns) {
+
+  const byMinute = new Map<number, number>();
+  for (const { minute, column } of map.goldDiffColumns) {
     const raw = teamRow[column];
     if (typeof raw !== 'string' || !raw.trim()) continue;
-    const n = Number(raw);
-    if (Number.isFinite(n)) values.push(n);
+    const value = Number(raw);
+    if (Number.isFinite(value)) byMinute.set(minute, value);
   }
-  if (values.length === 0) return null;
-  return { peak: Math.max(...values), trough: Math.min(...values) };
+  if (byMinute.size === 0) return null;
+
+  const checkpoints = GOLD_CHECKPOINTS.map((minute) => byMinute.get(minute) ?? null);
+  const present = [...byMinute.values()];
+  return { checkpoints, peak: Math.max(...present), trough: Math.min(...present) };
 }
 
 /**

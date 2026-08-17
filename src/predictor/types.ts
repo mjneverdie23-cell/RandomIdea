@@ -7,7 +7,14 @@
  * never formatted text. Presentation lives in the page.
  */
 
-import type { Champion, CompetitionId, Role, Side, StageKind } from '../domain/types.ts';
+import type {
+  Champion,
+  CompetitionId,
+  GoldCheckpoint,
+  Role,
+  Side,
+  StageKind,
+} from '../domain/types.ts';
 
 /** Best-of length the series is played to. */
 export type SeriesLength = 'BO1' | 'BO3' | 'BO5';
@@ -78,6 +85,25 @@ export interface TeamBehavior {
   game1Rate: number | null;
 }
 
+/**
+ * How a team's gold difference typically looks at one minute mark.
+ *
+ * `averageDiff` is the headline: it says how far ahead or behind the team
+ * usually is. `aheadRate` guards against a single 8k stomp masquerading as a
+ * habit — a team can average +400g while only leading in a third of its games.
+ */
+export interface GoldTempoPoint {
+  minute: GoldCheckpoint;
+  /** Games that actually reached this mark. */
+  sample: number;
+  averageDiff: number;
+  /** Share of those games entered with a gold lead. */
+  aheadRate: number;
+}
+
+/** A team's early-game gold pattern, one entry per checkpoint reached. */
+export type GoldTempo = GoldTempoPoint[];
+
 /** Hand-maintained ratings; optional, and absent by default. */
 export interface TeamRating {
   team: string;
@@ -105,6 +131,8 @@ export interface PredictorModel {
   metaPatches: string[];
   metaPickRateThreshold: number;
   behavior: Map<string, TeamBehavior>;
+  /** Gold difference by minute mark, per team. */
+  goldTempo: Map<string, GoldTempo>;
   standingsByCompetition: Map<CompetitionId, Map<string, StandingRow>>;
   standingsOverall: Map<string, StandingRow>;
   /** Season the standings and behaviour reads describe. */
@@ -182,6 +210,7 @@ export interface SideScore {
 
 export type NoticeKind =
   | 'first-pick'
+  | 'gold'
   | 'standings'
   | 'rank'
   | 'draft'

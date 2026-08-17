@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DECISIVE_GOLD,
+  MIN_TEMPO_SAMPLE,
   buildPredictorModel,
   deriveMeta,
   latestSeason,
@@ -27,6 +28,8 @@ interface GameSpec {
   blueDraft?: string[];
   redDraft?: string[];
   blueGold?: GoldDiffTrack | null;
+  /** Blue-side gold diff at 10/15/20/25; null entries mean "never reached". */
+  blueCheckpoints?: (number | null)[];
   /** Minutes past midnight, so games in one series stay inside the 12h window. */
   hour?: number;
 }
@@ -50,8 +53,23 @@ function makeGame(spec: GameSpec): Game {
     goldDiff: gold,
   });
 
-  const blueGold = spec.blueGold === undefined ? null : spec.blueGold;
-  const redGold = blueGold ? { peak: -blueGold.trough, trough: -blueGold.peak } : null;
+  let blueGold = spec.blueGold === undefined ? null : spec.blueGold;
+  if (spec.blueCheckpoints) {
+    const present = spec.blueCheckpoints.filter((v): v is number => v !== null);
+    blueGold = {
+      checkpoints: spec.blueCheckpoints,
+      peak: present.length ? Math.max(...present) : 0,
+      trough: present.length ? Math.min(...present) : 0,
+    };
+  }
+  const mirror = (track: GoldDiffTrack): GoldDiffTrack => ({
+    ...(track.checkpoints
+      ? { checkpoints: track.checkpoints.map((v) => (v === null ? null : -v)) }
+      : {}),
+    peak: -track.trough,
+    trough: -track.peak,
+  });
+  const redGold = blueGold ? mirror(blueGold) : null;
 
   return {
     gameId: spec.id,
@@ -391,5 +409,128 @@ describe('buildPredictorModel — rosters and pools', () => {
     expect(model.teamsByCompetition.get('LCK')).toEqual(['GenG', 'T1']);
     expect(model.teamsByCompetition.get('LEC')).toEqual(['FNC', 'G2']);
     expect(model.allTeams).toEqual(['FNC', 'G2', 'GenG', 'T1']);
+  });
+});
+
+describe('buildPredictorModel — early-game gold tempo', () => {
+  /** `n` games where blue's 10-minute gold diff is exactly `diff`. */
+  const runOf = (n: number, diff: number, team = 'T1', opp = 'GenG') =>
+    Array.from({ length: n }, (_, i) =>
+      makeGame({
+        id: `${team}-${diff}-${i}`,
+        blue: team,
+        red: opp,
+        winner: 'blue',
+        day: i * 2,
+        blueCheckpoints: [diff, diff, diff, diff],
+      }),
+    );
+
+  it('averages the gold difference at each mark', () => {
+    const model = buildPredictorModel(runOf(8, 500));
+    const point = model.goldTempo.get('t1')!.find((p) => p.minute === 10)!;
+    expect(point.averageDiff).toBe(500);
+    expect(point.aheadRate).toBe(1);
+    expect(point.sample).toBe(8);
+  });
+
+  it('mirrors the opponent read', () => {
+    const model = buildPredictorModel(runOf(8, 500));
+    const point = model.goldTempo.get('geng')!.find((p) => p.minute === 10)!;
+    expect(point.averageDiff).toBe(-500);
+    expect(point.aheadRate).toBe(0);
+  });
+
+  it('separates the average from how often a team is actually ahead', () => {
+    // Nine small deficits and one huge lead: positive average, rarely ahead.
+    const games = [
+      ...Array.from({ length: 9 }, (_, i) =>
+        makeGame({
+          id: `small-${i}`,
+          blue: 'T1',
+          red: 'GenG',
+          winner: 'blue',
+          day: i,
+          blueCheckpoints: [-200, -200, -200, -200],
+        }),
+      ),
+      makeGame({
+        id: 'stomp',
+        blue: 'T1',
+        red: 'GenG',
+        winner: 'blue',
+        day: 20,
+        blueCheckpoints: [8000, 8000, 8000, 8000],
+      }),
+    ];
+    const point = buildPredictorModel(games).goldTempo.get('t1')!.find((p) => p.minute === 10)!;
+    expect(point.averageDiff).toBeCloseTo(620, 5);
+    expect(point.aheadRate).toBeCloseTo(0.1, 10);
+  });
+
+  it('ignores marks a game never reached instead of counting them as level', () => {
+    // Every game ends before 25 minutes.
+    const games = Array.from({ length: 8 }, (_, i) =>
+      makeGame({
+        id: `short-${i}`,
+        blue: 'T1',
+        red: 'GenG',
+        winner: 'blue',
+        day: i,
+        blueCheckpoints: [600, 900, 1200, null],
+      }),
+    );
+    const tempo = buildPredictorModel(games).goldTempo.get('t1')!;
+    expect(tempo.map((p) => p.minute)).toEqual([10, 15, 20]);
+    expect(tempo.find((p) => p.minute === 20)!.averageDiff).toBe(1200);
+  });
+
+  it('suppresses a mark with too few games to mean anything', () => {
+    expect(buildPredictorModel(runOf(MIN_TEMPO_SAMPLE - 1, 400)).goldTempo.get('t1')).toBeUndefined();
+    expect(buildPredictorModel(runOf(MIN_TEMPO_SAMPLE, 400)).goldTempo.get('t1')).toBeDefined();
+  });
+
+  it('skips games imported before checkpoints were captured', () => {
+    const legacy = Array.from({ length: 8 }, (_, i) =>
+      makeGame({
+        id: `legacy-${i}`,
+        blue: 'T1',
+        red: 'GenG',
+        winner: 'blue',
+        day: i,
+        blueGold: { peak: 2000, trough: -100 },
+      }),
+    );
+    expect(buildPredictorModel(legacy).goldTempo.get('t1')).toBeUndefined();
+  });
+
+  it('scopes the read to the most recent season, like the other form reads', () => {
+    const games = [
+      ...Array.from({ length: 8 }, (_, i) =>
+        makeGame({
+          id: `old-${i}`,
+          blue: 'T1',
+          red: 'GenG',
+          winner: 'blue',
+          day: i,
+          season: '2025',
+          blueCheckpoints: [-900, -900, -900, -900],
+        }),
+      ),
+      ...Array.from({ length: 8 }, (_, i) =>
+        makeGame({
+          id: `new-${i}`,
+          blue: 'T1',
+          red: 'GenG',
+          winner: 'blue',
+          day: 400 + i,
+          season: '2026',
+          blueCheckpoints: [700, 700, 700, 700],
+        }),
+      ),
+    ];
+    const point = buildPredictorModel(games).goldTempo.get('t1')!.find((p) => p.minute === 10)!;
+    expect(point.averageDiff).toBe(700);
+    expect(point.sample).toBe(8);
   });
 });

@@ -63,8 +63,21 @@ export interface TeamSide {
   goldDiff?: GoldDiffTrack | null;
 }
 
+/** Minute marks Oracle's Elixir reports gold at. There is no 5-minute bucket. */
+export const GOLD_CHECKPOINTS = [10, 15, 20, 25] as const;
+export type GoldCheckpoint = (typeof GOLD_CHECKPOINTS)[number];
+
 /** Gold lead (positive) or deficit (negative) at fixed minute marks. */
 export interface GoldDiffTrack {
+  /**
+   * Gold difference at each mark in `GOLD_CHECKPOINTS`, same order.
+   *
+   * An entry is `null` when the game ended before that mark — about 8% of games
+   * finish inside 25 minutes — and the whole field is absent on games imported
+   * before per-checkpoint capture existed, which is why reads must tolerate it
+   * going missing rather than assuming four numbers.
+   */
+  checkpoints?: (number | null)[];
   /** Largest lead held at any checkpoint. */
   peak: number;
   /** Deepest deficit faced at any checkpoint. */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FIRST_PICK_SIDE,
   FORM_CAP,
   META_POINT,
   MOTIVATION_POINTS,
@@ -16,7 +17,7 @@ import {
 import { emptyPredictorModel } from './derive.ts';
 import { makeChampion } from '../domain/champions.ts';
 import { ROLES, type Champion, type Role } from '../domain/types.ts';
-import type { PredictionInput, PredictorModel, TeamBehavior } from './types.ts';
+import type { GoldTempo, PredictionInput, PredictorModel, TeamBehavior } from './types.ts';
 
 const champ = (name: string): Champion => makeChampion(name)!;
 
@@ -57,6 +58,25 @@ function withRecords(
   });
   return map;
 }
+
+/** A team with a game count but every read too thin to report. */
+const BLANK_BEHAVIOR: TeamBehavior = {
+  games: 30,
+  winRate: 0.5,
+  recentForm: null,
+  blueWinRate: null,
+  redWinRate: null,
+  throwRate: null,
+  throwSample: 0,
+  comebackRate: null,
+  comebackSample: 0,
+  bouncebackRate: null,
+  deciderRate: null,
+  matchPointCloseRate: null,
+  chokeRate: null,
+  chokeSample: 0,
+  game1Rate: null,
+};
 
 /** Mark the first `count` of blue's picks as meta, leaving the rest off-meta. */
 function metaFor(count: number): Map<Role, Set<string>> {
@@ -341,11 +361,34 @@ describe('predict — series probabilities', () => {
 });
 
 describe('predict — notices', () => {
-  it('credits first pick to blue side, which drafts first', () => {
+  it('credits first pick to the configured side and last pick to the other', () => {
     const notice = predict(model(), input()).notices.find((n) => n.kind === 'first-pick');
-    expect(notice?.side).toBe('blue');
-    expect(notice?.text).toContain('First pick belongs to Blue Team');
-    expect(notice?.text).toContain('last pick on red');
+    expect(notice?.side).toBe(FIRST_PICK_SIDE);
+
+    const [first, last] =
+      FIRST_PICK_SIDE === 'red' ? ['Red Team', 'Blue Team'] : ['Blue Team', 'Red Team'];
+    expect(notice?.text).toContain(`First pick belongs to ${first}`);
+    expect(notice?.text).toContain(`${last} have last pick`);
+    // Never both roles to the same team.
+    expect(notice?.text).not.toContain(`${first} have last pick`);
+  });
+
+  it('quotes the first-pick team win rate on the side it is drafting from', () => {
+    const behavior = new Map([
+      [
+        'red team',
+        { ...BLANK_BEHAVIOR, blueWinRate: 0.9, redWinRate: 0.42 },
+      ],
+      [
+        'blue team',
+        { ...BLANK_BEHAVIOR, blueWinRate: 0.71, redWinRate: 0.11 },
+      ],
+    ]);
+    const notice = predict(model({ behavior }), input()).notices.find(
+      (n) => n.kind === 'first-pick',
+    );
+    // Whichever side has first pick, the quoted rate is that team on that side.
+    expect(notice?.text).toContain(FIRST_PICK_SIDE === 'red' ? '42% on red' : '71% on blue');
   });
 
   it('flags a decider when both teams are one win away', () => {
@@ -391,23 +434,7 @@ describe('predict — notices', () => {
 });
 
 describe('behaviorTendencies', () => {
-  const base: TeamBehavior = {
-    games: 30,
-    winRate: 0.5,
-    recentForm: null,
-    blueWinRate: null,
-    redWinRate: null,
-    throwRate: null,
-    throwSample: 0,
-    comebackRate: null,
-    comebackSample: 0,
-    bouncebackRate: null,
-    deciderRate: null,
-    matchPointCloseRate: null,
-    chokeRate: null,
-    chokeSample: 0,
-    game1Rate: null,
-  };
+  const base = BLANK_BEHAVIOR;
 
   it('says so plainly when there is no team at all', () => {
     expect(behaviorTendencies(undefined)[0]).toContain('No games');
@@ -455,5 +482,99 @@ describe('predict — partial drafts', () => {
       }),
     );
     expect(result.notices.filter((n) => n.kind === 'draft')).toHaveLength(0);
+  });
+});
+
+describe('predict — early-game gold tempo', () => {
+  const tempo = (
+    team: string,
+    averageDiff: number,
+    aheadRate: number,
+    sample = 40,
+    minute: 10 | 15 | 20 | 25 = 10,
+  ): [string, GoldTempo] => [team, [{ minute, sample, averageDiff, aheadRate }]];
+
+  const goldNotices = (model: PredictorModel) =>
+    predict(model, input()).notices.filter((n) => n.kind === 'gold');
+
+  it('says nothing when no team has gold data', () => {
+    expect(goldNotices(model())).toHaveLength(0);
+  });
+
+  it('calls out a team that habitually leads early', () => {
+    const goldTempo = new Map([tempo('blue team', 480, 0.66)]);
+    const text = goldNotices(model({ goldTempo }))[0]!.text;
+    expect(text).toContain('Blue Team');
+    expect(text).toContain('+480g');
+    expect(text).toContain('at 10 min');
+    expect(text).toContain('ahead in 66%');
+    expect(text).toContain('tend to lead early');
+  });
+
+  it('calls out a team that habitually falls behind, and flags it', () => {
+    const goldTempo = new Map([tempo('red team', -390, 0.34)]);
+    const notice = goldNotices(model({ goldTempo }))[0]!;
+    expect(notice.text).toContain('−390g');
+    expect(notice.text).toContain('tend to fall behind early');
+    expect(notice.warning).toBe(true);
+    expect(notice.side).toBe('red');
+  });
+
+  it('does not mistake a few blowouts for a habit', () => {
+    // A big average that comes from rarely being ahead is variance, not tempo.
+    const goldTempo = new Map([tempo('blue team', 600, 0.45)]);
+    const text = goldNotices(model({ goldTempo }))[0]!.text;
+    expect(text).toContain('swingy starts');
+    expect(text).not.toContain('tend to lead early');
+  });
+
+  it('describes a genuinely even team as even', () => {
+    const goldTempo = new Map([tempo('blue team', 40, 0.51)]);
+    expect(goldNotices(model({ goldTempo }))[0]!.text).toContain('even out of the gate');
+  });
+
+  it('adds a head-to-head line when the two teams differ meaningfully', () => {
+    const goldTempo = new Map([tempo('blue team', 421, 0.62), tempo('red team', -379, 0.37)]);
+    const notices = goldNotices(model({ goldTempo }));
+    const head = notices.find((n) => n.text.startsWith('Early game'));
+    expect(head?.text).toContain('Blue Team +421g');
+    expect(head?.text).toContain('Red Team −379g');
+    expect(head?.text).toContain('Blue Team open 800g stronger');
+  });
+
+  it('skips the head-to-head line when the two open alike', () => {
+    const goldTempo = new Map([tempo('blue team', 120, 0.52), tempo('red team', 40, 0.5)]);
+    expect(goldNotices(model({ goldTempo })).some((n) => n.text.startsWith('Early game'))).toBe(
+      false,
+    );
+  });
+
+  it('prefers the 10-minute mark when several are available', () => {
+    const goldTempo = new Map<string, GoldTempo>([
+      [
+        'blue team',
+        [
+          { minute: 10, sample: 30, averageDiff: 111, aheadRate: 0.55 },
+          { minute: 15, sample: 30, averageDiff: 999, aheadRate: 0.8 },
+        ],
+      ],
+    ]);
+    expect(goldNotices(model({ goldTempo }))[0]!.text).toContain('at 10 min');
+  });
+
+  it('falls back to a later mark when 10 minutes is missing', () => {
+    const goldTempo = new Map<string, GoldTempo>([
+      ['blue team', [{ minute: 15, sample: 30, averageDiff: 500, aheadRate: 0.7 }]],
+    ]);
+    expect(goldNotices(model({ goldTempo }))[0]!.text).toContain('at 15 min');
+  });
+
+  it('never moves the score', () => {
+    const goldTempo = new Map([tempo('blue team', 900, 0.8), tempo('red team', -900, 0.2)]);
+    const withGold = predict(model({ goldTempo }), input());
+    const without = predict(model(), input());
+    expect(withGold.blue.total).toBe(without.blue.total);
+    expect(withGold.red.total).toBe(without.red.total);
+    expect(withGold.gameProbBlue).toBe(without.gameProbBlue);
   });
 });

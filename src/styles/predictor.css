@@ -725,9 +725,14 @@
   border-left-color: var(--amber);
 }
 
+/* Gold tempo reads carry their own accent so they scan as a group. */
+.notice-kind {
+  font-variant-numeric: tabular-nums;
+}
+
 .notice-kind {
   flex: none;
-  min-width: 84px;
+  min-width: 92px;
   font-size: 0.62rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
