@@ -8,9 +8,18 @@
  * every change instead of hiding behind a Predict button.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useDataset } from './DatasetContext.tsx';
-import { buildPredictorModel, emptyPredictorModel } from '../predictor/derive.ts';
+import { buildPredictorModel, emptyPredictorModel, gamesBefore } from '../predictor/derive.ts';
 import {
   RatingsParseError,
   bundledRatings,
@@ -37,11 +46,13 @@ import {
 } from '../predictor/draft.ts';
 import {
   MatchImportError,
+  asOfInstant,
   matchToDraft,
   parseMatchText,
   type ImportedMatch,
 } from '../predictor/matchImport.ts';
 import type { PredictorModel } from '../predictor/types.ts';
+import type { Game } from '../domain/types.ts';
 
 /** A pasted list of matches, with a cursor for stepping through it. */
 export interface MatchQueue {
@@ -73,6 +84,16 @@ export interface PredictorContextValue {
   resetDraft: () => void;
   /** Matches pasted for backtesting, or `null` when none are loaded. */
   queue: MatchQueue | null;
+  /**
+   * Instant the model is scoped to, or `null` when it uses every loaded game.
+   * Set from the current queue match so a backtest cannot see its own future.
+   */
+  asOf: number | null;
+  /** Whether to cut history at the current match's kickoff. */
+  asOfEnabled: boolean;
+  setAsOfEnabled: (enabled: boolean) => void;
+  /** Games the scoped model was built from, against the total loaded. */
+  scopedGameCount: number;
   /** Parse pasted text and fill the composer with its first match. */
   loadMatches: (text: string) => MatchLoadReport;
   /** Jump to a match in the queue and fill the composer with it. */
@@ -89,6 +110,7 @@ const PredictorContext = createContext<PredictorContextValue | null>(null);
 
 export function PredictorProvider({ children }: { children: ReactNode }) {
   const { dataset } = useDataset();
+  const games = dataset?.games;
   const [ratings, setRatings] = useState<StoredRatings>(bundledRatings);
   const [ratingsStatus, setRatingsStatus] = useState<'loading' | 'ready'>('loading');
   // Read straight from storage on first render, so the page never paints a
@@ -167,6 +189,43 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
     setQueueText('');
   }, []);
 
+  const [asOfEnabled, setAsOfEnabled] = useState(true);
+
+  const currentMatch = queue ? (queue.matches[queue.index] ?? null) : null;
+  const asOf = asOfEnabled && currentMatch ? asOfInstant(currentMatch) : null;
+
+  const scopedGames = useMemo<readonly Game[]>(() => {
+    if (!games) return [];
+    return asOf === null ? games : gamesBefore(games, asOf);
+  }, [games, asOf]);
+
+  /**
+   * Models keyed by cutoff, so stepping through a queue doesn't rebuild for
+   * every click. A backtest walks forward through games that often share a day,
+   * and revisiting one should be instant; the cache is cleared whenever the
+   * underlying games or ratings change, which is what makes it safe to hold.
+   */
+  const modelCache = useRef(new Map<string, PredictorModel>());
+  useEffect(() => {
+    modelCache.current.clear();
+  }, [games, ratings]);
+
+  const model = useMemo<PredictorModel>(() => {
+    if (scopedGames.length === 0) return emptyPredictorModel();
+    const key = asOf === null ? 'all' : String(asOf);
+    const cached = modelCache.current.get(key);
+    if (cached) return cached;
+
+    const built = buildPredictorModel(scopedGames, ratingsFromStored(ratings));
+    // Bounded so a long backtest can't grow the cache without limit.
+    if (modelCache.current.size >= 24) {
+      const oldest = modelCache.current.keys().next().value;
+      if (oldest !== undefined) modelCache.current.delete(oldest);
+    }
+    modelCache.current.set(key, built);
+    return built;
+  }, [scopedGames, asOf, ratings]);
+
   useEffect(() => {
     let cancelled = false;
     void loadStoredRatings().then((stored) => {
@@ -179,13 +238,6 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
-
-  const games = dataset?.games;
-
-  const model = useMemo<PredictorModel>(() => {
-    if (!games || games.length === 0) return emptyPredictorModel();
-    return buildPredictorModel(games, ratingsFromStored(ratings));
-  }, [games, ratings]);
 
   const importRatings = useCallback(async (file: File): Promise<RatingsImportReport> => {
     let text: string;
@@ -235,6 +287,10 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
       setDraft,
       resetDraft,
       queue,
+      asOf,
+      asOfEnabled,
+      setAsOfEnabled,
+      scopedGameCount: scopedGames.length,
       loadMatches,
       goToMatch,
       clearQueue,
@@ -249,6 +305,9 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
       setDraft,
       resetDraft,
       queue,
+      asOf,
+      asOfEnabled,
+      scopedGames.length,
       loadMatches,
       goToMatch,
       clearQueue,

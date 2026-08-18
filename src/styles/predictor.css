@@ -1150,3 +1150,25 @@
   font-size: 0.8rem;
   max-width: 74ch;
 }
+
+.queue-asof {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  border-left: 3px solid var(--green);
+}
+
+.queue-asof:has(input:not(:checked)) {
+  border-left-color: var(--amber);
+}
+
+.queue-asof input {
+  margin-top: 3px;
+  accent-color: var(--blue);
+  flex: none;
+}

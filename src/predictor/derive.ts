@@ -704,3 +704,30 @@ export function emptyPredictorModel(): PredictorModel {
     gamesAnalyzed: 0,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Point-in-time scoping                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Games that had already been played at a given instant.
+ *
+ * Backtesting against a model built from the whole season is the classic
+ * lookahead mistake: predicting a July game while the champion win rates,
+ * standings and meta already contain August. Cutting the history at kickoff is
+ * what makes a backtest mean anything.
+ *
+ * `games` arrives newest-first, so the cut is a binary search for the first
+ * game strictly older than the cutoff and a single slice — no full scan per
+ * match, which matters when stepping through hundreds of them.
+ */
+export function gamesBefore(games: readonly Game[], cutoff: number): Game[] {
+  let low = 0;
+  let high = games.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (Date.parse(games[mid]!.date) < cutoff) high = mid;
+    else low = mid + 1;
+  }
+  return games.slice(low);
+}

@@ -37,6 +37,13 @@ export interface ImportedMatch {
   /** Free-text label for the queue, e.g. an Oracle's Elixir game id. */
   id: string | null;
   date: string | null;
+  /**
+   * Moment this game started, when the source knows it.
+   *
+   * Lets a backtest cut its history at kickoff rather than at the start of the
+   * day, so game three of a series can legitimately see games one and two.
+   */
+  kickoff: string | null;
   competition: CompetitionId | null;
   /** Competition string as pasted, kept when it doesn't resolve. */
   competitionRaw: string | null;
@@ -315,6 +322,7 @@ function readMatch(raw: unknown, index: number, warnings: string[]): ImportedMat
   return {
     id: asText(pick(raw, 'id', 'gameId', 'gameid')),
     date: asText(pick(raw, 'date', 'when')),
+    kickoff: asText(pick(raw, 'kickoff', 'datetime', 'startTime')),
     competition,
     competitionRaw,
     stage: parseStage(asText(pick(raw, 'stage', 'round', 'phase'))),
@@ -429,3 +437,19 @@ export function unknownChampions(
 
 /** Role order the paste format uses, for the help text. */
 export const PASTE_ROLE_KEYS: Role[] = [...ROLES];
+
+/**
+ * Instant a backtest should treat as "now" for this match.
+ *
+ * Prefers the kickoff, falling back to midnight on the match date so a file
+ * carrying only a day still scopes history — conservatively, since everything
+ * that day is then treated as not yet played.
+ */
+export function asOfInstant(match: ImportedMatch): number | null {
+  for (const candidate of [match.kickoff, match.date]) {
+    if (!candidate) continue;
+    const parsed = Date.parse(candidate);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}

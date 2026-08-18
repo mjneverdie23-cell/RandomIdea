@@ -88,10 +88,11 @@ def resolve_competition(league: str) -> str | None:
     return None
 
 
-def parse_date(raw: str) -> date | None:
+def parse_datetime(raw: str) -> datetime | None:
+    """Full kickoff time. Day granularity cannot order games within a series."""
     for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d"):
         try:
-            return datetime.strptime((raw or "").strip(), pattern).date()
+            return datetime.strptime((raw or "").strip(), pattern)
         except ValueError:
             continue
     return None
@@ -164,7 +165,7 @@ def build(args: argparse.Namespace) -> int:
             if args.league and competition != args.league.strip().upper():
                 continue
 
-            played = parse_date(row.get("date", ""))
+            played = parse_datetime(row.get("date", ""))
             if played is None:
                 continue
             seen_years.append(played.year)
@@ -176,7 +177,8 @@ def build(args: argparse.Namespace) -> int:
             entry = games.setdefault(
                 game_id,
                 {
-                    "date": played,
+                    "kickoff": played,
+                    "date": played.date(),
                     "competition": competition,
                     "stage": stage_of(row),
                     "game": int(float(row.get("game") or 1)),
@@ -184,6 +186,9 @@ def build(args: argparse.Namespace) -> int:
                     "sides": defaultdict(dict),
                 },
             )
+
+            if played < entry["kickoff"]:
+                entry["kickoff"] = played
 
             side = (row.get("side") or "").strip().capitalize()
             if side not in ("Blue", "Red"):
@@ -247,8 +252,13 @@ def build(args: argparse.Namespace) -> int:
 
         kept.append(
             {
+                "_series": key,
+                "_kickoff": entry["kickoff"],
                 "id": game_id,
                 "date": entry["date"].isoformat(),
+                # Full kickoff, so a backtest can cut its history at the moment
+                # this game started rather than at the start of the day.
+                "kickoff": entry["kickoff"].isoformat(),
                 "competition": entry["competition"],
                 "stage": entry["stage"],
                 "series": best_of,
@@ -259,9 +269,29 @@ def build(args: argparse.Namespace) -> int:
             }
         )
 
-    kept.sort(key=lambda m: (m["date"], m["id"], m["game"]), reverse=args.order == "desc")
+    # Order series-by-series, each series in game order.
+    #
+    # Sorting on (date, id) interleaved concurrent series and scattered their
+    # games — Oracle's Elixir game ids are not sequential within a series, so a
+    # best-of-five came out G1, G3, G4, G2, G5. Series are ordered by when they
+    # started; games inside one follow the game counter, with kickoff breaking
+    # any tie.
+    series_start: dict[tuple, datetime] = {}
+    for match in kept:
+        key = match["_series"]
+        earliest = series_start.get(key)
+        if earliest is None or match["_kickoff"] < earliest:
+            series_start[key] = match["_kickoff"]
+
+    kept.sort(key=lambda m: (series_start[m["_series"]], m["_series"], m["game"], m["_kickoff"]))
+    if args.order == "desc":
+        kept.reverse()
     if args.limit:
         kept = kept[: args.limit]
+
+    for match in kept:
+        del match["_series"]
+        del match["_kickoff"]
 
     if not kept:
         print(

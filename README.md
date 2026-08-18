@@ -211,7 +211,7 @@ higher total is the predicted winner.
 | --- | --- |
 | Win-rate base | The five champions' historical win rates for that team in that role, capped at 1.00 per lane |
 | Meta champions | +1 per champion clearing the pick-rate bar on the newest patches |
-| Pocket picks | +1.5 per off-meta pick, up to two; three or more −2 |
+| Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
 | Rank edge | +0.5 when GlobalRank differs by 2 or more |
 | Form edge | Up to +1 for the better current-season series record |
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive |
@@ -220,6 +220,12 @@ higher total is the predicted winner.
 The point margin becomes a per-game probability through a logistic curve, and
 the series and sweep odds follow by counting the ways a best-of can still be
 won from the current score.
+
+The pocket term is halved in game one, where neither side has seen what the
+other intends to play and an off-meta pick says far less about a plan than the
+same pick in game three. Worth knowing: because an off-meta pick still forfeits
+its full meta point while earning only half a pocket bonus, a game-one pocket
+pick nets −0.25 against an all-meta draft, and +0.5 from game two on.
 
 A pocket pick is priced above a meta pick on purpose. An off-meta champion
 earns no meta bonus, so while the two were equal they cancelled exactly: four
@@ -288,6 +294,32 @@ it can't resolve is reported rather than silently dropped.
 **No winner field is read, ever** — the point is to fill in what a predictor
 would know before the game.
 
+### Backtesting without lookahead
+
+A model built from the whole season already knows how the season went. Predict
+a July game against it and the champion win rates, standings, form and meta all
+contain August — the classic lookahead mistake, and it flatters the model badly.
+
+When a queue is loaded, **Only use history up to this game** cuts the model at
+the current match's kickoff. It is on by default and can be switched off for
+live prediction, where you do want everything.
+
+Measured on the real 2026 export, same match (T1 vs Team Liquid, 1 July):
+
+| History | Games | Meta from | T1 win probability |
+| --- | --- | --- | --- |
+| Cut at kickoff | 1,446 | patch 16.13 / 16.11 | 66.9% |
+| Whole season | 1,820 | patch 16.16 / 16.15 | 83.5% |
+
+A 16.6-point swing, and the uncut version was scoring a 1 July draft against a
+meta from patches that had not shipped yet.
+
+The cut uses the exported `kickoff` timestamp, so game three of a series can
+legitimately see games one and two. With only a date it falls back to midnight,
+which is conservative — everything that day counts as not yet played. Models
+are cached per cutoff, so stepping back and forth through a queue does not
+rebuild.
+
 ### Generating a queue
 
 `scripts/export_matches.py` turns an Oracle's Elixir CSV into one paste-ready
@@ -301,6 +333,10 @@ python scripts/export_matches.py 2026_LoL_esports_match_data_from_OraclesElixir.
 python scripts/export_matches.py data.csv --from 2026-05-01 --to 2026-08-01 \
     --league LCK --order desc --out lck-backtest.json
 ```
+
+Games come out series by series, each series in game order, ordered by when it
+started. (Oracle's Elixir game ids are not sequential within a series, so
+sorting on them scattered a best-of-five into G1, G3, G4, G2, G5.)
 
 It writes no result — no winner, score, kills, gold or game length. A backtest
 that can see the answer is not a backtest, so scoring each prediction against

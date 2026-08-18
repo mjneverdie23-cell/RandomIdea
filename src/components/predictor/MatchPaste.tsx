@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { usePredictor, type MatchLoadReport } from '../../state/PredictorContext.tsx';
 import { describeMatch, unknownChampions } from '../../predictor/matchImport.ts';
 import { ROLES } from '../../domain/types.ts';
+import { formatCount } from '../../lib/format.ts';
 
 const EXAMPLE = `{
   "matches": [
@@ -35,7 +36,17 @@ const EXAMPLE = `{
  * more than one, so a single-match paste stays uncluttered.
  */
 export function MatchPaste() {
-  const { queue, loadMatches, goToMatch, clearQueue, model } = usePredictor();
+  const {
+    queue,
+    loadMatches,
+    goToMatch,
+    clearQueue,
+    model,
+    asOf,
+    asOfEnabled,
+    setAsOfEnabled,
+    scopedGameCount,
+  } = usePredictor();
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [report, setReport] = useState<MatchLoadReport | null>(null);
@@ -148,6 +159,33 @@ export function MatchPaste() {
               </span>
             )}
           </div>
+
+          <label className="queue-asof">
+            <input
+              type="checkbox"
+              checked={asOfEnabled}
+              onChange={(event) => setAsOfEnabled(event.target.checked)}
+            />
+            <span>
+              <strong>Only use history up to this game</strong>
+              {asOf !== null ? (
+                <span className="dim">
+                  {' '}
+                  — {formatCount(scopedGameCount, 'game')} played before{' '}
+                  {new Date(asOf).toLocaleString(undefined, {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                </span>
+              ) : (
+                <span className="dim">
+                  {' '}
+                  — off: every loaded game feeds the model, including ones played after
+                  this one
+                </span>
+              )}
+            </span>
+          </label>
 
           {queue.matches.length > 1 && (
             <label className="queue-scrub">

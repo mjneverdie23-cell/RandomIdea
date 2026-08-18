@@ -7,6 +7,7 @@
  *   win-rate base   the 5 champions' historical win rates for that team + role
  *   meta bonus      +1 per meta champion (meta = pick frequency, computed live)
  *   pocket picks    1-2 off-meta picks -> +1.5 each ; more than 2 -> -2
+ *                   (halved in game one, where the read is least informative)
  *   rank edge       +0.5 to the stronger team when GlobalRank differs by >= 2
  *   form edge       up to +1 for the better current-season series record
  *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
@@ -61,9 +62,22 @@ export const POCKET_POINT = 1.5;
 export const POCKET_MAX = 2;
 export const POCKET_MANY_PENALTY = -2.0;
 
-export function pocketBonusFor(offMetaCount: number): number {
+/**
+ * How much of the pocket-pick term survives in game one.
+ *
+ * Opening games are the volatile ones: neither side has seen what the other
+ * intends to play, so an off-meta pick there says far less about a plan than
+ * the same pick in game three, where it answers something already on the
+ * board. The whole term is discounted — reward and chaos penalty alike —
+ * because the read is less informative, not because surprises are worth less.
+ */
+export const GAME_ONE_POCKET_SCALE = 0.5;
+
+export function pocketBonusFor(offMetaCount: number, gameNumber: number): number {
   if (offMetaCount <= 0) return 0;
-  return offMetaCount <= POCKET_MAX ? offMetaCount * POCKET_POINT : POCKET_MANY_PENALTY;
+  const raw =
+    offMetaCount <= POCKET_MAX ? offMetaCount * POCKET_POINT : POCKET_MANY_PENALTY;
+  return gameNumber <= 1 ? raw * GAME_ONE_POCKET_SCALE : raw;
 }
 export const RANK_DIFF_THRESHOLD = 2;
 export const RANK_BONUS = 0.5;
@@ -232,7 +246,12 @@ function usableForm(model: PredictorModel, competition: string | null, team: str
 /* Per-side tally                                                      */
 /* ------------------------------------------------------------------ */
 
-function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput): SideScore {
+function scoreSide(
+  model: PredictorModel,
+  input: SideInput,
+  opposing: SideInput,
+  gameNumber: number,
+): SideScore {
   const own = input.champions.filter((c): c is Champion => c !== null);
   const against = opposing.champions.filter((c): c is Champion => c !== null);
   const roster = model.rosters.get(input.team.toLowerCase()) ?? {};
@@ -266,7 +285,7 @@ function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput)
   winRateBase = Math.min(winRateBase, ROLES.length);
 
   const offMetaCount = picks.length - metaCount;
-  const pocketBonus = pocketBonusFor(offMetaCount);
+  const pocketBonus = pocketBonusFor(offMetaCount, gameNumber);
 
   const fraudPenalty = lookupRating(model.ratings, input.team)?.fraud ?? 0;
 
@@ -523,6 +542,7 @@ function buildNotices(
     }
   }
 
+  const gameOne = input.gameNumber <= 1;
   for (const [side, score] of [
     ['blue', blue],
     ['red', red],
@@ -534,14 +554,18 @@ function buildNotices(
       notices.push({
         kind: 'draft',
         side,
-        text: `${score.team}: ${score.offMetaCount} pocket pick(s) — surprise factor (${signed(score.pocketBonus)}).`,
+        text:
+          `${score.team}: ${score.offMetaCount} pocket pick(s) — surprise factor ` +
+          `(${signed(score.pocketBonus)}${gameOne ? ', halved in game one' : ''}).`,
       });
     } else {
       notices.push({
         kind: 'draft',
         side,
         warning: true,
-        text: `${score.team}: ${score.offMetaCount} off-meta picks — chaotic, high-risk draft (${signed(score.pocketBonus)}).`,
+        text:
+          `${score.team}: ${score.offMetaCount} off-meta picks — chaotic, high-risk draft ` +
+          `(${signed(score.pocketBonus)}${gameOne ? ', halved in game one' : ''}).`,
       });
     }
   }
@@ -650,8 +674,8 @@ function signed(value: number): string {
 /* ------------------------------------------------------------------ */
 
 export function predict(model: PredictorModel, input: PredictionInput): Prediction {
-  const blue = scoreSide(model, input.blue, input.red);
-  const red = scoreSide(model, input.red, input.blue);
+  const blue = scoreSide(model, input.blue, input.red, input.gameNumber);
+  const red = scoreSide(model, input.red, input.blue, input.gameNumber);
 
   // Rank edge needs both sides, so it is applied after the per-side tallies.
   const blueRank = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;

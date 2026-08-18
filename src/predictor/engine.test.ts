@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FIRST_PICK_SIDE,
   FORM_CAP,
+  GAME_ONE_POCKET_SCALE,
   META_POINT,
   MOTIVATION_POINTS,
   POCKET_MANY_PENALTY,
@@ -77,6 +78,9 @@ const BLANK_BEHAVIOR: TeamBehavior = {
   chokeSample: 0,
   game1Rate: null,
 };
+
+/** The same matchup at game two, where the pocket term is not discounted. */
+const laterGame = () => input({ gameNumber: 2 });
 
 /** Mark the first `count` of blue's picks as meta, leaving the rest off-meta. */
 function metaFor(count: number): Map<Role, Set<string>> {
@@ -184,14 +188,43 @@ describe('predict — point tally', () => {
 
   it('rewards one or two pocket picks and punishes more than two', () => {
     // Four meta picks leaves one off-meta pick: a pocket pick.
-    expect(predict(model({ metaByRole: metaFor(4) }), input()).blue.pocketBonus).toBe(POCKET_POINT);
-    expect(predict(model({ metaByRole: metaFor(3) }), input()).blue.pocketBonus).toBe(
+    expect(predict(model({ metaByRole: metaFor(4) }), laterGame()).blue.pocketBonus).toBe(
+      POCKET_POINT,
+    );
+    expect(predict(model({ metaByRole: metaFor(3) }), laterGame()).blue.pocketBonus).toBe(
       2 * POCKET_POINT,
     );
     // Three off-meta picks tips over into chaos.
-    expect(predict(model({ metaByRole: metaFor(2) }), input()).blue.pocketBonus).toBe(
+    expect(predict(model({ metaByRole: metaFor(2) }), laterGame()).blue.pocketBonus).toBe(
       POCKET_MANY_PENALTY,
     );
+  });
+
+  it('halves the whole pocket term in game one', () => {
+    const one = (metaCount: number) =>
+      predict(model({ metaByRole: metaFor(metaCount) }), input({ gameNumber: 1 })).blue
+        .pocketBonus;
+    const later = (metaCount: number) =>
+      predict(model({ metaByRole: metaFor(metaCount) }), laterGame()).blue.pocketBonus;
+
+    expect(one(4)).toBe(POCKET_POINT * GAME_ONE_POCKET_SCALE);
+    expect(one(3)).toBe(2 * POCKET_POINT * GAME_ONE_POCKET_SCALE);
+    // The chaos penalty is discounted too — the read is less informative in
+    // game one, not less punishing.
+    expect(one(2)).toBe(POCKET_MANY_PENALTY * GAME_ONE_POCKET_SCALE);
+
+    for (const metaCount of [2, 3, 4]) {
+      expect(one(metaCount)).toBeCloseTo(later(metaCount) * GAME_ONE_POCKET_SCALE, 10);
+    }
+  });
+
+  it('leaves every other line item alone in game one', () => {
+    const one = predict(model({ metaByRole: metaFor(4) }), input({ gameNumber: 1 })).blue;
+    const later = predict(model({ metaByRole: metaFor(4) }), laterGame()).blue;
+    expect(one.winRateBase).toBe(later.winRateBase);
+    expect(one.metaBonus).toBe(later.metaBonus);
+    expect(one.formEdge).toBe(later.formEdge);
+    expect(one.motivationBonus).toBe(later.motivationBonus);
   });
 
   it('prices a pocket pick above a meta pick', () => {
@@ -199,16 +232,35 @@ describe('predict — point tally', () => {
     // cancelled and a pocket pick was worth exactly nothing in the total.
     expect(POCKET_POINT).toBeGreaterThan(META_POINT);
 
-    const allMeta = predict(model({ metaByRole: metaFor(5) }), input()).blue;
-    const onePocket = predict(model({ metaByRole: metaFor(4) }), input()).blue;
+    const allMeta = predict(model({ metaByRole: metaFor(5) }), laterGame()).blue;
+    const onePocket = predict(model({ metaByRole: metaFor(4) }), laterGame()).blue;
     expect(allMeta.metaBonus + allMeta.pocketBonus).toBe(5);
     expect(onePocket.metaBonus + onePocket.pocketBonus).toBeCloseTo(4 + POCKET_POINT, 10);
     expect(onePocket.total).toBeGreaterThan(allMeta.total);
   });
 
+  it('turns a game-one pocket pick into a small net cost', () => {
+    // A consequence of halving, worth pinning because it flips the sign: an
+    // off-meta pick still forfeits its full meta point, but only earns half a
+    // pocket bonus. At 1.5 * 0.5 = 0.75 against META_POINT of 1.0 that is a
+    // net -0.25 in game one, where the same pick is +0.5 from game two on.
+    const allMeta = predict(model({ metaByRole: metaFor(5) }), input({ gameNumber: 1 })).blue;
+    const onePocket = predict(model({ metaByRole: metaFor(4) }), input({ gameNumber: 1 })).blue;
+    expect(onePocket.total - allMeta.total).toBeCloseTo(
+      POCKET_POINT * GAME_ONE_POCKET_SCALE - META_POINT,
+      10,
+    );
+    expect(onePocket.total).toBeLessThan(allMeta.total);
+
+    // From game two it is an edge again.
+    const laterAllMeta = predict(model({ metaByRole: metaFor(5) }), laterGame()).blue;
+    const laterPocket = predict(model({ metaByRole: metaFor(4) }), laterGame()).blue;
+    expect(laterPocket.total).toBeGreaterThan(laterAllMeta.total);
+  });
+
   it('makes a second pocket pick worth more than the first, then falls off a cliff', () => {
     const draftValue = (metaCount: number): number => {
-      const score = predict(model({ metaByRole: metaFor(metaCount) }), input()).blue;
+      const score = predict(model({ metaByRole: metaFor(metaCount) }), laterGame()).blue;
       return score.metaBonus + score.pocketBonus;
     };
     expect(draftValue(3)).toBeGreaterThan(draftValue(4));
@@ -416,10 +468,17 @@ describe('predict — notices', () => {
 
   it('reports fractional point values without rounding them away', () => {
     // A +1.5 pocket bonus used to print as "+2" and a 0.25 fraud rating as "-0".
-    const pocket = predict(model({ metaByRole: metaFor(4) }), input()).notices.find(
+    const pocket = predict(model({ metaByRole: metaFor(4) }), laterGame()).notices.find(
       (n) => n.kind === 'draft' && n.side === 'blue',
     );
     expect(pocket?.text).toContain('+1.5');
+
+    // Game one says so rather than quietly reporting a different number.
+    const halved = predict(model({ metaByRole: metaFor(4) }), input({ gameNumber: 1 })).notices.find(
+      (n) => n.kind === 'draft' && n.side === 'blue',
+    );
+    expect(halved?.text).toContain('+0.75');
+    expect(halved?.text).toContain('halved in game one');
 
     const ratings = new Map([['red team', { team: 'Red Team', globalRank: null, fraud: 0.25 }]]);
     const fraud = predict(model({ ratings }), input()).notices.find(
