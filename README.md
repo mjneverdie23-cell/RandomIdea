@@ -209,10 +209,9 @@ higher total is the predicted winner.
 
 | Line item | What it adds |
 | --- | --- |
-| Win-rate base | The five champions' historical win rates for that team in that role, capped at 1.00 per lane |
+| Win-rate base | The five champions' historical win rates for that team in that role, capped at 1.00 per lane. A champion with no recorded games counts as 1.00 |
 | Meta champions | +1 per champion clearing the pick-rate bar on the newest patches |
 | Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
-| Rank edge | +0.5 when GlobalRank differs by 2 or more |
 | Form edge | Up to +1 for the better current-season series record |
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive |
 | Fraud penalty | Minus the team's inconsistency rating |
@@ -242,6 +241,21 @@ ever outweighing what the teams actually drafted.
 
 The composition survives switching tabs, and a reload or a closed browser. Use
 **Reset** to clear it; that forgets the saved copy too.
+
+### First-time picks count as 100%
+
+A champion a team has no recorded games on scores a full 1.00 rather than a
+neutral 0.50. Nobody first-times a champion on stage: it has been scrimmed, it
+is aimed at this opponent, and the other side has no film on it. Knight's Swain
+at MSI is the case this exists for.
+
+Only a champion with no record *anywhere* qualifies — one the team plays
+constantly at home but has never used at an international event still scores its
+real rate, from the wider scope, and the report names which scope it used.
+
+Worth watching: combined with the as-of cutoff below, an early-season backtest
+has little recorded play, so many lanes qualify at once and both bases inflate
+together. `UNPLAYED_WIN_RATE` in `src/predictor/engine.ts` is the dial.
 
 ### Where its numbers come from
 
@@ -342,10 +356,17 @@ It writes no result — no winner, score, kills, gold or game length. A backtest
 that can see the answer is not a backtest, so scoring each prediction against
 what really happened is left to you.
 
-One consequence worth knowing: pasted games start at 0–0 even when they are
-game 3 of a series, because in a best-of-three a 1–1 scoreline names the winner
-of the first two games. The composer still shows the real game number; set the
-score yourself if you want series odds rather than this game's.
+Each game carries the series score *entering* it, so stepping to game two of a
+series moves the score and the series odds with it. That is legitimate pre-game
+information — a 1-1 going into game three is what any analyst would know — and
+the result of the game being predicted is still never written. The winner is
+read only to build that running score for later games, then discarded.
+
+The best-of is inferred from both the games played and the winner's total,
+because neither alone is enough: counting games reads every Bo5 sweep as a Bo3
+(a 3-0 and a 2-1 both run to three games), and counting the winner's games reads
+a two-game 1-1 as a Bo1. Getting this wrong put impossible scorelines — 0-2 in a
+best-of-three — into the queue.
 
 ### Early-game gold tempo
 
@@ -376,12 +397,12 @@ champions actually on the board, and likewise never move a total.
 
 ### Team ratings
 
-GlobalRank and Fraud are the one input with no equivalent in an Oracle's Elixir
-export — they are hand-maintained judgements about how strong a team is and how
-reliably it plays to that strength.
+Fraud is the one scored input with no equivalent in an Oracle's Elixir export —
+a hand-maintained judgement about how reliably a team plays to its level.
+GlobalRank is carried through from the same file and shown on the Data tab for
+reference, but no longer scores: the rank edge was removed.
 
-A default table ships with the app, so the rank edge and fraud penalty work
-immediately. Replace it by importing a champion-pool CSV (columns `teamName`,
+A default table ships with the app, so the fraud penalty works immediately. Replace it by importing a champion-pool CSV (columns `teamName`,
 `GlobalRank`, `Fraud`) on the **Data** tab; **Revert to default** drops the
 import again. Team names are matched case- and punctuation-insensitively, so
 `BNK FEARX` finds `BNK FearX` and `GENG` finds `Gen.G`, and the report names
@@ -565,10 +586,10 @@ number reconciliation, and that no winner is ever read).
   without code changes — at the cost of not always matching the official tag.
 - **The leaderboard is per-device** (localStorage). "Global" means global across
   runs on that device until a backend is attached.
-- **The predictor's rank and fraud terms come from a hand-maintained table.**
-  GlobalRank and Fraud appear nowhere in an Oracle's Elixir export. A default
-  table ships with the app and can be replaced on the Data tab; teams it does
-  not list score zero on both lines, which the report states.
+- **The predictor's fraud term comes from a hand-maintained table.** It appears
+  nowhere in an Oracle's Elixir export. A default table ships with the app and
+  can be replaced on the Data tab; teams it does not list take no penalty, which
+  the report states.
 - **Champion counters and synergies are static reference data**
   (`src/predictor/data/championGraph.json`). They annotate the per-lane
   breakdown and never move a score. Regenerate with

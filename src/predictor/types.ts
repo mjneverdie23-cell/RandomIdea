@@ -107,7 +107,10 @@ export type GoldTempo = GoldTempoPoint[];
 /** Hand-maintained ratings; optional, and absent by default. */
 export interface TeamRating {
   team: string;
-  /** Lower is stronger. */
+  /**
+   * Lower is stronger. Carried through from the ratings file and shown on the
+   * Data tab for reference, but no longer scored — the rank edge was removed.
+   */
   globalRank: number | null;
   /** Inconsistency penalty subtracted from the team's total. */
   fraud: number;
@@ -200,7 +203,6 @@ export interface SideScore {
   metaBonus: number;
   offMetaCount: number;
   pocketBonus: number;
-  rankBonus: number;
   formEdge: number;
   /** What the stated motivation is worth; zero for a normal game. */
   motivationBonus: number;
@@ -212,7 +214,6 @@ export type NoticeKind =
   | 'first-pick'
   | 'gold'
   | 'standings'
-  | 'rank'
   | 'draft'
   | 'reliability'
   | 'series'
@@ -244,7 +245,6 @@ export interface Prediction {
   needBlue: number;
   needRed: number;
   seriesTarget: number;
-  rankNote: string;
   formNote: string;
   tendencyBlue: string[];
   tendencyRed: string[];

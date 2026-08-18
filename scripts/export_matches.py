@@ -16,10 +16,14 @@ contents, paste, and step through the games.
     # one league only, newest first
     python scripts/export_matches.py data.csv --league LCK --order desc
 
-**No result is written.** Winner, kill counts, gold and game length are all
-dropped on purpose: the file is meant to be fed to a predictor, and a backtest
-that can see the answer is not a backtest. Check each prediction against the
-real result yourself.
+**The result of each game is never written.** Kills, gold and game length are
+dropped too: the file is predictor input, and a backtest that can see the answer
+is not a backtest. Check each prediction against the real result yourself.
+
+The one thing derived from results is the series score *entering* each game — a
+1-1 going into game three is what any analyst would know beforehand, so it is
+included and drives the series odds. The winner of the game being predicted is
+read only to build that running score for later games, then discarded.
 
 Standard library only — no pandas, no install step.
 """
@@ -98,13 +102,27 @@ def parse_datetime(raw: str) -> datetime | None:
     return None
 
 
-def series_length(games_in_series: int) -> str:
-    """Oracle's Elixir has no best-of column; infer it from the series length."""
-    if games_in_series <= 1:
-        return "BO1"
-    if games_in_series <= 3:
+def series_length(games_played: int, games_won_by_winner: int) -> str:
+    """
+    Oracle's Elixir has no best-of column, so the format is inferred.
+
+    Both signals are needed, and the format has to be able to hold what actually
+    happened. Counting games alone reads every Bo5 sweep as a Bo3, because a 3-0
+    and a 2-1 both run to three games — which then puts an impossible 0-2 into a
+    best-of-three. Counting the winner's games alone mislabels a two-game 1-1
+    (a Bo2, or a Bo3 whose decider is missing from the export) as a Bo1, where a
+    1-0 cannot exist either.
+
+    A race to `t` wins spans between `t` and `2t - 1` games, so the smallest
+    format that fits is the larger of the winner's total and the games played
+    rounded up.
+    """
+    target = max(games_won_by_winner, (games_played + 2) // 2, 1)
+    if target >= 3:
+        return "BO5"
+    if target == 2:
         return "BO3"
-    return "BO5"
+    return "BO1"
 
 
 def stage_of(row: dict[str, str]) -> str:
@@ -144,7 +162,7 @@ def build(args: argparse.Namespace) -> int:
 
     with path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
-        required = {"gameid", "league", "date", "position", "champion", "teamname", "side"}
+        required = {"gameid", "league", "date", "position", "champion", "teamname", "side", "result"}
         missing = required - set(reader.fieldnames or [])
         if missing:
             print(
@@ -183,6 +201,7 @@ def build(args: argparse.Namespace) -> int:
                     "stage": stage_of(row),
                     "game": int(float(row.get("game") or 1)),
                     "teams": {},
+                    "won_by": None,
                     "sides": defaultdict(dict),
                 },
             )
@@ -197,6 +216,10 @@ def build(args: argparse.Namespace) -> int:
             team = (row.get("teamname") or "").strip()
             if team:
                 entry["teams"][side] = team
+                # Kept only to reconstruct the score going INTO each later game.
+                # It is never written out for the game it belongs to.
+                if (row.get("result") or "").strip() == "1":
+                    entry["won_by"] = team
 
             role = ROLES.get((row.get("position") or "").strip().lower())
             champion = (row.get("champion") or "").strip()
@@ -213,17 +236,31 @@ def build(args: argparse.Namespace) -> int:
     if args.date_to:
         end = datetime.strptime(args.date_to, "%Y-%m-%d").date()
 
-    # A series is one competition + day + team pair; its length gives the best-of.
-    series_sizes: dict[tuple, int] = defaultdict(int)
-    for entry in games.values():
+    # Series score entering each game, reconstructed from the games before it.
+    #
+    # This is legitimate pre-game information: going into game three you know
+    # the series is 1-1, and so does every analyst. What must never appear is
+    # the result of the game being predicted, which is why the winner is read
+    # here and then discarded rather than written out.
+    by_series: dict[tuple, list[tuple[int, str, dict]]] = defaultdict(list)
+    for game_id, entry in games.items():
         if len(entry["teams"]) != 2:
             continue
-        key = (
-            entry["competition"],
-            entry["date"],
-            tuple(sorted(entry["teams"].values())),
+        key = (entry["competition"], entry["date"], tuple(sorted(entry["teams"].values())))
+        by_series[key].append((entry["game"], game_id, entry))
+
+    score_before: dict[str, dict[str, int]] = {}
+    series_format: dict[tuple, str] = {}
+    for key, members in by_series.items():
+        members.sort(key=lambda item: (item[0], item[2]["kickoff"]))
+        tally: dict[str, int] = defaultdict(int)
+        for _game_no, game_id, entry in members:
+            score_before[game_id] = dict(tally)
+            if entry["won_by"]:
+                tally[entry["won_by"]] += 1
+        series_format[key] = series_length(
+            len(members), max(tally.values()) if tally else 1
         )
-        series_sizes[key] += 1
 
     kept = []
     skipped_incomplete = 0
@@ -243,12 +280,15 @@ def build(args: argparse.Namespace) -> int:
             entry["date"],
             tuple(sorted(entry["teams"].values())),
         )
-        best_of = series_length(series_sizes.get(key, 1))
+        best_of = series_format.get(key, "BO3")
 
-        # Games before this one in the same series, so the composer opens on the
-        # right game number. The result stays out of it, so the score is not
-        # reconstructed — only how many games have already been played.
-        played_before = max(0, entry["game"] - 1)
+        # Score entering this game, from the point of view of the sides as they
+        # line up here — teams swap sides between games, so a 1-0 lead can
+        # belong to blue in game one and red in game two.
+        tally = score_before.get(game_id, {})
+        blue_wins = tally.get(entry["teams"]["Blue"], 0)
+        red_wins = tally.get(entry["teams"]["Red"], 0)
+        played_before = blue_wins + red_wins
 
         kept.append(
             {
@@ -264,6 +304,7 @@ def build(args: argparse.Namespace) -> int:
                 "series": best_of,
                 "game": entry["game"],
                 "gamesPlayedBefore": played_before,
+                "score": [blue_wins, red_wins],
                 "blue": {"team": entry["teams"]["Blue"], **entry["sides"]["Blue"]},
                 "red": {"team": entry["teams"]["Red"], **entry["sides"]["Red"]},
             }

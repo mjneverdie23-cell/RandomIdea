@@ -8,7 +8,6 @@
  *   meta bonus      +1 per meta champion (meta = pick frequency, computed live)
  *   pocket picks    1-2 off-meta picks -> +1.5 each ; more than 2 -> -2
  *                   (halved in game one, where the read is least informative)
- *   rank edge       +0.5 to the stronger team when GlobalRank differs by >= 2
  *   form edge       up to +1 for the better current-season series record
  *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
  *   fraud penalty   minus the team's inconsistency rating
@@ -79,8 +78,6 @@ export function pocketBonusFor(offMetaCount: number, gameNumber: number): number
     offMetaCount <= POCKET_MAX ? offMetaCount * POCKET_POINT : POCKET_MANY_PENALTY;
   return gameNumber <= 1 ? raw * GAME_ONE_POCKET_SCALE : raw;
 }
-export const RANK_DIFF_THRESHOLD = 2;
-export const RANK_BONUS = 0.5;
 /** Logistic scale converting a point margin into a per-game probability. */
 export const PROB_SCALE = 2.0;
 
@@ -107,8 +104,20 @@ export const MOTIVATION_POINTS: Record<Motivation, number> = {
   'tank incentive': -1.0,
 };
 
-/** Win rate used when a team has never played the champion in that role. */
-export const NEUTRAL_WIN_RATE = 0.5;
+/**
+ * Win rate credited when a team has never played the champion in that role.
+ *
+ * A pro pulling out a champion with no recorded history is not a coin flip —
+ * it is a prepared pick. Nobody first-times something on stage; it has been
+ * scrimmed, it is aimed at this opponent, and the other side has no film on
+ * it. Knight's Swain at MSI is the case this exists for. Credited full value
+ * rather than the 0.5 an absent record used to produce.
+ *
+ * The one place to watch: with history cut at kickoff, an early-season backtest
+ * has little recorded play, so many lanes qualify and the base inflates for
+ * both sides at once.
+ */
+export const UNPLAYED_WIN_RATE = 1.0;
 
 /**
  * Side credited with first pick in the draft notice.
@@ -176,9 +185,10 @@ export interface WinRateRead {
  * The selected competition is the primary scope, because how a team plays at
  * Worlds is not how they play in their home league. When they have simply
  * never played that champion there, we widen to their full history rather than
- * returning a bare 50% — an international event otherwise leaves nearly every
- * lane at neutral and the whole prediction collapses to a coin flip. The scope
- * that produced the number is reported so the UI can show it.
+ * dropping straight to the unplayed case — an international event otherwise
+ * treats a champion the team plays constantly at home as brand new. Only a
+ * champion with no record anywhere counts as a first-time pick. The scope that
+ * produced the number is reported so the UI can show it.
  */
 export function championWinRate(
   model: PredictorModel,
@@ -203,7 +213,11 @@ export function championWinRate(
     };
   }
 
-  return { winRate: NEUTRAL_WIN_RATE, note: 'never played here · 50%', scope: 'none' };
+  return {
+    winRate: UNPLAYED_WIN_RATE,
+    note: 'no recorded games — first-time pick',
+    scope: 'none',
+  };
 }
 
 function describe(record: WinLoss): string {
@@ -297,7 +311,6 @@ function scoreSide(
     metaBonus: metaCount * META_POINT,
     offMetaCount,
     pocketBonus,
-    rankBonus: 0,
     formEdge: 0,
     motivationBonus: MOTIVATION_POINTS[input.motivation] ?? 0,
     fraudPenalty,
@@ -310,7 +323,6 @@ function finalizeTotal(score: SideScore): number {
     score.winRateBase +
     score.metaBonus +
     score.pocketBonus +
-    score.rankBonus +
     score.formEdge +
     score.motivationBonus -
     score.fraudPenalty
@@ -522,26 +534,6 @@ function buildNotices(
     });
   }
 
-  const blueRank = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;
-  const redRank = lookupRating(model.ratings, input.red.team)?.globalRank ?? null;
-  if (blueRank !== null && redRank !== null) {
-    const diff = Math.abs(blueRank - redRank);
-    if (diff >= RANK_DIFF_THRESHOLD) {
-      const stronger = blueRank < redRank ? input.blue.team : input.red.team;
-      notices.push({
-        kind: 'rank',
-        side: blueRank < redRank ? 'blue' : 'red',
-        text: `Rank gap ${diff} (GlobalRank ${blueRank} vs ${redRank}) → +${RANK_BONUS} to ${stronger}.`,
-      });
-    } else {
-      notices.push({
-        kind: 'rank',
-        side: null,
-        text: `Ranks are close (gap ${diff}) — no rank edge awarded.`,
-      });
-    }
-  }
-
   const gameOne = input.gameNumber <= 1;
   for (const [side, score] of [
     ['blue', blue],
@@ -677,21 +669,6 @@ export function predict(model: PredictorModel, input: PredictionInput): Predicti
   const blue = scoreSide(model, input.blue, input.red, input.gameNumber);
   const red = scoreSide(model, input.red, input.blue, input.gameNumber);
 
-  // Rank edge needs both sides, so it is applied after the per-side tallies.
-  const blueRank = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;
-  const redRank = lookupRating(model.ratings, input.red.team)?.globalRank ?? null;
-  let rankNote = 'GlobalRank unavailable for one or both teams — no rank edge';
-  if (blueRank !== null && redRank !== null) {
-    const diff = Math.abs(blueRank - redRank);
-    if (diff >= RANK_DIFF_THRESHOLD) {
-      if (blueRank < redRank) blue.rankBonus = RANK_BONUS;
-      else red.rankBonus = RANK_BONUS;
-      rankNote = `rank gap ${diff} ≥ ${RANK_DIFF_THRESHOLD} → +${RANK_BONUS} to the stronger side`;
-    } else {
-      rankNote = `rank gap ${diff} < ${RANK_DIFF_THRESHOLD} → no bonus`;
-    }
-  }
-
   const blueForm = usableForm(model, input.blue.competition, input.blue.team);
   const redForm = usableForm(model, input.red.competition, input.red.team);
   let formNote = 'standings unavailable or too few series — no form edge';
@@ -739,7 +716,6 @@ export function predict(model: PredictorModel, input: PredictionInput): Predicti
     needBlue,
     needRed,
     seriesTarget,
-    rankNote,
     formNote,
     tendencyBlue: behaviorTendencies(model.behavior.get(input.blue.team.toLowerCase())),
     tendencyRed: behaviorTendencies(model.behavior.get(input.red.team.toLowerCase())),

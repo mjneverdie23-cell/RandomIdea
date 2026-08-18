@@ -77,8 +77,9 @@ export function MatchPaste() {
         <div>
           <h2>Load matches</h2>
           <p className="dim">
-            Paste one matchup or a whole list to step through. Nothing about who won is
-            read, so a backtest can&rsquo;t mark its own homework.
+            Paste one matchup or a whole list to step through. The result of the game
+            being predicted is never read — only the series score going into it, which
+            is what anyone would know beforehand.
           </p>
         </div>
         <button type="button" className="btn btn-sm" onClick={() => setOpen((value) => !value)}>
@@ -202,9 +203,8 @@ export function MatchPaste() {
 
           {current.gameNumber > 1 && current.scoreBlue + current.scoreRed === 0 && (
             <p className="dim queue-note">
-              Series score left at 0–0: in a best-of-three a 1–0 says who won game one,
-              which is the result a backtest must not see. Set it yourself if you want
-              series odds rather than this game&rsquo;s.
+              No series score came with this match, so the series odds treat it as 0–0.
+              Set it yourself, or re-export with a script that carries the running score.
             </p>
           )}
 

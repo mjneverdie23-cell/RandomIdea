@@ -7,11 +7,11 @@ import {
   MOTIVATION_POINTS,
   POCKET_MANY_PENALTY,
   POCKET_POINT,
-  RANK_BONUS,
   anywhereKey,
   behaviorTendencies,
   championWinRate,
   predict,
+  UNPLAYED_WIN_RATE,
   recordKey,
   seriesWinProbability,
 } from './engine.ts';
@@ -140,29 +140,60 @@ describe('championWinRate', () => {
     expect(read.note).toContain('all competitions');
   });
 
-  it('reports neutral when the champion has never been played in that role', () => {
+  it('credits a full win rate to a champion with no recorded games', () => {
+    // A pro pulling out an unplayed champion has prepared it; nobody
+    // first-times one on stage.
     const read = championWinRate(model(), 'LCK', 'Blue Team', DRAFT_A[0]!, 'top');
-    expect(read.winRate).toBe(0.5);
+    expect(read.winRate).toBe(UNPLAYED_WIN_RATE);
+    expect(read.winRate).toBe(1);
     expect(read.scope).toBe('none');
+    expect(read.note).toContain('first-time pick');
+  });
+
+  it('does not treat a champion played elsewhere as first-time', () => {
+    const anywhere = new Map([
+      [anywhereKey('Blue Team', 'top', DRAFT_A[0]!.id), { wins: 1, games: 4 }],
+    ]);
+    const read = championWinRate(model({ championRecordAnywhere: anywhere }), 'WORLDS', 'Blue Team', DRAFT_A[0]!, 'top');
+    expect(read.winRate).toBe(0.25);
+    expect(read.scope).toBe('anywhere');
   });
 });
 
 describe('predict — point tally', () => {
   it('is a coin flip when neither side has any history', () => {
+    // Ten first-time picks: both bases max out, and the two cancel.
     const result = predict(model(), input());
-    expect(result.blue.winRateBase).toBe(2.5);
-    expect(result.red.winRateBase).toBe(2.5);
+    expect(result.blue.winRateBase).toBe(5);
+    expect(result.red.winRateBase).toBe(5);
     expect(result.margin).toBe(0);
     expect(result.favourite).toBeNull();
     expect(result.gameProbBlue).toBeCloseTo(0.5, 10);
   });
 
+  it('ranks a played champion below an unplayed one when the record is poor', () => {
+    // Red's picks are all first-time (1.00 each); blue's are known and bad.
+    const result = predict(
+      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 1, 10) }),
+      input(),
+    );
+    expect(result.blue.winRateBase).toBeCloseTo(0.5, 10);
+    expect(result.red.winRateBase).toBe(5);
+    expect(result.favourite).toBe('red');
+  });
+
   it('favours the team with the stronger champion history', () => {
     const result = predict(
-      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 9, 10) }),
+      model({
+        championRecord: new Map([
+          ...withRecords('Blue Team', 'LCK', DRAFT_A, 9, 10),
+          ...withRecords('Red Team', 'LCK', DRAFT_B, 3, 10),
+        ]),
+      }),
       input(),
     );
     expect(result.blue.winRateBase).toBeCloseTo(4.5, 10);
+    expect(result.red.winRateBase).toBeCloseTo(1.5, 10);
     expect(result.favourite).toBe('blue');
     expect(result.gameProbBlue).toBeGreaterThan(0.5);
   });
@@ -269,21 +300,6 @@ describe('predict — point tally', () => {
     expect(draftValue(2)).toBeLessThan(draftValue(5));
   });
 
-  it('gives the rank edge only when the gap clears the threshold', () => {
-    const ratings = new Map([
-      ['blue team', { team: 'Blue Team', globalRank: 1, fraud: 0 }],
-      ['red team', { team: 'Red Team', globalRank: 2, fraud: 0 }],
-    ]);
-    const close = predict(model({ ratings }), input());
-    expect(close.blue.rankBonus).toBe(0);
-    expect(close.rankNote).toContain('no bonus');
-
-    ratings.set('red team', { team: 'Red Team', globalRank: 6, fraud: 0 });
-    const wide = predict(model({ ratings }), input());
-    expect(wide.blue.rankBonus).toBe(RANK_BONUS);
-    expect(wide.red.rankBonus).toBe(0);
-  });
-
   it('subtracts the fraud rating from the team that carries it', () => {
     const ratings = new Map([['red team', { team: 'Red Team', globalRank: null, fraud: 1.5 }]]);
     const result = predict(model({ ratings }), input());
@@ -357,10 +373,18 @@ describe('predict — point tally', () => {
   });
 
   it('never lets motivation outweigh the draft itself', () => {
-    // A team with a perfect record on every pick, but tanking, still leads a
-    // team with no history at all.
+    // Blue drafts five meta picks they win on; red drafts three off-meta and
+    // has a poor record. Tanking is not enough to flip that.
+    const metaByRole = new Map<Role, Set<string>>();
+    ROLES.forEach((role, index) => metaByRole.set(role, new Set([DRAFT_A[index]!.id])));
     const result = predict(
-      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 10, 10) }),
+      model({
+        metaByRole,
+        championRecord: new Map([
+          ...withRecords('Blue Team', 'LCK', DRAFT_A, 10, 10),
+          ...withRecords('Red Team', 'LCK', DRAFT_B, 2, 10),
+        ]),
+      }),
       input({ blue: { ...input().blue, motivation: 'tank incentive' } }),
     );
     expect(result.favourite).toBe('blue');
@@ -378,7 +402,6 @@ describe('predict — point tally', () => {
       blue.winRateBase +
         blue.metaBonus +
         blue.pocketBonus +
-        blue.rankBonus +
         blue.formEdge +
         blue.motivationBonus -
         blue.fraudPenalty,
@@ -527,7 +550,8 @@ describe('predict — partial drafts', () => {
     const half: (Champion | null)[] = [DRAFT_A[0]!, DRAFT_A[1]!, null, null, null];
     const result = predict(model(), input({ blue: { ...input().blue, champions: half } }));
     expect(result.blue.picks).toHaveLength(2);
-    expect(result.blue.winRateBase).toBeCloseTo(1, 10);
+    // Two first-time picks at 1.00 each; the three empty lanes contribute nothing.
+    expect(result.blue.winRateBase).toBeCloseTo(2, 10);
     expect(result.red.picks).toHaveLength(5);
   });
 
@@ -635,5 +659,29 @@ describe('predict — early-game gold tempo', () => {
     expect(withGold.blue.total).toBe(without.blue.total);
     expect(withGold.red.total).toBe(without.red.total);
     expect(withGold.gameProbBlue).toBe(without.gameProbBlue);
+  });
+});
+
+describe('predict — first-time picks', () => {
+  it('rewards the side that pulled out an unplayed champion', () => {
+    // Both sides have a solid record on four lanes; blue's mid is brand new.
+    const known = new Map([
+      ...withRecords('Blue Team', 'LCK', DRAFT_A, 6, 10),
+      ...withRecords('Red Team', 'LCK', DRAFT_B, 6, 10),
+    ]);
+    known.delete(recordKey('LCK', 'Blue Team', 'mid', DRAFT_A[2]!.id));
+
+    const result = predict(model({ championRecord: known }), input());
+    const surprise = result.blue.picks.find((pick) => pick.role === 'mid')!;
+    expect(surprise.scope).toBe('none');
+    expect(surprise.winRate).toBe(1);
+    expect(result.blue.winRateBase).toBeCloseTo(0.6 * 4 + 1, 10);
+    expect(result.red.winRateBase).toBeCloseTo(0.6 * 5, 10);
+    expect(result.favourite).toBe('blue');
+  });
+
+  it('labels the lane so the report can explain the 100%', () => {
+    const pick = predict(model(), input()).blue.picks[0]!;
+    expect(pick.note).toContain('first-time pick');
   });
 });

@@ -2,7 +2,19 @@ import { ChampionArt } from '../ChampionArt.tsx';
 import { ROLE_SHORT, type Side } from '../../domain/types.ts';
 import type { Notice, Prediction, SideScore } from '../../predictor/types.ts';
 
-const pct = (value: number): string => `${(value * 100).toFixed(1)}%`;
+/**
+ * Percentage that never claims a certainty it doesn't have.
+ *
+ * A 99.96% series probability rounds to "100.0%", which reads as settled when
+ * the model still gives the other side a chance. Anything short of exact is
+ * held back to 99.9 / 0.1.
+ */
+const pct = (value: number): string => {
+  const shown = value * 100;
+  if (value < 1 && shown >= 99.95) return '99.9%';
+  if (value > 0 && shown < 0.05) return '0.1%';
+  return `${shown.toFixed(1)}%`;
+};
 const signed = (value: number): string => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(2)}`;
 
 interface PredictionReportProps {
@@ -84,21 +96,18 @@ export function PredictionReport({
         </div>
         <footer className="tally-notes">
           <p>
-            <span className="dim">Rank edge:</span> {prediction.rankNote}.
-          </p>
-          <p>
             <span className="dim">Form edge:</span> {prediction.formNote}
             {formSeason ? ` (${formSeason} season)` : ''}.
           </p>
           <p>
-            <span className="dim">Rank &amp; fraud source:</span> {ratingsLabel}
+            <span className="dim">Fraud source:</span> {ratingsLabel}
             {unratedTeams.length > 0 && (
               <>
                 {' — '}
                 {unratedTeams.join(' and ')}{' '}
                 {unratedTeams.length === 1 ? 'is' : 'are'} not listed in it, so{' '}
-                {unratedTeams.length === 1 ? 'that team scores' : 'those teams score'} no rank edge
-                and no fraud penalty
+                {unratedTeams.length === 1 ? 'that team takes' : 'those teams take'} no fraud
+                penalty
               </>
             )}
             .
@@ -190,7 +199,6 @@ const TALLY_ROWS = [
   { key: 'winRateBase', label: 'Win-rate base', hint: '5 lanes, capped at 1.00 each' },
   { key: 'metaBonus', label: 'Meta champions', hint: '+1 each' },
   { key: 'pocketBonus', label: 'Pocket picks', hint: '+1.5 each for 1–2 off-meta, more −2' },
-  { key: 'rankBonus', label: 'Rank edge', hint: '+0.5 when ranks differ by 2+' },
   { key: 'formEdge', label: 'Form edge', hint: 'from the current-season record' },
   { key: 'motivationBonus', label: 'Motivation', hint: 'must-win +0.5, coasting −0.5, tanking −1' },
 ] as const;
