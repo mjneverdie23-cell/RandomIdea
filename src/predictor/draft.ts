@@ -32,6 +32,15 @@ export interface PredictorDraft {
   seriesTouched: boolean;
   scoreBlue: number;
   scoreRed: number;
+  /**
+   * Game number stated outright, rather than inferred from the score.
+   *
+   * A pasted backtest match knows it is game 3 of a series but deliberately
+   * carries no score, because in a best-of-three a 1-1 scoreline says who won
+   * the first two games — exactly the result a backtest must not see. `null`
+   * means "derive it from the score", which is what typing in the composer does.
+   */
+  gameNumber: number | null;
   winRequirement: WinRequirement;
 }
 
@@ -50,12 +59,14 @@ export const BLANK_DRAFT: PredictorDraft = {
   seriesTouched: false,
   scoreBlue: 0,
   scoreRed: 0,
+  gameNumber: null,
   winRequirement: 'series',
 };
 
-/** Game number implied by the series score; game 1 at 0-0. */
+/** Stated game number, else the one the series score implies; game 1 at 0-0. */
 export function gameNumberOf(draft: PredictorDraft): number {
-  return draft.scoreBlue + draft.scoreRed + 1;
+  if (draft.scoreBlue + draft.scoreRed > 0) return draft.scoreBlue + draft.scoreRed + 1;
+  return draft.gameNumber ?? 1;
 }
 
 /** Swap the two sides, carrying each team's score with it. */
@@ -90,6 +101,7 @@ export function clampScores(draft: PredictorDraft): PredictorDraft {
 /* ------------------------------------------------------------------ */
 
 const STORAGE_KEY = 'predictor:draft:v1';
+const QUEUE_KEY = 'predictor:queue:v1';
 
 const SERIES_LENGTHS = new Set<string>(['BO1', 'BO3', 'BO5']);
 const MOTIVATION_VALUES = new Set<string>([
@@ -159,6 +171,10 @@ export function reviveDraft(raw: unknown): PredictorDraft {
     seriesTouched: draft.seriesTouched === true,
     scoreBlue: clampScore(draft.scoreBlue),
     scoreRed: clampScore(draft.scoreRed),
+    gameNumber:
+      typeof draft.gameNumber === 'number' && draft.gameNumber >= 1
+        ? Math.floor(draft.gameNumber)
+        : null,
     winRequirement: draft.winRequirement === 'sweep' ? 'sweep' : 'series',
   };
 }
@@ -185,6 +201,53 @@ export function saveDraft(draft: PredictorDraft): void {
 export function clearSavedDraft(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing further to clean up.
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Backtest queue                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A pasted list of matches to step through.
+ *
+ * Only the raw text and the cursor are stored, never the parsed matches: the
+ * text is the thing the user actually owns, it is a fraction of the size, and
+ * re-parsing it on load means a change to the reader can never leave a stale
+ * shape sitting in storage.
+ */
+export interface StoredQueue {
+  text: string;
+  index: number;
+}
+
+export function loadQueue(): StoredQueue | null {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const { text, index } = parsed as Partial<StoredQueue>;
+    if (typeof text !== 'string' || !text.trim()) return null;
+    return { text, index: typeof index === 'number' && index >= 0 ? Math.floor(index) : 0 };
+  } catch {
+    return null;
+  }
+}
+
+export function saveQueue(queue: StoredQueue): void {
+  try {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  } catch {
+    // Persisting is a convenience; the queue still works for this session.
+  }
+}
+
+export function clearSavedQueue(): void {
+  try {
+    localStorage.removeItem(QUEUE_KEY);
   } catch {
     // Nothing further to clean up.
   }

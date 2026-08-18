@@ -11,6 +11,12 @@ interface SearchSelectProps {
   label: string;
   value: string | null;
   options: readonly SearchOption[];
+  /**
+   * Text to show when `value` isn't among `options` — a pasted team or
+   * champion the loaded seasons have never seen. Without it the field would
+   * render empty while the draft quietly holds a value.
+   */
+  valueLabel?: string;
   onChange: (value: string | null) => void;
   placeholder?: string;
   /** Rendered inside the field, before the text — used for champion art. */
@@ -32,6 +38,7 @@ export function SearchSelect({
   label,
   value,
   options,
+  valueLabel,
   onChange,
   placeholder = 'Search…',
   adornment,
@@ -137,8 +144,8 @@ export function SearchSelect({
           aria-autocomplete="list"
           aria-label={label}
           disabled={disabled}
-          value={open ? query : (selected?.label ?? '')}
-          placeholder={selected ? selected.label : placeholder}
+          value={open ? query : (selected?.label ?? valueLabel ?? '')}
+          placeholder={selected?.label ?? valueLabel ?? placeholder}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);

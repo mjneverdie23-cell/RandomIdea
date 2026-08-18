@@ -40,6 +40,16 @@ describe('gameNumberOf', () => {
     expect(gameNumberOf(BLANK_DRAFT)).toBe(1);
     expect(gameNumberOf(draft({ scoreBlue: 1, scoreRed: 1 }))).toBe(3);
   });
+
+  it('uses a stated game number when no score is set', () => {
+    // A pasted backtest game knows it is game 3 but withholds the score,
+    // because the score would name the winner of the earlier games.
+    expect(gameNumberOf(draft({ gameNumber: 3, scoreBlue: 0, scoreRed: 0 }))).toBe(3);
+  });
+
+  it('lets an entered score win over a stated game number', () => {
+    expect(gameNumberOf(draft({ gameNumber: 5, scoreBlue: 1, scoreRed: 0 }))).toBe(2);
+  });
 });
 
 describe('swapDraftSides', () => {

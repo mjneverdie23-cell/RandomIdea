@@ -252,6 +252,65 @@ deliberately:
   current-form reads; averaging five seasons together would wash out exactly
   the signal they exist to provide.
 
+### Backtesting: paste matches instead of clicking them
+
+Composing a matchup by hand takes about a minute — fine for one prediction,
+hopeless for a season. The **Load matches** box on the Predictor takes the same
+information as text and fills the composer from it. Paste one match, or a whole
+list and step through it with Previous/Next or the scrubber. The queue survives
+switching tabs and reloading.
+
+```json
+{
+  "matches": [
+    {
+      "id": "LOLTMNT99_1234",
+      "date": "2026-07-14",
+      "competition": "LCK",
+      "stage": "regular",
+      "series": "BO3",
+      "game": 1,
+      "blue": { "team": "T1",    "top": "Aatrox", "jungle": "Viego",   "mid": "Azir",    "bot": "Jinx",   "support": "Thresh" },
+      "red":  { "team": "Gen.G", "top": "Gnar",   "jungle": "Sejuani", "mid": "Orianna", "bot": "Ezreal", "support": "Nautilus" }
+    }
+  ]
+}
+```
+
+Read leniently, because the point is to paste without thinking about syntax:
+a bare object or a bare array works as well as the `matches` wrapper, keys need
+no quotes, single quotes and trailing commas are fine, `//` and `/* */`
+comments are ignored, `jng`/`jungle`/`jgl` all name the same lane, champions may
+be a list in draft order instead of a per-role map, and competition names go
+through the same alias table as the CSV import (`WLDS` finds Worlds). Anything
+it can't resolve is reported rather than silently dropped.
+
+**No winner field is read, ever** — the point is to fill in what a predictor
+would know before the game.
+
+### Generating a queue
+
+`scripts/export_matches.py` turns an Oracle's Elixir CSV into one paste-ready
+file. Standard library only, no install step.
+
+```bash
+# July through today, all tracked competitions
+python scripts/export_matches.py 2026_LoL_esports_match_data_from_OraclesElixir.csv
+
+# a different window, one league, newest first
+python scripts/export_matches.py data.csv --from 2026-05-01 --to 2026-08-01 \
+    --league LCK --order desc --out lck-backtest.json
+```
+
+It writes no result — no winner, score, kills, gold or game length. A backtest
+that can see the answer is not a backtest, so scoring each prediction against
+what really happened is left to you.
+
+One consequence worth knowing: pasted games start at 0–0 even when they are
+game 3 of a series, because in a best-of-three a 1–1 scoreline names the winner
+of the first two games. The composer still shows the real game number; set the
+score yourself if you want series odds rather than this game's.
+
 ### Early-game gold tempo
 
 Oracle's Elixir records each team's gold difference at the 10, 15, 20 and 25
@@ -397,7 +456,8 @@ mode" branch anywhere downstream.
 ```
 data/              imported seasons, one JSON per year (gitignored)
 public/assets/     champion art + team logos (populated by `npm run assets`)
-scripts/           asset downloader, team list, data-folder dev middleware
+scripts/           asset downloader, team list, data-folder dev middleware,
+                   champion-graph + team-ratings builders, match exporter (py)
 src/
   assets/          local-asset manifest
   domain/          types, competition registry, champion + team identity/art
@@ -406,7 +466,7 @@ src/
   quiz/            seeded RNG, config, matchup grouping, question generation,
                    scoring, session reducer + summary
   predictor/       prediction engine, model derivation, champion matchup graph,
-                   league formats, optional team ratings
+                   league formats, team ratings, composer state, match paste
   meta/            patch meta aggregation
   leaderboard/     repository interface + localStorage implementation
   storage/         IndexedDB key-value store, dataset persistence
@@ -448,7 +508,9 @@ duplicates, exact counts, impossible configs), patch meta aggregation,
 leaderboard ranking/filtering, and the predictor (every point rule and its
 boundaries, series/sweep probability against hand-computed values, win-rate
 scope fallback, behaviour narration thresholds, meta derivation, standings and
-series reconstruction, and ratings parsing with fuzzy team matching).
+series reconstruction, ratings parsing with fuzzy team matching, and the match
+paste reader — lenient JSON repair, role and competition aliases, score/game
+number reconciliation, and that no winner is ever read).
 
 ---
 

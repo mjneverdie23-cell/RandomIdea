@@ -4,6 +4,7 @@ import { useDataset } from '../state/DatasetContext.tsx';
 import { usePredictor } from '../state/PredictorContext.tsx';
 import { DraftComposer } from '../components/predictor/DraftComposer.tsx';
 import { PredictionReport } from '../components/predictor/PredictionReport.tsx';
+import { MatchPaste } from '../components/predictor/MatchPaste.tsx';
 import { predict } from '../predictor/engine.ts';
 import { lookupRating } from '../predictor/ratings.ts';
 import { PREDICTABLE_STAGES, STAGE_LABEL, formatFor } from '../predictor/formats.ts';
@@ -150,6 +151,8 @@ export function PredictorPage() {
         </p>
       )}
 
+      <MatchPaste />
+
       <section className="context-bar" aria-label="Series context">
         <label className="field">
           <span className="field-label">Blue competition</span>
@@ -235,7 +238,9 @@ export function PredictorPage() {
               value={scoreBlue}
               max={target - 1}
               tone="blue"
-              onChange={(value) => setDraft((current) => ({ ...current, scoreBlue: value }))}
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, scoreBlue: value, gameNumber: null }))
+              }
             />
             <span className="score-dash">–</span>
             <ScoreStepper
@@ -243,7 +248,9 @@ export function PredictorPage() {
               value={scoreRed}
               max={target - 1}
               tone="red"
-              onChange={(value) => setDraft((current) => ({ ...current, scoreRed: value }))}
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, scoreRed: value, gameNumber: null }))
+              }
             />
           </div>
         </div>

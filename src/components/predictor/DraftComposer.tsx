@@ -78,6 +78,7 @@ export function DraftComposer({
             label={`${side} team`}
             tone={side}
             value={team}
+            valueLabel={team ?? undefined}
             options={teamChoices}
             onChange={onTeamChange}
             placeholder={competition ? 'Pick a team' : 'Pick a competition first'}
@@ -169,6 +170,7 @@ function PickSlot({ role, side, model, champion, player, takenIds, onChange }: P
           label={`${side} ${role}`}
           tone={side}
           value={champion?.id ?? null}
+          valueLabel={champion?.name}
           options={options}
           onChange={(id) => onChange(id ? (byId.get(id) ?? null) : null)}
           placeholder="Champion"
