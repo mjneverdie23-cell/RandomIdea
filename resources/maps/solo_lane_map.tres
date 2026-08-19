@@ -39,5 +39,6 @@ side_clearing_span = 26.0
 rock_count = 2
 rock_radius = 2.25
 minion_spawn_offset = 9.0
+spawn_side_offset = 5.5
 inner_tower_offset = 17.0
 outer_tower_offset = 20.0

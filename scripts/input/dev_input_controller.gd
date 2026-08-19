@@ -1,7 +1,7 @@
 class_name DevInputController
 extends Node
 
-## Development-only key bindings (F1-F8, F10-F12).
+## Development-only key bindings (F1-F8, F10-F12, Escape).
 ##
 ## Kept in its own node so nothing in the gameplay systems depends on it:
 ## deleting this node removes every cheat and leaves the sandbox intact. The
@@ -9,8 +9,9 @@ extends Node
 ## shipped build may still expose it.
 
 signal dev_command(label: String)
-## Raised when the developer asks for a different game mode.
-signal game_mode_cycle_requested()
+## Raised when the developer asks for the network readout or the menu.
+signal network_debug_requested()
+signal menu_requested()
 
 var director: GameDirector
 var overlay: CombatDebugOverlay
@@ -48,8 +49,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_report("Killed %d enemies" % director.dev_kill_all_enemies())
 	elif event.is_action_pressed("toggle_combat_debug") and overlay != null:
 		_report("Combat debug %s" % ("on" if overlay.toggle() else "off"))
-	elif event.is_action_pressed("cycle_game_mode"):
-		game_mode_cycle_requested.emit()
+	elif event.is_action_pressed("toggle_net_debug"):
+		network_debug_requested.emit()
+	elif event.is_action_pressed("open_multiplayer_menu"):
+		menu_requested.emit()
 	elif event.is_action_pressed("dev_destroy_nexus"):
 		_report("Destroyed the enemy nexus" if director.dev_destroy_enemy_nexus() else "No enemy nexus")
 

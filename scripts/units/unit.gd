@@ -32,8 +32,22 @@ var combat: CombatComponent
 var targeting: TargetingComponent
 var movement: MovementComponent
 var visual: Node3D
+## Champions fill this in; everything else leaves it null.
+var abilities: AbilityComponent
 
 var gameplay_enabled: bool = true
+
+## --- networking --------------------------------------------------------------
+## Stable id used by [NetworkStateSync]. 0 means "not replicated".
+var net_id: int = 0
+## True on the process that decides this unit's behaviour. Offline and host
+## simulate; clients only render what the authority sends.
+var simulated: bool = true
+## Last state received from the authority, interpolated towards on clients.
+var net_position: Vector3 = Vector3.ZERO
+var net_facing: float = 0.0
+## How quickly a puppet catches up with the authority, in units of 1/second.
+const NET_SMOOTHING := 14.0
 
 
 ## Called before the unit enters the tree so components see final values.
@@ -43,6 +57,8 @@ func initialize(unit_team: int, unit_stats: UnitStats) -> void:
 
 
 func _ready() -> void:
+	simulated = Net.is_authority()
+	net_position = global_position
 	collision_layer = CombatLayers.team_layer(team)
 	# Units only collide with terrain; separation between units is handled by
 	# navigation avoidance, which cannot deadlock a lane full of minions.
@@ -76,7 +92,7 @@ func _ready() -> void:
 		movement = MovementComponent.new()
 		movement.name = "Movement"
 		add_child(movement)
-		movement.setup(self, stats, uses_navigation, body_radius())
+		movement.setup(self, stats, uses_navigation and simulated, body_radius())
 
 	visual = Node3D.new()
 	visual.name = "Visual"
@@ -93,6 +109,9 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not simulated:
+		_follow_network_state(delta)
+		return
 	combat.tick(delta)
 	if health.is_alive():
 		health.regenerate(stats.value("health_regen"), delta)
@@ -106,6 +125,39 @@ func _physics_process(delta: float) -> void:
 ## Per-unit behaviour. Subclasses override this instead of _physics_process.
 func _think(_delta: float) -> void:
 	pass
+
+
+# --- network puppetry --------------------------------------------------------
+
+## Facing the authority replicates, so a client sees units turn.
+func facing_angle() -> float:
+	return visual.rotation.y if visual != null else 0.0
+
+
+## Applies one authority snapshot. Health and life are set outright because a
+## client must never disagree with the server about them; position and facing
+## are smoothed towards instead of snapped, so movement stays readable between
+## the twenty snapshots a second.
+func apply_network_state(position: Vector3, facing: float, current_health: float, alive: bool) -> void:
+	net_position = position
+	net_facing = facing
+	if health != null:
+		health.apply_replicated(current_health, alive)
+	if not alive and visual != null:
+		visual.visible = false
+	elif alive and visual != null and not visual.visible:
+		visual.visible = true
+
+
+func _follow_network_state(delta: float) -> void:
+	var weight := clampf(NET_SMOOTHING * delta, 0.0, 1.0)
+	# A large correction means a teleport (respawn, recall, dash), so snap.
+	if global_position.distance_to(net_position) > 6.0:
+		global_position = net_position
+	else:
+		global_position = global_position.lerp(net_position, weight)
+	if visual != null:
+		visual.rotation.y = lerp_angle(visual.rotation.y, net_facing, weight)
 
 
 # --- geometry (the replaceable part) -----------------------------------------

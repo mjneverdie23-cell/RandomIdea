@@ -29,6 +29,10 @@ extends MapConfig
 @export_group("Solo spawns")
 ## Distance from a base centre, towards the lane, where minion waves appear.
 @export_range(1.0, 40.0, 0.5) var minion_spawn_offset: float = 9.0
+## Sideways offset of the champion fountain. The nexus sits on the lane axis,
+## so a spawn directly behind it would leave the player walking into their own
+## base structure; this puts the fountain beside it with a clear run out.
+@export_range(0.0, 20.0, 0.5) var spawn_side_offset: float = 5.5
 
 @export_group("Solo towers")
 ## Distance from a base centre to the inner tower.

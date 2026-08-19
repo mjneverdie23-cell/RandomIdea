@@ -9,15 +9,106 @@ navigation, combat loop and architecture*, not the art.
 
 ## Game modes
 
-| Mode | Map | Launch |
+| Mode | Map | Players |
 |---|---|---|
-| **Full MOBA** | three lanes, jungle, river, two neutral objectives | default |
-| **Solo Lane** | one lane, two towers and one nexus per team | `--mode=solo_lane` |
+| **Full MOBA** | three lanes, jungle, river, two neutral objectives | 1 + AI |
+| **Solo Lane** | one lane, two towers and one nexus per team | **1v1, both human** |
 
-Press **F11** in game to switch modes (the scene reloads), or pass
-`--mode=<id>` on the command line. A mode is a `GameModeConfig` resource
-naming a `MapConfig`, the `MapLayout` subclass that builds it, and a
-`MatchConfig`; adding a third mode means adding a resource, not a code path.
+Pressing Play opens a small menu: pick a mode, then **Play Offline**, **Host
+Match** or **Join Match**. A mode is a `GameModeConfig` resource naming a
+`MapConfig`, the `MapLayout` subclass that builds it, and a `MatchConfig`;
+adding a third mode means adding a resource, not a code path.
+
+```
+GameModeConfig -> MapConfig + layout script -> MapLayout -> MapController
+               \-> MatchConfig -------------------------> GameDirector
+```
+
+Nothing below that line knows which mode is running, or whether the match is
+offline, hosted or joined.
+
+## Multiplayer
+
+Solo Lane is a real 1v1: one human champion per team, no AI opponent. The same
+scene, map, champion, combat, minion and turret code runs offline, on a host
+and on a client — networking is a layer beside gameplay, not inside it.
+
+```
+Input -> InputCommands -> [CommandRelay] -> ChampionController -> Components
+                              (client sends, authority applies)
+```
+
+| Piece | Job |
+|---|---|
+| `NetworkManager` (autoload `Net`) | owns the peer, role, connection state, latency |
+| `NetworkTransport` | how a match reaches the wire; ENet by default |
+| `MatchSession` / `PlayerSession` | who is playing, which team, which phase |
+| `NetworkSpawner` | replicates champions and minions |
+| `NetworkStateSync` | 20 Hz authority snapshots of the units |
+| `CommandRelay` | client intent in, validated authority action out |
+
+### Running a match
+
+```bash
+godot --path .                                   # menu
+godot --path . -- --mode=solo_lane               # offline, straight in
+godot --path . -- --mode=solo_lane --host        # host and wait for an opponent
+godot --path . -- --mode=solo_lane --join=10.0.0.5 --port=8642
+godot --headless --path . -- --mode=solo_lane --dedicated-server
+```
+
+**LAN** — one PC hosts and the menu shows its address; the other types that
+address and port and joins. Nothing else is needed.
+
+**Online / WAN** — ENet is plain UDP, so a host behind NAT is not reachable
+from another network. Rather than pretend otherwise, the same build runs as a
+public **dedicated server**: start it headless with `--dedicated-server` on a
+host with a reachable address (a small VPS is enough), and both players join
+it with `--join=<that address>`. The server seats both teams, simulates
+everything and plays no champion of its own. This topology is covered by
+`NetDedicatedTest.tscn`.
+
+That is the only external infrastructure required, and it is isolated behind
+`NetworkTransport`: a relay or a `WebRTCMultiplayerPeer` plus a signalling
+server can be added as another `NetworkTransport` subclass and a `.tres` file,
+with no change to any gameplay script.
+
+### Authority
+
+The host (or dedicated server) decides everything: spawning, movement,
+damage, health, cooldowns, ability effects, death, respawn, minion and turret
+behaviour, nexus damage and victory. Clients send four kinds of request —
+movement, ability, attack and recall — and receive results.
+
+Every request passes `CommandRelay._authorise()`, which rejects it unless the
+sender is a seated player, the match is running, and that player has a living
+champion. Beyond that the request re-enters the ordinary gameplay path, so the
+existing components do the rest of the checking: `AbilityComponent` still
+tests cooldown and cast validity, `CombatComponent` still tests range, team
+and target, `StatsComponent` still supplies the speed. Aim points are clamped
+to the play field. A client sends a *point*, never a target — the server picks
+the unit itself — so target choice is never client-authored.
+
+On a client every unit has `simulated = false`: it runs no `_think`, no
+`move_and_slide`, no timers, and simply interpolates towards the last snapshot.
+A client cannot disagree with the server about a result because it never
+computes one.
+
+### What is replicated
+
+Position, facing, health and alive flag for every unit at 20 Hz, keyed by a
+network id; champion ability cooldowns in the same snapshot; the roster, match
+phase and result over reliable RPCs; and one-shot ability flashes as events.
+Movement is smoothed between snapshots, and a correction over six metres —
+a respawn, recall or dash — snaps instead.
+
+### Connection handling
+
+`Connecting…`, `Waiting for opponent…`, `Connected`, `Opponent disconnected`,
+`Host disconnected`, `Connection failed` and `Connection timed out` all appear
+in the HUD and the menu. A client that loses its host returns to the menu; a
+host whose opponent leaves ends the match rather than continuing into an
+invalid state. Reconnect-and-resume is deliberately not implemented.
 
 ```
 GameModeConfig -> MapConfig + layout script -> MapLayout -> MapController
@@ -74,8 +165,9 @@ deleting that node removes every cheat and leaves the sandbox intact.
 | `F8` | Kill every enemy |
 | `F9` | Toggle the map debug view |
 | `F10` | Toggle the combat debug overlay |
-| `F11` | Switch game mode |
-| `F12` | Destroy the enemy nexus (instant win) |
+| `F11` | Network debug overlay (role, peer id, latency, roster, snapshots) |
+| `F12` | Destroy the enemy nexus (instant win, host only) |
+| `Esc` | Back to the multiplayer menu |
 
 `F9` goes through the normal command bus (a shipped build may still expose a
 debug view); `F1`–`F8` and `F10` do not.
@@ -83,10 +175,15 @@ debug view); `F1`–`F8` and `F10` do not.
 ### Headless / offscreen check
 
 ```bash
-godot --headless --path . tools/SmokeTest.tscn        # full MOBA
-godot --headless --path . tools/SoloLaneTest.tscn     # solo lane
-godot --path . tools/SmokeTest.tscn -- --out=/tmp/shots   # + screenshots
+godot --headless --path . tools/SmokeTest.tscn         # full MOBA
+godot --headless --path . tools/SoloLaneTest.tscn      # solo lane, offline
+godot --headless --path . tools/NetMatchTest.tscn      # host + client 1v1
+godot --headless --path . tools/NetDedicatedTest.tscn  # dedicated server + 2 clients
+godot --path . tools/SmokeTest.tscn -- --out=/tmp/shots    # + screenshots
 ```
+
+The two networking tests launch real extra Godot processes and play a scripted
+match over a live ENet connection, so one command covers both sides.
 
 The smoke test boots the real game scene and asserts that:
 
@@ -114,7 +211,22 @@ is approachable; waves spawn from both minion spawns and march; the enemy
 champion's AI brain drives it down the lane; a minion damages the enemy nexus;
 and destroying that nexus produces `VICTORY`.
 
-Both exit non-zero on failure.
+`NetMatchTest.tscn` hosts a Solo Lane match, launches a client process and
+checks: the host waits for its opponent instead of starting alone; teams are
+assigned one per peer with the host on A; each champion is owned by its own
+peer and has its own command bus; a command from an unseated peer is rejected;
+the client's movement command reaches the host and moves its champion there;
+damage, death and respawn replicate; minions, all four turrets and both
+nexuses replicate; the client simulates nothing; the result arrives as
+`VICTORY` on the host and `DEFEAT` on the client; and the disconnect unseats
+the player.
+
+`NetDedicatedTest.tscn` runs the same build as a dedicated server with no local
+player and two client processes, checking that the server seats one team each,
+spawns and simulates both champions and the minions, refuses the local-player
+cheats it has no business running, and ends the match for both clients.
+
+All exit non-zero on failure.
 
 ---
 
@@ -349,7 +461,13 @@ UI, audio or networking type.
 `InputCommands` bus (`move_direction`, `aim_point`, ability/attack/recall
 signals). `Champion` and `GameplayCamera` only ever read the bus, so a mobile
 joystick and on-screen buttons can replace the PC controller without touching
-gameplay. The smoke test relies on exactly this: it drives the bus directly.
+gameplay. The tests rely on exactly this: they drive the bus directly.
+
+Networking slots into the same seam. On a client, `CommandRelay` forwards the
+local bus to the authority instead of letting it drive anything; on the
+authority, each player has their own bus that the relay fills from validated
+requests. The champion cannot tell which one it is listening to, which is why
+there is no networked champion class.
 
 ### Camera
 
@@ -384,8 +502,10 @@ raises `match_ended`. The HUD shows a `VICTORY`/`DEFEAT` banner with the match
 time and the restart hint. `Enter` reloads the mode, `F11` reloads into the
 other one.
 
-AI champions run `ChampionAi`, a small state machine that only reads and writes
-the champion's existing components:
+`ChampionAi` is still available and still drives the Full MOBA's enemy
+champions, but **Solo Lane never uses it** — that mode is 1v1 between humans.
+It is a small state machine that only reads and writes the champion's existing
+components:
 
 ```
 PUSH_LANE -> ATTACK_MINIONS -> ATTACK_CHAMPION -> RETREAT -> DEFEND -> DEAD
@@ -402,8 +522,14 @@ command bus or under this brain with no branching inside the champion.
 Objective and jungle-camp *behaviour* (the spaces, spawn points and identifiers
 are there, the fights are not); inhibitor rules, waves scaling over time, gold,
 levels and items; the full Wild Rift turret rule set (fortification, aggro
-switching on champion attacks); a front end beyond the mode switch key; and
-audio, animation, VFX and networking.
+switching on champion attacks); a front end beyond the launch menu; and audio,
+animation and VFX.
+
+On the networking side: no reconnect-and-resume, no client-side prediction or
+rollback (a client shows the authority's state a snapshot behind), no lobby
+browser or matchmaking service, no NAT traversal of its own — WAN play goes
+through the dedicated server described above — and no encryption or
+authentication on the wire.
 
 Camp monsters and objective placeholder meshes still have no colliders, because
 nothing in this milestone needs them to.

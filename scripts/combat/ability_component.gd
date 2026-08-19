@@ -86,6 +86,20 @@ func try_cast(slot: int, aim_point: Vector3) -> bool:
 	return true
 
 
+## Adopts the authority's cooldowns. A client never runs the timers itself, so
+## its ability bar always agrees with what the server will actually allow.
+func apply_replicated_cooldowns(values: PackedFloat32Array) -> void:
+	for slot in mini(values.size(), _cooldowns.size()):
+		if is_equal_approx(_cooldowns[slot], values[slot]):
+			continue
+		_cooldowns[slot] = values[slot]
+		cooldown_changed.emit(slot, _cooldowns[slot], total_cooldown(slot))
+
+
+func snapshot_cooldowns() -> PackedFloat32Array:
+	return _cooldowns.duplicate()
+
+
 func reset_cooldowns() -> void:
 	for slot in _cooldowns.size():
 		_cooldowns[slot] = 0.0

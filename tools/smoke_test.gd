@@ -27,6 +27,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	# Skip the multiplayer menu and boot straight into an offline match.
+	GameRoot._pending_mode_id = "full_moba"
 	var scene: PackedScene = load(MAIN_SCENE)
 	_root = scene.instantiate()
 	add_child(_root)

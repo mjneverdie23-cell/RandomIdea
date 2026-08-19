@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="NetworkTransport" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/net/network_transport.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+display_name = "ENet"
+address = "127.0.0.1"
+port = 8642
+max_clients = 4
+connect_timeout = 10.0
+infrastructure_notes = "Direct ENet/UDP. LAN needs nothing. Over the internet the host must be reachable: either a public address with UDP 8642 forwarded, or run this project headless on a public host with --dedicated-server and have both players use --join=<that host>. Swap this resource for another NetworkTransport subclass (relay, WebRTC + signalling) without touching gameplay."

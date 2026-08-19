@@ -67,6 +67,7 @@ func _build_solo_lane() -> void:
 func _build_solo_bases() -> void:
 	var solo := solo_config()
 	var minion_offset: float = solo.minion_spawn_offset if solo != null else 9.0
+	var side_offset: float = solo.spawn_side_offset if solo != null else 5.5
 
 	for team in [MapEnums.Team.A, MapEnums.Team.B]:
 		var suffix := MapEnums.team_name(team)
@@ -95,7 +96,7 @@ func _build_solo_bases() -> void:
 			"id": "SOLO_SPAWN_%s" % suffix,
 			"team": team,
 			"role": SpawnPointManager.ROLE_CHAMPION,
-			"position": center + outward * config.spawn_offset,
+			"position": center + outward * config.spawn_offset + Vector2(side_offset, 0.0),
 			"facing": inward,
 			"radius": config.base_radius * 0.3,
 		})

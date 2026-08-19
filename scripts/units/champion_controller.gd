@@ -16,10 +16,11 @@ signal respawn_finished()
 signal target_selected(target: Node3D)
 
 @export var loadout: ChampionLoadout
+## Peer that owns this champion in a networked match; 0 means nobody.
+var owner_peer_id: int = 0
 ## When true the champion picks its own targets and walks itself.
 @export var ai_enabled: bool = false
 
-var abilities: AbilityComponent
 ## Set for AI champions; player champions leave it null and read the bus.
 var ai: ChampionAi
 var commands: InputCommands
@@ -141,6 +142,11 @@ func attach_ai(brain: ChampionAi) -> void:
 	ai_enabled = true
 	targeting.auto_acquire = false  # the brain decides what to shoot
 	add_child(brain)
+
+
+## True when this machine's input device drives this champion.
+func is_locally_owned() -> bool:
+	return owner_peer_id == 0 or owner_peer_id == Net.local_peer_id()
 
 
 func ai_state_name() -> String:
@@ -268,7 +274,8 @@ func respawn_total() -> float:
 
 
 func _process(delta: float) -> void:
-	if is_alive() or _respawn_left <= 0.0:
+	# Respawn is an authority decision; a client just sees the champion return.
+	if not simulated or is_alive() or _respawn_left <= 0.0:
 		return
 	_respawn_left -= delta
 	if _respawn_left <= 0.0:

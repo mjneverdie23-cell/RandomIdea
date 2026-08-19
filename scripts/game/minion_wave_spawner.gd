@@ -13,6 +13,8 @@ signal wave_spawned(index: int, team: int, lane: int, count: int)
 var map: MapController
 ## Where spawned minions are parented.
 var container: Node3D
+## Replicates each minion to the clients. Offline this just adds a child.
+var spawner: NetworkSpawner
 var running: bool = false
 var wave_index: int = 0
 
@@ -20,12 +22,16 @@ var _timer: float = 0.0
 var _spawn_counter: int = 0
 
 
-func setup(map_controller: MapController, unit_container: Node3D) -> void:
+func setup(map_controller: MapController, unit_container: Node3D,
+		unit_spawner: NetworkSpawner = null) -> void:
 	map = map_controller
 	container = unit_container
+	spawner = unit_spawner
 
 
 func start() -> void:
+	if not Net.is_authority():
+		return  # minions are simulated by the authority alone
 	if config == null:
 		push_warning("MinionWaveSpawner has no WaveConfig; not starting.")
 		return
@@ -53,7 +59,7 @@ func _process(delta: float) -> void:
 
 ## Spawns one wave per configured lane. [param team] of -1 spawns for both.
 func spawn_wave(team: int = -1) -> int:
-	if config == null or map == null or container == null:
+	if config == null or map == null or container == null or not Net.is_authority():
 		return 0
 	wave_index += 1
 	var spawned := 0
@@ -98,14 +104,19 @@ func _spawn_lane_wave(team: int, lane: int) -> int:
 
 func _spawn_minion(team: int, lane: int, stats_resource: MinionStats, at: Vector3,
 		route: PackedVector3Array) -> MinionController:
-	var minion := MinionController.new()
-	minion.initialize(team, stats_resource)
 	_spawn_counter += 1
-	minion.name = "Minion_%s_%s_w%d_%d" % [
-		MapEnums.team_name(team), MapEnums.lane_name(lane), wave_index, _spawn_counter
-	]
-	container.add_child(minion)
-	minion.global_position = at + Vector3.UP * 0.2
+	# The route stays on the authority: a client never navigates a minion, so
+	# there is no reason to put a dozen waypoints on the wire.
+	var minion: MinionController = spawner.spawn_unit({
+		"kind": NetworkSpawner.KIND_MINION,
+		"team": team,
+		"stats": stats_resource.resource_path,
+		"lane": lane,
+		"spawn": at + Vector3.UP * 0.2,
+	})
+	if minion == null:
+		return null
+	# The spawner already parented it; only the route is left to hand over.
 	minion.set_lane_route(lane, route)
 	return minion
 

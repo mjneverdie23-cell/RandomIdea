@@ -182,7 +182,8 @@ func _handle_death(_source: Node) -> void:
 
 
 func _process(delta: float) -> void:
-	if is_alive() or _corpse_timer <= 0.0:
+	# Replicated corpses are freed by the authority through the spawner.
+	if not simulated or is_alive() or _corpse_timer <= 0.0:
 		return
 	_corpse_timer -= delta
 	if _corpse_timer <= 0.0:

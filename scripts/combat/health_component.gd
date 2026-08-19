@@ -85,6 +85,22 @@ func regenerate(rate: float, delta: float) -> void:
 		heal(rate * delta)
 
 
+## Overwrites health from a network snapshot. The authority is the only place
+## damage is ever calculated, so a client just adopts the number and fires the
+## same signals the local systems already listen to.
+func apply_replicated(new_current: float, alive: bool) -> void:
+	var changed := not is_equal_approx(new_current, current) or alive != _alive
+	current = clampf(new_current, 0.0, maximum)
+	if alive and not _alive:
+		_alive = true
+		revived.emit()
+	elif not alive and _alive:
+		_alive = false
+		died.emit(null)
+	if changed:
+		health_changed.emit(current, maximum)
+
+
 func is_alive() -> bool:
 	return _alive
 

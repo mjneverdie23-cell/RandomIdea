@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/game_root.gd" id="1_root"]
 [ext_resource type="Script" path="res://scripts/map/map_controller.gd" id="2_map"]
@@ -12,6 +12,13 @@
 [ext_resource type="Script" path="res://scripts/game/combat_debug_overlay.gd" id="10_combatdbg"]
 [ext_resource type="Resource" path="res://resources/modes/full_moba.tres" id="12_full"]
 [ext_resource type="Resource" path="res://resources/modes/solo_lane.tres" id="13_solo"]
+[ext_resource type="Script" path="res://scripts/net/match_session.gd" id="14_session"]
+[ext_resource type="Script" path="res://scripts/net/network_spawner.gd" id="15_spawner"]
+[ext_resource type="Script" path="res://scripts/net/network_state_sync.gd" id="16_sync"]
+[ext_resource type="Script" path="res://scripts/net/command_relay.gd" id="17_relay"]
+[ext_resource type="Script" path="res://scripts/game/network_debug_overlay.gd" id="18_netdbg"]
+[ext_resource type="Script" path="res://scripts/ui/multiplayer_menu.gd" id="19_menu"]
+[ext_resource type="Resource" path="res://resources/net/enet_transport.tres" id="20_transport"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.145098, 0.203922, 0.290196, 1)
@@ -36,6 +43,7 @@ tonemap_white = 1.4
 [node name="Main" type="Node3D"]
 script = ExtResource("1_root")
 modes = [ExtResource("12_full"), ExtResource("13_solo")]
+transport = ExtResource("20_transport")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Env")
@@ -78,3 +86,22 @@ script = ExtResource("10_combatdbg")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")
+
+[node name="MatchSession" type="Node" parent="."]
+script = ExtResource("14_session")
+
+[node name="NetworkSpawner" type="MultiplayerSpawner" parent="."]
+spawn_path = NodePath("../Units")
+script = ExtResource("15_spawner")
+
+[node name="NetworkStateSync" type="Node" parent="."]
+script = ExtResource("16_sync")
+
+[node name="CommandRelay" type="Node" parent="."]
+script = ExtResource("17_relay")
+
+[node name="NetworkDebug" type="CanvasLayer" parent="."]
+script = ExtResource("18_netdbg")
+
+[node name="Menu" type="CanvasLayer" parent="."]
+script = ExtResource("19_menu")

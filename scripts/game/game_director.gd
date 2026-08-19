@@ -6,6 +6,11 @@ extends Node3D
 ## It is the only place that knows about both the map and the combat systems.
 ## The map stays free of gameplay code — turret behaviour is attached to the
 ## map's existing turret nodes here, using their stable identifiers.
+##
+## The same director runs offline, on a host and on a client. Only the
+## authority spawns units, runs waves and decides results; a client builds the
+## same structures locally so their node paths line up, then renders whatever
+## [NetworkStateSync] sends. There is no separate networked gameplay path.
 
 signal player_spawned(champion: ChampionController)
 signal enemy_champion_spawned(champion: ChampionController)
@@ -19,8 +24,17 @@ var map: MapController
 var commands: InputCommands
 ## Parent for every spawned unit, projectile and effect.
 var container: Node3D
+## Who is playing. Offline this holds a single local player.
+var session: MatchSession
+## Replicates dynamic units. Falls back to a plain add_child when offline.
+var spawner: NetworkSpawner
+
+## Net ids for units both peers build locally are drawn from this range, so
+## they can never collide with the spawner's incrementing ids.
+const STRUCTURE_NET_ID_BASE := 1000000
 
 var player: ChampionController
+var match_started: bool = false
 var waves: MinionWaveSpawner
 var turrets: Array[TurretController] = []
 var nexuses: Array[NexusController] = []
@@ -30,13 +44,18 @@ var match_state := MatchState.new()
 var _target_indicator: TargetIndicator
 
 
-func setup(map_controller: MapController, command_bus: InputCommands, unit_container: Node3D) -> void:
+func setup(map_controller: MapController, command_bus: InputCommands, unit_container: Node3D,
+		match_session: MatchSession = null, unit_spawner: NetworkSpawner = null) -> void:
 	map = map_controller
 	commands = command_bus
 	container = unit_container
+	session = match_session
+	spawner = unit_spawner
 
 
-## Builds the whole sandbox. Safe to call once the map has been built.
+## Builds everything both peers need: the structures the map placed and the
+## wave spawner. Champions wait for [method begin_match], because a networked
+## match cannot start until its players are seated.
 func start() -> void:
 	if config == null:
 		config = MatchConfig.new()
@@ -51,21 +70,69 @@ func start() -> void:
 	if config.spawn_nexus_controllers:
 		_create_nexus_controllers()
 
-	player = spawn_player_champion()
-	for i in config.starting_enemy_champions:
-		spawn_enemy_champion()
-
 	waves = MinionWaveSpawner.new()
 	waves.name = "MinionWaves"
 	waves.config = config.wave
 	add_child(waves)
-	waves.setup(map, container)
+	waves.setup(map, container, spawner)
+
+
+## Seats the players, spawns their champions and starts the waves. Authority
+## only; clients receive the champions through the spawner.
+func begin_match() -> void:
+	if not Net.is_authority() or match_started:
+		return
+	match_started = true
+	if session != null:
+		for player_session in session.sessions():
+			_spawn_session_champion(player_session)
+	for i in config.starting_enemy_champions:
+		spawn_enemy_champion()
 	if config.wave != null and config.wave.auto_start:
 		waves.start()
 
 
+## Champion for one seated player, owned by that player's peer.
+func _spawn_session_champion(player_session: PlayerSession) -> ChampionController:
+	var loadout: ChampionLoadout = config.player_loadout
+	var spawn := map.spawn_transform(player_session.team)
+	var champion: ChampionController = spawner.spawn_unit({
+		"kind": NetworkSpawner.KIND_CHAMPION,
+		"team": player_session.team,
+		"loadout": loadout.resource_path if loadout != null else "",
+		"spawn": spawn.origin,
+		"owner_peer": player_session.peer_id,
+	})
+	if champion == null:
+		return null
+	champion.spawn_point = spawn.origin
+	player_session.set_champion(champion)
+	# Remote players get their own server-side bus, filled by CommandRelay.
+	if player_session.commands == null:
+		var bus := commands if player_session.is_local else InputCommands.new()
+		if bus != commands:
+			bus.name = "Commands"
+		player_session.attach_commands(bus)
+	champion.bind_commands(player_session.commands)
+	if player_session.is_local:
+		player = champion
+		champion.targeting.target_changed.connect(_on_player_target_changed)
+	player_spawned.emit(champion)
+	return champion
+
+
 func enemy_team() -> int:
 	return MapEnums.other_team(player_team)
+
+
+## The champion this machine's input drives, if any. A dedicated server has
+## none, and a client finds its own once the spawner has delivered it.
+func adopt_local_champion() -> ChampionController:
+	for unit in Battle.all():
+		if unit.kind == Unit.Kind.CHAMPION and unit.is_locally_owned() and unit.owner_peer_id != 0:
+			player = unit
+			return player
+	return player
 
 
 func _process(delta: float) -> void:
@@ -75,37 +142,24 @@ func _process(delta: float) -> void:
 
 # --- champions ---------------------------------------------------------------
 
-func spawn_player_champion() -> ChampionController:
-	var champion := ChampionController.new()
-	champion.name = "PlayerChampion"
-	champion.loadout = config.player_loadout
-	champion.initialize(player_team, config.player_loadout.stats if config.player_loadout != null else null)
-	container.add_child(champion)
-
-	var spawn := map.spawn_transform(player_team)
-	champion.spawn_point = spawn.origin
-	champion.teleport_to(spawn.origin)
-	if commands != null:
-		champion.bind_commands(commands)
-	champion.targeting.target_changed.connect(_on_player_target_changed)
-	player_spawned.emit(champion)
-	return champion
-
-
 ## AI champion for the opposing team, spawned at its own fountain.
 func spawn_enemy_champion() -> ChampionController:
 	var team := enemy_team()
 	var loadout: ChampionLoadout = config.enemy_loadout if config.enemy_loadout != null else config.player_loadout
-	var champion := ChampionController.new()
-	champion.name = "EnemyChampion%d" % (enemy_champions.size() + 1)
-	champion.loadout = loadout
-	champion.ai_enabled = true
-	champion.initialize(team, loadout.stats if loadout != null else null)
-	container.add_child(champion)
-
+	if not Net.is_authority():
+		return null
 	var spawn := map.spawn_transform(team, 3.0, enemy_champions.size())
+	var champion: ChampionController = spawner.spawn_unit({
+		"kind": NetworkSpawner.KIND_CHAMPION,
+		"team": team,
+		"loadout": loadout.resource_path if loadout != null else "",
+		"spawn": spawn.origin,
+		"owner_peer": 0,
+	})
+	if champion == null:
+		return null
+	champion.ai_enabled = true
 	champion.spawn_point = spawn.origin
-	champion.teleport_to(spawn.origin)
 	var push_lane: int = int(map.layout.lanes[0]["lane"]) if not map.layout.lanes.is_empty() else MapEnums.Lane.MID
 	var push := map.layout.lane_point(push_lane, config.ai_push_target)
 	champion.ai_destination = Vector3(push.x, 0.0, push.y)
@@ -150,6 +204,7 @@ func _create_turret_controllers() -> void:
 		var controller := TurretController.new()
 		controller.initialize(int(turret_data["team"]), _turret_stats_for(turret_data))
 		controller.bind_structure(structure, turret_data)
+		controller.net_id = STRUCTURE_NET_ID_BASE + turrets.size()
 		container.add_child(controller)
 		controller.global_position = structure.global_position
 		turrets.append(controller)
@@ -188,6 +243,7 @@ func _create_nexus_controllers() -> void:
 		var controller := NexusController.new()
 		controller.initialize(int(nexus_data["team"]), _nexus_stats())
 		controller.bind_structure(structure, nexus_data)
+		controller.net_id = STRUCTURE_NET_ID_BASE + 500 + nexuses.size()
 		container.add_child(controller)
 		controller.global_position = structure.global_position
 		controller.destroyed.connect(_on_nexus_destroyed)
@@ -210,10 +266,32 @@ func nexus_for(map_id: String) -> NexusController:
 
 
 func _on_nexus_destroyed(nexus: NexusController) -> void:
-	if not config.nexus_destruction_ends_match or not match_state.is_running():
+	if not Net.is_authority() or not config.nexus_destruction_ends_match:
 		return
-	match_state.finish(MapEnums.other_team(nexus.team), player_team)
+	if not match_state.is_running():
+		return
+	var winner := MapEnums.other_team(nexus.team)
+	if session != null:
+		# Everyone hears the result from the authority; each peer then scores it
+		# from its own team's point of view.
+		session.finish(MatchState.Outcome.VICTORY, winner)
+	report_match_result(winner)
+
+
+## Applies a result that the authority decided. Called locally on the host and
+## through the session RPC on clients.
+func report_match_result(winner_team: int) -> void:
+	if not match_state.is_running():
+		return
+	match_state.finish(winner_team, local_team())
 	_end_match()
+
+
+## The team this machine plays. Networked matches read it from the session.
+func local_team() -> int:
+	if session != null and Net.is_networked():
+		return session.local_team()
+	return player_team
 
 
 ## Stops the sandbox so the result is stable while the banner is up.
@@ -281,8 +359,11 @@ func dev_teleport_to_enemy_base() -> void:
 
 ## Developer shortcut for the win condition.
 func dev_destroy_enemy_nexus() -> bool:
+	# Cheats act on behalf of the local player, and a dedicated server has none.
+	if not Net.is_authority() or not Net.has_local_player():
+		return false
 	for nexus in nexuses:
-		if nexus.team != player_team and nexus.is_alive():
+		if nexus.team != local_team() and nexus.is_alive():
 			nexus.health.kill(player)
 			return true
 	return false
@@ -294,7 +375,7 @@ func dev_refill_health() -> void:
 
 
 func dev_kill_selected_target() -> bool:
-	if player == null:
+	if player == null or not Net.is_authority():
 		return false
 	var target := player.targeting.current_target
 	if target == null or not is_instance_valid(target) or not target.is_alive():
@@ -304,8 +385,10 @@ func dev_kill_selected_target() -> bool:
 
 
 func dev_kill_all_enemies() -> int:
+	if not Net.is_authority() or not Net.has_local_player():
+		return 0
 	var killed := 0
-	for unit in Battle.enemies_of(player_team):
+	for unit in Battle.enemies_of(local_team()):
 		unit.health.kill(player)
 		killed += 1
 	return killed
@@ -322,5 +405,7 @@ func describe() -> Dictionary:
 		"units": Battle.all().size(),
 		"nexuses": nexuses.size(),
 		"outcome": match_state.outcome_name(),
+		"role": NetTypes.role_name(Net.role),
+		"phase": session.phase_name() if session != null else "-",
 		"next_wave": waves.time_to_next_wave() if waves != null else -1.0,
 	}

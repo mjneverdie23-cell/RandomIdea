@@ -13,6 +13,7 @@ const COLOR_WARN := "#ffd36b"
 const COLOR_BAD := "#ff8a7a"
 
 var _root: GameRoot
+var _attached: ChampionController
 var _map: MapController
 var _director: GameDirector
 var _camera: GameplayCamera
@@ -25,6 +26,8 @@ var _controls_label: RichTextLabel
 var _toast_label: Label
 var _result_label: RichTextLabel
 var _toast_timer: float = 0.0
+var _network_label: Label
+var _network_status: String = ""
 
 
 func bind(root: GameRoot) -> void:
@@ -47,25 +50,26 @@ func bind(root: GameRoot) -> void:
 
 	_build_ui()
 	_connect_signals(root.dev_input)
+	if _champion != null:
+		attach_champion(_champion)
+
+
+## Wires the toast feed to whichever champion this machine drives.
+func attach_champion(champion: ChampionController) -> void:
+	if champion == null or champion == _attached:
+		return
+	_champion = champion
+	_attached = champion
+	_connect_champion(champion)
+
+
+func set_network_status(text: String) -> void:
+	_network_status = text
+	if _network_label != null:
+		_network_label.text = text
 
 
 func _connect_signals(dev_input: DevInputController) -> void:
-	var champion := _champion
-	champion.abilities.ability_cast.connect(func(_slot: int, ability: AbilityData) -> void:
-		_toast("Cast %s" % ability.display_name))
-	champion.abilities.ability_failed.connect(func(slot: int, reason: String) -> void:
-		_toast("%s: %s" % [InputCommands.ability_name(slot), reason]))
-	champion.recall_started.connect(func(duration: float) -> void: _toast("Recalling (%.1fs)" % duration))
-	champion.recall_finished.connect(func() -> void: _toast("Recalled to fountain"))
-	champion.recall_interrupted.connect(func() -> void: _toast("Recall interrupted"))
-	champion.respawn_started.connect(func(duration: float) -> void: _toast("Killed - respawn in %.0fs" % duration))
-	champion.respawn_finished.connect(func() -> void: _toast("Respawned"))
-	champion.target_selected.connect(func(target: Node3D) -> void:
-		_toast("Target: %s" % target.display_label()))
-	champion.health.damaged.connect(func(amount: float, _source: Node) -> void:
-		if amount >= 1.0:
-			_toast("-%d HP" % int(amount)))
-
 	_map.debug_renderer.debug_visibility_changed.connect(func(on: bool) -> void:
 		_toast("Map debug %s" % ("on" if on else "off")))
 	_camera.lock_changed.connect(func(locked: bool) -> void:
@@ -80,6 +84,23 @@ func _connect_signals(dev_input: DevInputController) -> void:
 	for nexus in _director.nexuses:
 		nexus.health.damaged.connect(func(_amount: float, _source: Node) -> void:
 			_toast("%s under attack" % nexus.display_label()))
+
+
+func _connect_champion(champion: ChampionController) -> void:
+	champion.abilities.ability_cast.connect(func(_slot: int, ability: AbilityData) -> void:
+		_toast("Cast %s" % ability.display_name))
+	champion.abilities.ability_failed.connect(func(slot: int, reason: String) -> void:
+		_toast("%s: %s" % [InputCommands.ability_name(slot), reason]))
+	champion.recall_started.connect(func(duration: float) -> void: _toast("Recalling (%.1fs)" % duration))
+	champion.recall_finished.connect(func() -> void: _toast("Recalled to fountain"))
+	champion.recall_interrupted.connect(func() -> void: _toast("Recall interrupted"))
+	champion.respawn_started.connect(func(duration: float) -> void: _toast("Killed - respawn in %.0fs" % duration))
+	champion.respawn_finished.connect(func() -> void: _toast("Respawned"))
+	champion.target_selected.connect(func(target: Node3D) -> void:
+		_toast("Target: %s" % target.display_label()))
+	champion.health.damaged.connect(func(amount: float, _source: Node) -> void:
+		if amount >= 1.0:
+			_toast("-%d HP" % int(amount)))
 
 
 func _build_ui() -> void:
@@ -106,6 +127,14 @@ func _build_ui() -> void:
 	_result_label.offset_top = -70
 	_result_label.visible = false
 	add_child(_result_label)
+
+	_network_label = Label.new()
+	_network_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_network_label.offset_left = 16
+	_network_label.offset_top = 330
+	_network_label.modulate = Color(1.0, 0.83, 0.42)
+	_network_label.text = _network_status
+	add_child(_network_label)
 
 	_toast_label = Label.new()
 	_toast_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -143,13 +172,17 @@ func _controls_text() -> String:
 		"[color=#b9c2ce]F5[/color] to B base       [color=#b9c2ce]F6[/color] refill HP",
 		"[color=#b9c2ce]F7[/color] kill target     [color=#b9c2ce]F8[/color] kill enemies",
 		"[color=#b9c2ce]F9[/color] map debug       [color=#b9c2ce]F10[/color] combat debug",
-		"[color=#b9c2ce]F11[/color] switch mode    [color=#b9c2ce]F12[/color] destroy nexus",
-		"[color=#b9c2ce]Enter[/color] restart match",
+		"[color=#b9c2ce]F11[/color] network info   [color=#b9c2ce]F12[/color] destroy nexus",
+		"[color=#b9c2ce]Enter[/color] restart match  [color=#b9c2ce]Esc[/color] menu",
 	])
 
 
 func _process(delta: float) -> void:
-	if _champion == null or _map == null or not _map.is_built():
+	if _map == null or not _map.is_built():
+		return
+	if _root != null and _root.champion != null and _root.champion != _attached:
+		attach_champion(_root.champion)
+	if _champion == null or not is_instance_valid(_champion):
 		return
 	_update_visited()
 	_status_label.text = _status_text()
