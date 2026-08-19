@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ChampionLoadout" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/champion_loadout.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/units/champion_stats.tres" id="2_stats"]
+[ext_resource type="Script" path="res://scripts/combat/ability_data.gd" id="7_ability"]
+[ext_resource type="Resource" path="res://resources/abilities/q_bolt.tres" id="3_q"]
+[ext_resource type="Resource" path="res://resources/abilities/e_dash.tres" id="4_e"]
+[ext_resource type="Resource" path="res://resources/abilities/r_nova.tres" id="5_r"]
+[ext_resource type="Resource" path="res://resources/abilities/f_bulwark.tres" id="6_f"]
+
+[resource]
+script = ExtResource("1_script")
+display_name = "Prototype Champion"
+stats = ExtResource("2_stats")
+abilities = Array[ExtResource("7_ability")]([ExtResource("3_q"), ExtResource("4_e"), ExtResource("5_r"), ExtResource("6_f")])
+respawn_time = 8.0
+respawn_health_ratio = 1.0
+selection_radius = 3.5
+chase_selected_target = true
+max_chase_distance = 26.0
+recall_duration = 1.6
+ai_aggro_range = 16.0

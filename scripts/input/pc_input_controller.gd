@@ -8,22 +8,21 @@ extends Node
 ##
 ## WASD          movement (camera relative)
 ## Mouse         aim / camera interaction
-## Left click    basic attack
-## Q W E R       placeholder abilities
+## Left click    select an enemy and basic attack
+## Q E R F       placeholder abilities
 ## B             recall
 ## Space         toggle camera lock
 ## Mouse wheel   zoom
-## F1            toggle debug view
+## F9            toggle the map debug view
 ##
-## Note: W is deliberately bound to both "move forward" and "ability W" because
-## the design brief asks for WASD movement and Q/W/E/R abilities on the same
-## keyboard. F is provided as a movement-free alias for ability W.
+## Abilities deliberately avoid W, A, S and D so no key ever means both "move"
+## and "cast". Development-only keys live in [DevInputController].
 
 const ABILITY_ACTIONS := {
 	InputCommands.AbilitySlot.Q: "ability_q",
-	InputCommands.AbilitySlot.W: "ability_w",
 	InputCommands.AbilitySlot.E: "ability_e",
 	InputCommands.AbilitySlot.R: "ability_r",
+	InputCommands.AbilitySlot.F: "ability_f",
 }
 
 ## Movement is expressed relative to this camera's yaw so "W" always means

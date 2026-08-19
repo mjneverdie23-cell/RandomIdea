@@ -1,19 +1,21 @@
 class_name PrototypeHud
 extends CanvasLayer
 
-## Development HUD: controls reference, live champion state and an acceptance
-## checklist that ticks off every gameplay space as the player walks into it.
+## Development HUD: control reference on the left, live champion and sandbox
+## state on the right.
 ##
-## Purely observational — it reads from the map, champion and camera and never
-## drives them, so removing it cannot change gameplay.
+## Purely observational. It reads from the map, the director and the camera and
+## never drives them, so deleting it cannot change gameplay.
 
-const CHECK_COLOR_DONE := "#7fe08a"
-const CHECK_COLOR_TODO := "#8d97a5"
+const COLOR_OK := "#7fe08a"
+const COLOR_IDLE := "#8d97a5"
+const COLOR_WARN := "#ffd36b"
+const COLOR_BAD := "#ff8a7a"
 
 var _map: MapController
-var _champion: Champion
+var _director: GameDirector
 var _camera: GameplayCamera
-var _commands: InputCommands
+var _champion: ChampionController
 
 var _tracked: PackedStringArray = PackedStringArray()
 var _visited: Dictionary = {}
@@ -23,11 +25,12 @@ var _toast_label: Label
 var _toast_timer: float = 0.0
 
 
-func bind(map: MapController, champion: Champion, camera: GameplayCamera, commands: InputCommands) -> void:
+func bind(map: MapController, director: GameDirector, camera: GameplayCamera,
+		dev_input: DevInputController) -> void:
 	_map = map
-	_champion = champion
+	_director = director
 	_camera = camera
-	_commands = commands
+	_champion = director.player
 
 	_tracked = PackedStringArray(["TOP_LANE", "MID_LANE", "BOT_LANE", "RIVER"])
 	for jungle in map.layout.jungles:
@@ -37,62 +40,87 @@ func bind(map: MapController, champion: Champion, camera: GameplayCamera, comman
 		_visited[id] = false
 
 	_build_ui()
-	champion.ability_cast.connect(func(slot: int) -> void: _toast("Ability %s" % InputCommands.ability_name(slot)))
-	champion.ability_blocked.connect(func(slot: int, left: float) -> void:
-		_toast("Ability %s on cooldown (%.1fs)" % [InputCommands.ability_name(slot), left]))
+	_connect_signals(dev_input)
+
+
+func _connect_signals(dev_input: DevInputController) -> void:
+	var champion := _champion
+	champion.abilities.ability_cast.connect(func(_slot: int, ability: AbilityData) -> void:
+		_toast("Cast %s" % ability.display_name))
+	champion.abilities.ability_failed.connect(func(slot: int, reason: String) -> void:
+		_toast("%s: %s" % [InputCommands.ability_name(slot), reason]))
 	champion.recall_started.connect(func(duration: float) -> void: _toast("Recalling (%.1fs)" % duration))
 	champion.recall_finished.connect(func() -> void: _toast("Recalled to fountain"))
 	champion.recall_interrupted.connect(func() -> void: _toast("Recall interrupted"))
-	camera.lock_changed.connect(func(locked: bool) -> void:
-		_toast("Camera %s" % ("locked to champion" if locked else "free (edge pan)")))
-	map.debug_renderer.debug_visibility_changed.connect(func(on: bool) -> void:
-		_toast("Debug view %s" % ("on" if on else "off")))
+	champion.respawn_started.connect(func(duration: float) -> void: _toast("Killed - respawn in %.0fs" % duration))
+	champion.respawn_finished.connect(func() -> void: _toast("Respawned"))
+	champion.target_selected.connect(func(target: Node3D) -> void:
+		_toast("Target: %s" % target.display_label()))
+	champion.health.damaged.connect(func(amount: float, _source: Node) -> void:
+		if amount >= 1.0:
+			_toast("-%d HP" % int(amount)))
+
+	_map.debug_renderer.debug_visibility_changed.connect(func(on: bool) -> void:
+		_toast("Map debug %s" % ("on" if on else "off")))
+	_camera.lock_changed.connect(func(locked: bool) -> void:
+		_toast("Camera %s" % ("locked" if locked else "free")))
+	if _director.waves != null:
+		_director.waves.wave_spawned.connect(func(index: int, team: int, lane: int, count: int) -> void:
+			if team == MapEnums.Team.A and lane == MapEnums.Lane.MID:
+				_toast("Wave %d spawned (%d per lane)" % [index, count]))
+	if dev_input != null:
+		dev_input.dev_command.connect(_toast)
 
 
 func _build_ui() -> void:
-	_controls_label = RichTextLabel.new()
-	_controls_label.bbcode_enabled = true
-	_controls_label.fit_content = true
-	_controls_label.scroll_active = false
-	_controls_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_controls_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_controls_label = _make_label(Control.PRESET_TOP_LEFT)
 	_controls_label.offset_left = 16
-	_controls_label.offset_top = 12
-	_controls_label.custom_minimum_size = Vector2(340, 0)
+	_controls_label.custom_minimum_size = Vector2(360, 0)
 	_controls_label.text = _controls_text()
 	add_child(_controls_label)
 
-	_status_label = RichTextLabel.new()
-	_status_label.bbcode_enabled = true
-	_status_label.fit_content = true
-	_status_label.scroll_active = false
-	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_status_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_status_label = _make_label(Control.PRESET_TOP_RIGHT)
 	_status_label.offset_right = -16
-	_status_label.offset_top = 12
-	_status_label.offset_left = -400
-	_status_label.custom_minimum_size = Vector2(384, 0)
+	_status_label.offset_left = -430
+	_status_label.custom_minimum_size = Vector2(414, 0)
 	add_child(_status_label)
 
 	_toast_label = Label.new()
 	_toast_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_toast_label.offset_bottom = -48
-	_toast_label.offset_left = -300
-	_toast_label.offset_right = 300
+	_toast_label.offset_left = -320
+	_toast_label.offset_right = 320
 	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast_label.modulate = Color(1, 1, 1, 0)
 	add_child(_toast_label)
 
 
+func _make_label(preset: int) -> RichTextLabel:
+	var label := RichTextLabel.new()
+	label.bbcode_enabled = true
+	label.fit_content = true
+	label.scroll_active = false
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.set_anchors_preset(preset)
+	label.offset_top = 12
+	return label
+
+
 func _controls_text() -> String:
 	return "\n".join([
-		"[b]MOBA prototype[/b]",
-		"[color=#b9c2ce]WASD[/color]  move        [color=#b9c2ce]Mouse[/color] aim",
-		"[color=#b9c2ce]LMB[/color]   basic attack",
-		"[color=#b9c2ce]Q W E R[/color] abilities  [color=#b9c2ce]B[/color] recall",
-		"[color=#b9c2ce]Wheel[/color] zoom        [color=#b9c2ce]Space[/color] camera lock",
-		"[color=#b9c2ce]F1[/color]    debug view",
+		"[b]MOBA prototype - combat sandbox[/b]",
+		"[color=#b9c2ce]WASD[/color]  move          [color=#b9c2ce]Mouse[/color] aim",
+		"[color=#b9c2ce]LMB[/color]   select + attack",
+		"[color=#b9c2ce]Q E R F[/color] abilities   [color=#b9c2ce]B[/color] recall",
+		"[color=#b9c2ce]Wheel[/color] zoom          [color=#b9c2ce]Space[/color] camera lock",
+		"",
+		"[b]Developer[/b]",
+		"[color=#b9c2ce]F1[/color] enemy champion  [color=#b9c2ce]F2[/color] minion wave",
+		"[color=#b9c2ce]F3[/color] reset champion  [color=#b9c2ce]F4[/color] to A spawn",
+		"[color=#b9c2ce]F5[/color] to B base       [color=#b9c2ce]F6[/color] refill HP",
+		"[color=#b9c2ce]F7[/color] kill target     [color=#b9c2ce]F8[/color] kill enemies",
+		"[color=#b9c2ce]F9[/color] map debug       [color=#b9c2ce]F10[/color] combat debug",
 	])
 
 
@@ -107,10 +135,10 @@ func _process(delta: float) -> void:
 
 
 func _update_visited() -> void:
-	var area := _map.layout.area_at(_champion.ground_position())
+	var ground := Vector2(_champion.global_position.x, _champion.global_position.z)
+	var area := _map.layout.area_at(ground)
 	if area.is_empty():
 		return
-	# Camps report their own id; credit the jungle quadrant that owns them.
 	var data := _map.registry.get_data(area)
 	if data.has("jungle"):
 		area = String(data["jungle"])
@@ -119,40 +147,82 @@ func _update_visited() -> void:
 
 
 func _status_text() -> String:
-	var pos := _champion.global_position
-	var area := _map.layout.area_at(_champion.ground_position())
 	var lines := PackedStringArray()
+	var position := _champion.global_position
 	lines.append("[right][b]%d FPS[/b]   x %.0f  z %.0f[/right]" % [
-		Engine.get_frames_per_second(), pos.x, pos.z
+		Engine.get_frames_per_second(), position.x, position.z
 	])
-	lines.append("[right]area: [color=#ffd36b]%s[/color][/right]" % (area if not area.is_empty() else "terrain"))
-	lines.append("[right]cooldowns  %s[/right]" % _cooldown_text())
-	if _champion.is_recalling():
-		lines.append("[right]recall %d%%[/right]" % int(_champion.recall_progress() * 100.0))
-	lines.append_array(_checklist_lines())
+	lines.append("[right]%s[/right]" % _health_text())
+	lines.append("[right]%s[/right]" % _ability_text())
+	lines.append("[right]target: %s[/right]" % _target_text())
+	lines.append("[right]%s[/right]" % _sandbox_text())
+	lines.append("[right]area: [color=%s]%s[/color]   visited %d/%d[/right]" % [
+		COLOR_WARN, _current_area(), _visited_count(), _tracked.size()
+	])
 	return "\n".join(lines)
 
 
-func _cooldown_text() -> String:
+func _current_area() -> String:
+	var ground := Vector2(_champion.global_position.x, _champion.global_position.z)
+	var area := _map.layout.area_at(ground)
+	return area if not area.is_empty() else "terrain"
+
+
+func _visited_count() -> int:
+	var total := 0
+	for id in _tracked:
+		if _visited[id]:
+			total += 1
+	return total
+
+
+func _health_text() -> String:
+	if not _champion.is_alive():
+		return "[color=%s]DEAD - respawn in %.1fs[/color]" % [COLOR_BAD, _champion.respawn_remaining()]
+	var health := _champion.health
+	var color := COLOR_OK if health.health_ratio() > 0.35 else COLOR_BAD
+	var text := "[color=%s]HP %d/%d[/color]" % [color, int(health.current), int(health.maximum)]
+	if _champion.is_recalling():
+		text += "   recall %d%%" % int(_champion.recall_progress() * 100.0)
+	for id in _champion.stats.active_modifier_ids():
+		text += "   [color=%s]%s %.1fs[/color]" % [COLOR_WARN, id, _champion.stats.modifier_remaining(id)]
+	return text
+
+
+func _ability_text() -> String:
 	var parts := PackedStringArray()
 	for slot in InputCommands.ABILITY_NAMES.size():
-		var left := _champion.cooldown_remaining(slot)
-		var color := CHECK_COLOR_TODO if left > 0.0 else CHECK_COLOR_DONE
-		parts.append("[color=%s]%s[/color]" % [color, InputCommands.ability_name(slot)])
-	return " ".join(parts)
+		var name := InputCommands.ability_name(slot)
+		if _champion.abilities.ability_for(slot) == null:
+			parts.append("[color=%s]%s -[/color]" % [COLOR_IDLE, name])
+			continue
+		var left := _champion.abilities.cooldown_remaining(slot)
+		if left <= 0.0:
+			parts.append("[color=%s]%s[/color]" % [COLOR_OK, name])
+		else:
+			parts.append("[color=%s]%s %.1f[/color]" % [COLOR_IDLE, name, left])
+	return "  ".join(parts)
 
 
-## One line per gameplay space the acceptance test asks the player to visit.
-func _checklist_lines() -> PackedStringArray:
-	var lines := PackedStringArray(["[right][b]visited[/b][/right]"])
-	for id in _tracked:
-		var done: bool = _visited[id]
-		lines.append("[right][color=%s]%s %s[/color][/right]" % [
-			CHECK_COLOR_DONE if done else CHECK_COLOR_TODO,
-			"[lb]x[rb]" if done else "[lb] [rb]",
-			id,
-		])
-	return lines
+func _target_text() -> String:
+	var target = _champion.targeting.current_target
+	if target == null or not is_instance_valid(target) or not target.is_alive():
+		return "[color=%s]none[/color]" % COLOR_IDLE
+	var gap := _champion.targeting.distance_to_target()
+	var color := COLOR_OK if gap <= _champion.attack_range() else COLOR_WARN
+	return "[color=%s]%s  %d/%d HP  %.1fm[/color]" % [
+		color, target.display_label(), int(target.health.current),
+		int(target.health.maximum), maxf(gap, 0.0)
+	]
+
+
+func _sandbox_text() -> String:
+	var info := _director.describe()
+	var wave: float = info["next_wave"]
+	var wave_text := "off" if wave < 0.0 else "%.0fs" % wave
+	return "minions %d/%d   turrets %d   next wave %s" % [
+		info["minions_a"], info["minions_b"], info["turrets"], wave_text
+	]
 
 
 func _toast(message: String) -> void:

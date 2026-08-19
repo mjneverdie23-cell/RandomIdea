@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/unit_stats.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+display_name = "Lane Turret"
+max_health = 2200.0
+health_regen = 0.0
+damage_reduction = 0.15
+attack_damage = 95.0
+attack_range = 14.0
+attack_speed = 0.7
+projectile_speed = 38.0
+move_speed = 0.0
+body_radius = 1.9
+body_height = 7.0

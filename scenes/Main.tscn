@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/game_root.gd" id="1_root"]
 [ext_resource type="Script" path="res://scripts/map/map_controller.gd" id="2_map"]
@@ -7,6 +7,10 @@
 [ext_resource type="Script" path="res://scripts/input/pc_input_controller.gd" id="5_pc"]
 [ext_resource type="Script" path="res://scripts/game/prototype_hud.gd" id="6_hud"]
 [ext_resource type="Resource" path="res://resources/maps/default_map.tres" id="7_mapcfg"]
+[ext_resource type="Script" path="res://scripts/game/game_director.gd" id="8_director"]
+[ext_resource type="Script" path="res://scripts/input/dev_input_controller.gd" id="9_dev"]
+[ext_resource type="Script" path="res://scripts/game/combat_debug_overlay.gd" id="10_combatdbg"]
+[ext_resource type="Resource" path="res://resources/game/match_config.tres" id="11_match"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.145098, 0.203922, 0.290196, 1)
@@ -59,6 +63,16 @@ script = ExtResource("4_cmd")
 
 [node name="PCInputController" type="Node" parent="."]
 script = ExtResource("5_pc")
+
+[node name="DevInputController" type="Node" parent="."]
+script = ExtResource("9_dev")
+
+[node name="GameDirector" type="Node3D" parent="."]
+script = ExtResource("8_director")
+config = ExtResource("11_match")
+
+[node name="CombatDebug" type="Node3D" parent="."]
+script = ExtResource("10_combatdbg")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")

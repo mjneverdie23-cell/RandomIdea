@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ProjectileAbility" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/abilities/projectile_ability.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = "q_bolt"
+display_name = "Bolt"
+slot = 0
+cooldown = 3.5
+cast_range = 16.0
+damage = 110.0
+radius = 0.0
+duration = 0.0
+color = Color(0.35, 0.75, 1, 1)
+projectile_speed = 46.0
+impact_radius = 2.6
+projectile_size = 0.5

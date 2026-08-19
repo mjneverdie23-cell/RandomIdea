@@ -1,9 +1,10 @@
 # RandomIdea — Godot 4 MOBA map prototype
 
-A playable low-poly 3D MOBA prototype in **Godot 4.3**, built around a Wild
-Rift-style map topology. Everything on screen is primitive geometry generated
-at runtime — the point of the project is the *map topology, gameplay spaces,
-navigation and architecture*, not the art.
+A playable low-poly 3D MOBA prototype in **Godot 4.3**: a Wild Rift-style map
+topology plus a working combat loop — champions, minion waves, turrets, damage,
+death and respawn. Everything on screen is primitive geometry generated at
+runtime; the point of the project is the *gameplay spaces, navigation, combat
+loop and architecture*, not the art.
 
 No proprietary assets are used or referenced; all geometry is cubes,
 cylinders, spheres and capsules created in code.
@@ -19,20 +20,40 @@ main scene). You spawn as Team A in the bottom-left fountain.
 |---|---|
 | `W A S D` | Move (camera relative) |
 | Mouse | Aim / camera interaction |
-| Left click | Basic attack |
-| `Q W E R` | Placeholder abilities |
+| Left click | Select an enemy and basic attack |
+| `Q` | Bolt — ranged projectile damage |
+| `E` | Dash — short burst of forced movement |
+| `R` | Nova — larger area damage at the aim point |
+| `F` | Bulwark — self-buff (damage reduction, speed, heal) |
 | `B` | Recall (channel, interrupted by moving) |
 | `Space` | Toggle camera lock / free pan |
 | Mouse wheel | Zoom |
-| `F1` | Toggle the debug view |
 
-`W` is bound to both *move forward* and *ability W*, because the brief asks
-for WASD movement and Q/W/E/R abilities on one keyboard. That overlap is a
-development-input artefact only: the gameplay side receives two independent
-commands and a mobile joystick + button layout can drive them separately.
+Abilities deliberately sit on **Q E R F** so no physical key ever means both
+"move" and "cast". The slots are indices on the command bus, not keys, so a
+mobile joystick plus a four-button bar raises exactly the same
+`InputCommands.ability_requested(slot, aim_point)`.
 
-The HUD lists every gameplay space and ticks each one off as you walk into it,
-which is the quickest way to run the acceptance test by hand.
+### Developer keys
+
+Development-only, handled by `DevInputController` and wired to nothing else —
+deleting that node removes every cheat and leaves the sandbox intact.
+
+| Key | Action |
+|---|---|
+| `F1` | Spawn an enemy champion |
+| `F2` | Spawn a minion wave in every lane |
+| `F3` | Reset the champion (position, health, cooldowns) |
+| `F4` | Teleport to `TEAM_A_SPAWN` |
+| `F5` | Teleport to `TEAM_B_BASE` |
+| `F6` | Refill health |
+| `F7` | Kill the selected target |
+| `F8` | Kill every enemy |
+| `F9` | Toggle the map debug view |
+| `F10` | Toggle the combat debug overlay |
+
+`F9` goes through the normal command bus (a shipped build may still expose a
+debug view); `F1`–`F8` and `F10` do not.
 
 ### Headless / offscreen check
 
@@ -41,12 +62,24 @@ godot --headless --path . tools/SmokeTest.tscn                    # verify
 godot --path . tools/SmokeTest.tscn -- --out=/tmp/shots           # + screenshots
 ```
 
-The smoke test boots the real game scene and asserts that the map builds, that
-every required identifier exists, that all lanes/jungles/camps/objectives and
-the enemy base are reachable from Team A's spawn over the baked navigation
-mesh, that movement commands move the champion, that walls stop it, that the
-debug view toggles, and that a second map configuration builds and passes the
-same checks. It exits non-zero on failure.
+The smoke test boots the real game scene and asserts that:
+
+* the map builds and every required identifier exists;
+* all lanes, jungles, camps, objectives and the enemy base are reachable from
+  Team A's spawn over the baked navigation mesh;
+* movement commands move the champion and walls stop it;
+* both debug views toggle;
+* a left click selects a nearby enemy and basic attacks repeat on it;
+* an out-of-range target is chased;
+* all four abilities cast, start cooldowns and refuse a second cast;
+* the champion dies, cannot move while dead, and respawns at its fountain with
+  full health;
+* a wave spawns and its minions navigate away from the spawn;
+* two opposing minions damage each other unaided;
+* a minion damages an enemy turret and is shot back;
+* a second map configuration builds and passes the same reachability check.
+
+It exits non-zero on failure.
 
 ---
 
@@ -104,6 +137,79 @@ var turret := map.registry.get_node_for("MID_OUTER_TURRET_B")
 ```
 
 ---
+
+## Combat sandbox
+
+Built on top of the map, never inside it. `GameDirector` is the only node that
+sees both sides: it reads the map's stable turret identifiers and attaches a
+`TurretController` to each existing turret node, so the map layer stays free of
+combat code and the map's topology, navigation and debug renderer are untouched.
+
+```
+GameDirector          spawns champions, attaches turret controllers, dev commands
+ ├── MinionWaveSpawner  waves per lane, routes sampled from MapLayout
+ └── Battle (autoload)  registry of live units; the only way units find each other
+
+Unit (CharacterBody3D)         team + UnitStats + components
+ ├── ChampionController        player (command bus) or AI (chase and shoot)
+ ├── MinionController          MOVE -> SEARCH -> ATTACK -> MOVE
+ └── TurretController          static, prefers minions over champions
+
+components: HealthComponent, StatsComponent, MovementComponent,
+            TargetingComponent, CombatComponent, AbilityComponent
+```
+
+**Health** clamps to `0..max`, emits `health_changed`, `damaged`, `healed`,
+`died` and `revived`, and applies a damage-reduction fraction that abilities can
+raise. A dead unit leaves every physics layer, so it cannot be selected,
+targeted or shot at, and it cannot move or attack.
+
+**Targeting** validates the current target every frame (team, alive, distance)
+and follows it out of the tree, so no system ever holds a freed unit. Turrets
+and minions auto-acquire with a kind priority — minions before champions for
+turrets. The player selects manually: a click picks the enemy nearest the aim
+point, and if the click lands on empty ground the nearest enemy already in range
+is used. A ring marks the selection. An out-of-range selected target is chased
+up to a leash distance, but only while you are not steering with WASD.
+
+**Basic attacks** run one pipeline for everyone —
+*request → cooldown → target validation → damage → health update* — and choose
+between an instant hit and a travelling `Projectile` purely from
+`UnitStats.projectile_speed`. No animation is involved.
+
+**Abilities** are resources, not code paths: `AbilityComponent` owns slots and
+cooldowns and calls `AbilityData.execute()`. `ProjectileAbility`, `DashAbility`,
+`AreaAbility` and `BuffAbility` each live in one small script with one `.tres`
+per ability, so adding a fifth kind never touches the champion.
+
+**Death and respawn**: a champion disables itself, hides, counts down a
+configurable `respawn_time`, then reappears at its team spawn point with health
+restored, modifiers dropped and cooldowns cleared. Minions leave a short-lived
+corpse and free themselves; a destroyed turret sinks, greys out and stops
+firing, keeping its collider so the baked navigation mesh stays valid.
+
+**Lane interaction** falls out of the above: waves spawn from each base's lane
+entrance, walk lane waypoints sampled from `MapLayout`, meet in the middle,
+fight each other, push into enemy turret range, damage the turret and get shot
+back. Wave interval and composition are data.
+
+### Combat data
+
+Everything a designer tunes lives in `resources/`:
+
+| Resource | What it drives |
+|---|---|
+| `units/champion_stats.tres` | champion health, damage, range, attack speed, move speed |
+| `units/champion_loadout.tres` | champion stats + its four abilities + respawn time |
+| `units/enemy_loadout.tres` | the AI champion variant |
+| `units/minion_melee.tres`, `minion_ranged.tres` | minion stats, aggro and leash ranges, body shape |
+| `units/turret_lane.tres`, `turret_nexus.tres` | turret health, damage, projectile speed |
+| `abilities/q_bolt.tres`, `e_dash.tres`, `r_nova.tres`, `f_bulwark.tres` | one file per ability |
+| `game/wave_config.tres` | wave interval, composition, lanes, routes, safety cap |
+| `game/match_config.tres` | which loadouts, turret tuning, starting enemies |
+
+Turret attack range is the one value the *map* owns rather than the resource,
+so the debug range rings and the turrets that draw them can never disagree.
 
 ## Architecture
 
@@ -183,17 +289,28 @@ to the map or the champion beyond those two inputs.
 
 ---
 
-## Debug view (`F1`)
+## Debug views
 
-Lane centre lines, jungle quadrant outlines and camps, turret ranges, spawn
-points and lane/jungle entrances, objective zones, the baked navigation mesh
-wireframe, the play field boundary and identifier labels for every feature.
+**Map debug (`F9`)** — lane centre lines, jungle quadrant outlines and camps,
+turret ranges, spawn points and lane/jungle entrances, objective zones, the
+baked navigation mesh wireframe, the play field boundary and identifier labels.
+
+**Combat debug (`F10`, on by default)** — per-unit health bars, attack-range
+rings for champions and turrets, a line to the current target, and a state line
+carrying the minion state machine (`MOVE`/`SEARCH`/`ATTACK`) with its waypoint,
+the current movement command, the navigation destination, champion ability
+cooldowns and the respawn countdown. Both overlays are read-only: turning them
+off changes nothing but the picture.
 
 ---
 
 ## What is deliberately not implemented
 
-Turret, minion, objective and camp *behaviour*; damage, health and abilities
-beyond cooldowns plus a placeholder pulse; UI beyond the development HUD; and
-audio, animation and networking. The map exposes the spaces and identifiers
-those systems will need.
+Objective and jungle-camp *behaviour* (the spaces, spawn points and identifiers
+are there, the fights are not); win conditions, inhibitor and nexus destruction
+rules, waves scaling over time, gold, levels and items; the full Wild Rift
+turret rule set (fortification, aggro switching on champion attacks); UI beyond
+the development HUD; and audio, animation, VFX and networking.
+
+Camp monsters and objective placeholder meshes still have no colliders, because
+nothing in this milestone needs them to.

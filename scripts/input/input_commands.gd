@@ -7,9 +7,11 @@ extends Node
 ## a mobile virtual joystick or a replay/AI driver can all feed it, which is
 ## why nothing below mentions keys, buttons or touch.
 
-enum AbilitySlot { Q, W, E, R }
+## Slot order matches the PC keys Q, E, R, F. Slots are indices, so a mobile
+## button bar can raise the same requests without knowing about keyboards.
+enum AbilitySlot { Q, E, R, F }
 
-const ABILITY_NAMES := ["Q", "W", "E", "R"]
+const ABILITY_NAMES := ["Q", "E", "R", "F"]
 
 signal ability_requested(slot: int, aim_point: Vector3)
 signal basic_attack_requested(aim_point: Vector3)

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AreaAbility" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/abilities/area_ability.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = "r_nova"
+display_name = "Nova"
+slot = 2
+cooldown = 18.0
+cast_range = 12.0
+damage = 260.0
+radius = 7.0
+duration = 0.0
+color = Color(1, 0.35, 0.85, 1)
+effect_duration = 0.5

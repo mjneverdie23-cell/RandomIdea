@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/unit_stats.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+display_name = "Prototype Champion"
+max_health = 820.0
+health_regen = 6.0
+damage_reduction = 0.0
+attack_damage = 62.0
+attack_range = 7.5
+attack_speed = 0.9
+projectile_speed = 0.0
+move_speed = 11.0
+body_radius = 0.95
+body_height = 2.8

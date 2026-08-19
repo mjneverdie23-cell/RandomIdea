@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WaveConfig" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/wave_config.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/units/minion_melee.tres" id="2_melee"]
+[ext_resource type="Resource" path="res://resources/units/minion_ranged.tres" id="3_ranged"]
+
+[resource]
+script = ExtResource("1_script")
+melee_stats = ExtResource("2_melee")
+ranged_stats = ExtResource("3_ranged")
+melee_per_wave = 3
+ranged_per_wave = 2
+formation_spacing = 2.0
+formation_width = 1.7
+auto_start = true
+first_wave_delay = 6.0
+interval = 25.0
+lanes = Array[int]([0, 1, 2])
+route_samples = 12
+route_start = 0.14
+route_end = 0.97
+max_alive_per_team = 48
