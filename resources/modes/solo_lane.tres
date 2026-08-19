@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="GameModeConfig" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/game_mode_config.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/maps/solo_lane_map.tres" id="2_map"]
+[ext_resource type="Resource" path="res://resources/game/solo_match_config.tres" id="3_match"]
+[ext_resource type="Script" path="res://scripts/map/solo_lane_layout.gd" id="4_layout"]
+
+[resource]
+script = ExtResource("1_script")
+id = "solo_lane"
+display_name = "Solo Lane"
+kind = 1
+map_config = ExtResource("2_map")
+layout_script = ExtResource("4_layout")
+match_config = ExtResource("3_match")

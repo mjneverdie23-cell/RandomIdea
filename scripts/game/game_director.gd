@@ -10,6 +10,7 @@ extends Node3D
 signal player_spawned(champion: ChampionController)
 signal enemy_champion_spawned(champion: ChampionController)
 signal turrets_ready(count: int)
+signal match_ended(outcome: int, winner_team: int)
 
 @export var config: MatchConfig
 @export var player_team: int = MapEnums.Team.A
@@ -22,7 +23,9 @@ var container: Node3D
 var player: ChampionController
 var waves: MinionWaveSpawner
 var turrets: Array[TurretController] = []
+var nexuses: Array[NexusController] = []
 var enemy_champions: Array[ChampionController] = []
+var match_state := MatchState.new()
 
 var _target_indicator: TargetIndicator
 
@@ -42,8 +45,11 @@ func start() -> void:
 	_target_indicator.name = "TargetIndicator"
 	container.add_child(_target_indicator)
 
+	match_state.reset()
 	if config.spawn_turret_controllers:
 		_create_turret_controllers()
+	if config.spawn_nexus_controllers:
+		_create_nexus_controllers()
 
 	player = spawn_player_champion()
 	for i in config.starting_enemy_champions:
@@ -60,6 +66,11 @@ func start() -> void:
 
 func enemy_team() -> int:
 	return MapEnums.other_team(player_team)
+
+
+func _process(delta: float) -> void:
+	if match_state.is_running():
+		match_state.elapsed += delta
 
 
 # --- champions ---------------------------------------------------------------
@@ -95,12 +106,30 @@ func spawn_enemy_champion() -> ChampionController:
 	var spawn := map.spawn_transform(team, 3.0, enemy_champions.size())
 	champion.spawn_point = spawn.origin
 	champion.teleport_to(spawn.origin)
-	var push := map.layout.lane_point(MapEnums.Lane.MID, config.ai_push_target)
+	var push_lane: int = int(map.layout.lanes[0]["lane"]) if not map.layout.lanes.is_empty() else MapEnums.Lane.MID
+	var push := map.layout.lane_point(push_lane, config.ai_push_target)
 	champion.ai_destination = Vector3(push.x, 0.0, push.y)
+	if config.enemy_champion_ai:
+		var brain := ChampionAi.new()
+		brain.name = "Brain"
+		champion.attach_ai(brain)
+		brain.setup(champion, champion.ai_destination, _friendly_structure_points(team))
 
 	enemy_champions.append(champion)
 	enemy_champion_spawned.emit(champion)
 	return champion
+
+
+## Positions an AI champion will fall back to defend: its own turrets and nexus.
+func _friendly_structure_points(team: int) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	for turret in turrets:
+		if turret.team == team:
+			points.append(turret.global_position)
+	for nexus in nexuses:
+		if nexus.team == team:
+			points.append(nexus.global_position)
+	return points
 
 
 func _on_player_target_changed(target: Node3D) -> void:
@@ -146,6 +175,56 @@ func _turret_stats_for(turret_data: Dictionary) -> UnitStats:
 	return stats
 
 
+# --- nexuses -----------------------------------------------------------------
+
+## Attaches a [NexusController] to every nexus the map already placed.
+func _create_nexus_controllers() -> void:
+	for nexus_data in map.layout.nexuses:
+		var id := String(nexus_data["id"])
+		var structure := map.registry.get_node_for(id)
+		if structure == null:
+			push_warning("GameDirector: no map node for nexus '%s'." % id)
+			continue
+		var controller := NexusController.new()
+		controller.initialize(int(nexus_data["team"]), _nexus_stats())
+		controller.bind_structure(structure, nexus_data)
+		container.add_child(controller)
+		controller.global_position = structure.global_position
+		controller.destroyed.connect(_on_nexus_destroyed)
+		nexuses.append(controller)
+
+
+func _nexus_stats() -> UnitStats:
+	var base: UnitStats = config.nexus_stats
+	if base == null:
+		base = UnitStats.new()
+		base.max_health = 4000.0
+	return base.duplicate()
+
+
+func nexus_for(map_id: String) -> NexusController:
+	for nexus in nexuses:
+		if nexus.map_id == map_id:
+			return nexus
+	return null
+
+
+func _on_nexus_destroyed(nexus: NexusController) -> void:
+	if not config.nexus_destruction_ends_match or not match_state.is_running():
+		return
+	match_state.finish(MapEnums.other_team(nexus.team), player_team)
+	_end_match()
+
+
+## Stops the sandbox so the result is stable while the banner is up.
+func _end_match() -> void:
+	if waves != null:
+		waves.stop()
+	for unit in Battle.all():
+		unit.set_gameplay_enabled(false)
+	match_ended.emit(match_state.outcome, match_state.winner)
+
+
 func turret_for(map_id: String) -> TurretController:
 	for turret in turrets:
 		if turret.map_id == map_id:
@@ -184,6 +263,31 @@ func dev_teleport_player(destination_id: String) -> void:
 	player.teleport_to(point)
 
 
+## Identifier-free teleports, so the developer keys work on any map.
+func dev_teleport_to_own_spawn() -> void:
+	if player != null:
+		player.teleport_to(map.spawn_transform(player_team).origin)
+
+
+func dev_teleport_to_enemy_base() -> void:
+	if player == null:
+		return
+	var base := map.layout.base_data(enemy_team())
+	if base.is_empty():
+		return
+	var position: Vector2 = base["position"]
+	player.teleport_to(Vector3(position.x, 0.0, position.y))
+
+
+## Developer shortcut for the win condition.
+func dev_destroy_enemy_nexus() -> bool:
+	for nexus in nexuses:
+		if nexus.team != player_team and nexus.is_alive():
+			nexus.health.kill(player)
+			return true
+	return false
+
+
 func dev_refill_health() -> void:
 	if player != null and player.is_alive():
 		player.health.heal(player.health.maximum)
@@ -216,5 +320,7 @@ func describe() -> Dictionary:
 		"minions_a": Battle.count_of(MapEnums.Team.A, Unit.Kind.MINION),
 		"minions_b": Battle.count_of(MapEnums.Team.B, Unit.Kind.MINION),
 		"units": Battle.all().size(),
+		"nexuses": nexuses.size(),
+		"outcome": match_state.outcome_name(),
 		"next_wave": waves.time_to_next_wave() if waves != null else -1.0,
 	}

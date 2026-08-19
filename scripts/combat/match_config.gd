@@ -9,6 +9,14 @@ extends Resource
 @export var enemy_loadout: ChampionLoadout
 @export var wave: WaveConfig
 
+@export_group("Nexus")
+@export var nexus_stats: UnitStats
+## Attach a [NexusController] to each nexus the map placed, making it a real,
+## destructible unit rather than scenery.
+@export var spawn_nexus_controllers: bool = true
+## Destroying a nexus ends the match.
+@export var nexus_destruction_ends_match: bool = true
+
 @export_group("Turrets")
 @export var lane_turret_stats: UnitStats
 @export var nexus_turret_stats: UnitStats
@@ -17,6 +25,8 @@ extends Resource
 @export var spawn_turret_controllers: bool = true
 
 @export_group("Champions")
+## Give AI champions the [ChampionAi] state machine.
+@export var enemy_champion_ai: bool = true
 @export_range(0, 6, 1) var starting_enemy_champions: int = 2
 ## Lane fraction an AI champion walks to when it has nothing to fight.
 @export_range(0.0, 1.0, 0.05) var ai_push_target: float = 0.5

@@ -1,7 +1,7 @@
 class_name DevInputController
 extends Node
 
-## Development-only key bindings (F1-F8, F10).
+## Development-only key bindings (F1-F8, F10-F12).
 ##
 ## Kept in its own node so nothing in the gameplay systems depends on it:
 ## deleting this node removes every cheat and leaves the sandbox intact. The
@@ -9,6 +9,8 @@ extends Node
 ## shipped build may still expose it.
 
 signal dev_command(label: String)
+## Raised when the developer asks for a different game mode.
+signal game_mode_cycle_requested()
 
 var director: GameDirector
 var overlay: CombatDebugOverlay
@@ -32,11 +34,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		director.dev_reset_champion()
 		_report("Champion reset")
 	elif event.is_action_pressed("dev_teleport_team_a"):
-		director.dev_teleport_player("TEAM_A_SPAWN")
-		_report("Teleported to TEAM_A_SPAWN")
+		director.dev_teleport_to_own_spawn()
+		_report("Teleported to own spawn")
 	elif event.is_action_pressed("dev_teleport_team_b"):
-		director.dev_teleport_player("TEAM_B_BASE")
-		_report("Teleported to TEAM_B_BASE")
+		director.dev_teleport_to_enemy_base()
+		_report("Teleported to the enemy base")
 	elif event.is_action_pressed("dev_refill_health"):
 		director.dev_refill_health()
 		_report("Health refilled")
@@ -46,6 +48,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_report("Killed %d enemies" % director.dev_kill_all_enemies())
 	elif event.is_action_pressed("toggle_combat_debug") and overlay != null:
 		_report("Combat debug %s" % ("on" if overlay.toggle() else "off"))
+	elif event.is_action_pressed("cycle_game_mode"):
+		game_mode_cycle_requested.emit()
+	elif event.is_action_pressed("dev_destroy_nexus"):
+		_report("Destroyed the enemy nexus" if director.dev_destroy_enemy_nexus() else "No enemy nexus")
 
 
 func _report(label: String) -> void:

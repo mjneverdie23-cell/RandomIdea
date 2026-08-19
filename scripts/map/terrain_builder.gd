@@ -32,6 +32,7 @@ func build(layout: MapLayout) -> void:
 	_rasterise()
 	_build_walls()
 	_build_navigation_floor()
+	_build_decor()
 
 
 func wall_rects() -> Array[Rect2]:
@@ -43,8 +44,8 @@ func floor_rects() -> Array[Rect2]:
 
 
 func _build_ground() -> void:
-	var config := _layout.config
-	var extent := _layout.outer_half_size()
+	var extents := _layout.outer_half_extents()
+	var play := _layout.play_half_extents()
 	var thickness := 2.0
 
 	var body := StaticBody3D.new()
@@ -55,7 +56,7 @@ func _build_ground() -> void:
 
 	var collision := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(extent * 2.0, thickness, extent * 2.0)
+	box.size = Vector3(extents.x * 2.0, thickness, extents.y * 2.0)
 	collision.shape = box
 	collision.position = Vector3(0.0, -thickness * 0.5, 0.0)
 	body.add_child(collision)
@@ -65,9 +66,9 @@ func _build_ground() -> void:
 	mesh.position = collision.position
 	body.add_child(mesh)
 
-	# Marks the playable square so the unreachable border reads as out of play.
+	# Marks the playable area so the unreachable border reads as out of play.
 	var field := PrototypeMeshes.box(
-		Vector3(config.map_half_size * 2.0, 0.02, config.map_half_size * 2.0),
+		Vector3(play.x * 2.0, 0.02, play.y * 2.0),
 		PrototypeMeshes.COLOR_GROUND.lightened(0.06)
 	)
 	field.name = "PlayFieldMesh"
@@ -80,9 +81,10 @@ func _build_ground() -> void:
 func _rasterise() -> void:
 	var config := _layout.config
 	var cell: float = maxf(config.terrain_cell_size, 0.25)
-	var extent := _layout.outer_half_size()
-	var cols := int(ceil(extent * 2.0 / cell))
-	var origin := Vector2(-extent, -extent)
+	var extents := _layout.outer_half_extents()
+	var cols := int(ceil(extents.x * 2.0 / cell))
+	var rows := int(ceil(extents.y * 2.0 / cell))
+	var origin := Vector2(-extents.x, -extents.y)
 
 	var walkable := MapShapes.with_bounds(_layout.walkable_shapes)
 	var blocked := MapShapes.with_bounds(_layout.blocked_shapes)
@@ -90,10 +92,10 @@ func _rasterise() -> void:
 
 	var solid := PackedByteArray()
 	var open := PackedByteArray()
-	solid.resize(cols * cols)
-	open.resize(cols * cols)
+	solid.resize(cols * rows)
+	open.resize(cols * rows)
 
-	for j in cols:
+	for j in rows:
 		for i in cols:
 			var p := origin + Vector2((float(i) + 0.5) * cell, (float(j) + 0.5) * cell)
 			var walkable_here := MapShapes.bounded_contains_any(walkable, p)
@@ -104,16 +106,17 @@ func _rasterise() -> void:
 			var navigable := walkable_here and not MapShapes.bounded_contains_any(structures, p)
 			open[index] = 1 if navigable else 0
 
-	_wall_rects = _merge_cells(solid, cols, origin, cell)
-	_floor_rects = _merge_cells(open, cols, origin, cell)
+	_wall_rects = _merge_cells(solid, cols, rows, origin, cell)
+	_floor_rects = _merge_cells(open, cols, rows, origin, cell)
 
 
 ## Greedy row/column sweep: grow each unused set cell right, then down.
-func _merge_cells(cells: PackedByteArray, cols: int, origin: Vector2, cell: float) -> Array[Rect2]:
+func _merge_cells(cells: PackedByteArray, cols: int, rows: int, origin: Vector2,
+		cell: float) -> Array[Rect2]:
 	var used := PackedByteArray()
-	used.resize(cols * cols)
+	used.resize(cols * rows)
 	var rects: Array[Rect2] = []
-	for j in cols:
+	for j in rows:
 		for i in cols:
 			var index := j * cols + i
 			if cells[index] == 0 or used[index] == 1:
@@ -125,7 +128,7 @@ func _merge_cells(cells: PackedByteArray, cols: int, origin: Vector2, cell: floa
 					break
 				width += 1
 			var height := 1
-			while j + height < cols:
+			while j + height < rows:
 				var row_ok := true
 				for k in width:
 					var probe := (j + height) * cols + i + k
@@ -180,6 +183,38 @@ func _build_walls() -> void:
 	view.multimesh = multi
 	view.material_override = PrototypeMeshes.material(PrototypeMeshes.COLOR_WALL)
 	body.add_child(view)
+
+
+## Collision-free props the layout asked for, standing on the solid terrain.
+func _build_decor() -> void:
+	if _layout.decor.is_empty():
+		return
+	var holder := Node3D.new()
+	holder.name = "Decor"
+	add_child(holder)
+	for prop in _layout.decor:
+		var radius: float = float(prop.get("radius", 1.5))
+		var height: float = float(prop.get("height", 4.0))
+		var position: Vector2 = prop["position"]
+		var kind := String(prop.get("kind", "cylinder"))
+		var mesh: MeshInstance3D
+		match kind:
+			"floor":
+				# Flat ground marker for a walkable pocket the lane decals miss.
+				mesh = PrototypeMeshes.disk_decal(
+					position, radius, prop.get("color", PrototypeMeshes.COLOR_ENTRANCE),
+					PrototypeMeshes.DECAL_Y_ENTRANCE, 20
+				)
+				holder.add_child(mesh)
+				continue
+			"box":
+				mesh = PrototypeMeshes.box(
+					Vector3(radius * 1.8, height, radius * 1.8), PrototypeMeshes.COLOR_WALL.lightened(0.12)
+				)
+			_:
+				mesh = PrototypeMeshes.cylinder(radius, height, PrototypeMeshes.COLOR_WALL.lightened(0.12), 8)
+		mesh.position = Vector3(position.x, height * 0.5, position.y)
+		holder.add_child(mesh)
 
 
 ## Invisible, physics-inert slabs that exist purely as navigation bake input.

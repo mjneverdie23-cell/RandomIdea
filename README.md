@@ -1,10 +1,32 @@
 # RandomIdea — Godot 4 MOBA map prototype
 
-A playable low-poly 3D MOBA prototype in **Godot 4.3**: a Wild Rift-style map
-topology plus a working combat loop — champions, minion waves, turrets, damage,
-death and respawn. Everything on screen is primitive geometry generated at
-runtime; the point of the project is the *gameplay spaces, navigation, combat
-loop and architecture*, not the art.
+A playable low-poly 3D MOBA prototype in **Godot 4.3**: two game modes sharing
+one set of systems — a Wild Rift-style three-lane map and a compact one-lane
+arena — with champions, minion waves, turrets, a destructible nexus, damage,
+death, respawn and win conditions. Everything on screen is primitive geometry
+generated at runtime; the point of the project is the *gameplay spaces,
+navigation, combat loop and architecture*, not the art.
+
+## Game modes
+
+| Mode | Map | Launch |
+|---|---|---|
+| **Full MOBA** | three lanes, jungle, river, two neutral objectives | default |
+| **Solo Lane** | one lane, two towers and one nexus per team | `--mode=solo_lane` |
+
+Press **F11** in game to switch modes (the scene reloads), or pass
+`--mode=<id>` on the command line. A mode is a `GameModeConfig` resource
+naming a `MapConfig`, the `MapLayout` subclass that builds it, and a
+`MatchConfig`; adding a third mode means adding a resource, not a code path.
+
+```
+GameModeConfig -> MapConfig + layout script -> MapLayout -> MapController
+                \-> MatchConfig -------------------------> GameDirector
+```
+
+Nothing below that line knows which mode is running: the same champion,
+combat, health, ability, minion, turret, navigation, input and debug systems
+serve both maps.
 
 No proprietary assets are used or referenced; all geometry is cubes,
 cylinders, spheres and capsules created in code.
@@ -28,6 +50,7 @@ main scene). You spawn as Team A in the bottom-left fountain.
 | `B` | Recall (channel, interrupted by moving) |
 | `Space` | Toggle camera lock / free pan |
 | Mouse wheel | Zoom |
+| `Enter` | Restart the match |
 
 Abilities deliberately sit on **Q E R F** so no physical key ever means both
 "move" and "cast". The slots are indices on the command bus, not keys, so a
@@ -51,6 +74,8 @@ deleting that node removes every cheat and leaves the sandbox intact.
 | `F8` | Kill every enemy |
 | `F9` | Toggle the map debug view |
 | `F10` | Toggle the combat debug overlay |
+| `F11` | Switch game mode |
+| `F12` | Destroy the enemy nexus (instant win) |
 
 `F9` goes through the normal command bus (a shipped build may still expose a
 debug view); `F1`–`F8` and `F10` do not.
@@ -58,8 +83,9 @@ debug view); `F1`–`F8` and `F10` do not.
 ### Headless / offscreen check
 
 ```bash
-godot --headless --path . tools/SmokeTest.tscn                    # verify
-godot --path . tools/SmokeTest.tscn -- --out=/tmp/shots           # + screenshots
+godot --headless --path . tools/SmokeTest.tscn        # full MOBA
+godot --headless --path . tools/SoloLaneTest.tscn     # solo lane
+godot --path . tools/SmokeTest.tscn -- --out=/tmp/shots   # + screenshots
 ```
 
 The smoke test boots the real game scene and asserts that:
@@ -79,9 +105,53 @@ The smoke test boots the real game scene and asserts that:
 * a minion damages an enemy turret and is shot back;
 * a second map configuration builds and passes the same reachability check.
 
-It exits non-zero on failure.
+`SoloLaneTest.tscn` boots the same scene in Solo Lane and checks the mode's own
+criteria: it is running `SoloLaneLayout`/`SoloLaneConfig`; there is exactly one
+lane, two towers and one nexus per team and no inhibitors, jungle, river or
+objectives; every `SOLO_*` identifier is registered; the bases sit at opposite
+ends; the full lane is navigable in both directions and every tower and nexus
+is approachable; waves spawn from both minion spawns and march; the enemy
+champion's AI brain drives it down the lane; a minion damages the enemy nexus;
+and destroying that nexus produces `VICTORY`.
+
+Both exit non-zero on failure.
 
 ---
+
+## Solo Lane arena
+
+A compact rectangular map, 54 m wide and 144 m long, built by `SoloLaneLayout`
+from `resources/maps/solo_lane_map.tres`:
+
+```
+TEAM A BASE  --  INNER  --  OUTER  --  open lane  --  OUTER  --  INNER  --  TEAM B BASE
+ nexus, fountain,   z=37     z=17        z=0          z=-17     z=-37      nexus, fountain,
+ minion spawn                                                              minion spawn
+   z=+54                                                                      z=-54
+```
+
+One straight lane runs the whole length. Each base holds a nexus, a fountain,
+a champion spawn, a minion spawn and a lane entrance; each team has exactly two
+towers and one nexus, and there are no inhibitors, jungle, river or neutral
+objectives. Walkable pockets flank the lane with rock cover, and everything
+outside them is solid terrain, so the arena funnels play back into the single
+lane. Identifiers:
+
+```
+SOLO_LANE
+SOLO_SPAWN_A            SOLO_SPAWN_B
+SOLO_MINION_SPAWN_A     SOLO_MINION_SPAWN_B
+SOLO_INNER_TURRET_A     SOLO_INNER_TURRET_B
+SOLO_OUTER_TURRET_A     SOLO_OUTER_TURRET_B
+SOLO_NEXUS_A            SOLO_NEXUS_B
+SOLO_LANE_ENTRANCE_A    SOLO_LANE_ENTRANCE_B
+```
+
+`SoloLaneConfig` extends `MapConfig` rather than replacing it, so lane width,
+base radius, tower spacing and range, terrain cell size, wall height and every
+navigation setting are the same fields the three-lane map uses. It adds only
+what a rectangular one-lane map needs: `map_half_length`, the side-clearing and
+rock counts, the minion spawn offset and the two tower offsets.
 
 ## Map topology
 
@@ -304,13 +374,36 @@ off changes nothing but the picture.
 
 ---
 
+## Win conditions and the enemy AI
+
+Each nexus carries a `NexusController` — the same `Unit` base as everything
+else, attached to the structure the map already placed. It has health, takes
+damage from minions and champions, and destroying one ends the match: the
+director records the outcome, stops the wave spawner, freezes every unit and
+raises `match_ended`. The HUD shows a `VICTORY`/`DEFEAT` banner with the match
+time and the restart hint. `Enter` reloads the mode, `F11` reloads into the
+other one.
+
+AI champions run `ChampionAi`, a small state machine that only reads and writes
+the champion's existing components:
+
+```
+PUSH_LANE -> ATTACK_MINIONS -> ATTACK_CHAMPION -> RETREAT -> DEFEND -> DEAD
+```
+
+It walks the lane when nothing is happening, prefers an enemy champion over
+minions, drops everything to defend a friendly structure that has enemies
+standing on it, retreats to its fountain below a health threshold and comes
+back out once healed. The same `ChampionController` runs under a player's
+command bus or under this brain with no branching inside the champion.
+
 ## What is deliberately not implemented
 
 Objective and jungle-camp *behaviour* (the spaces, spawn points and identifiers
-are there, the fights are not); win conditions, inhibitor and nexus destruction
-rules, waves scaling over time, gold, levels and items; the full Wild Rift
-turret rule set (fortification, aggro switching on champion attacks); UI beyond
-the development HUD; and audio, animation, VFX and networking.
+are there, the fights are not); inhibitor rules, waves scaling over time, gold,
+levels and items; the full Wild Rift turret rule set (fortification, aggro
+switching on champion attacks); a front end beyond the mode switch key; and
+audio, animation, VFX and networking.
 
 Camp monsters and objective placeholder meshes still have no colliders, because
 nothing in this milestone needs them to.

@@ -12,6 +12,7 @@ const COLOR_IDLE := "#8d97a5"
 const COLOR_WARN := "#ffd36b"
 const COLOR_BAD := "#ff8a7a"
 
+var _root: GameRoot
 var _map: MapController
 var _director: GameDirector
 var _camera: GameplayCamera
@@ -22,25 +23,30 @@ var _visited: Dictionary = {}
 var _status_label: RichTextLabel
 var _controls_label: RichTextLabel
 var _toast_label: Label
+var _result_label: RichTextLabel
 var _toast_timer: float = 0.0
 
 
-func bind(map: MapController, director: GameDirector, camera: GameplayCamera,
-		dev_input: DevInputController) -> void:
-	_map = map
-	_director = director
-	_camera = camera
-	_champion = director.player
+func bind(root: GameRoot) -> void:
+	_root = root
+	_map = root.map
+	_director = root.director
+	_camera = root.camera
+	_champion = root.director.player
 
-	_tracked = PackedStringArray(["TOP_LANE", "MID_LANE", "BOT_LANE", "RIVER"])
-	for jungle in map.layout.jungles:
-		_tracked.append(String(jungle["id"]))
-	_tracked.append_array(PackedStringArray(["TOP_OBJECTIVE", "BOT_OBJECTIVE", "TEAM_A_BASE", "TEAM_B_BASE"]))
+	# The gameplay spaces worth visiting come from the layout, so the checklist
+	# is right on the three-lane map and on the one-lane arena alike.
+	_tracked = PackedStringArray()
+	for collection in [_map.layout.lanes, _map.layout.jungles, _map.layout.objectives, _map.layout.bases]:
+		for entry in collection:
+			_tracked.append(String(entry["id"]))
+	if not _map.layout.river.is_empty():
+		_tracked.append(String(_map.layout.river["id"]))
 	for id in _tracked:
 		_visited[id] = false
 
 	_build_ui()
-	_connect_signals(dev_input)
+	_connect_signals(root.dev_input)
 
 
 func _connect_signals(dev_input: DevInputController) -> void:
@@ -70,6 +76,10 @@ func _connect_signals(dev_input: DevInputController) -> void:
 				_toast("Wave %d spawned (%d per lane)" % [index, count]))
 	if dev_input != null:
 		dev_input.dev_command.connect(_toast)
+	_director.match_ended.connect(_on_match_ended)
+	for nexus in _director.nexuses:
+		nexus.health.damaged.connect(func(_amount: float, _source: Node) -> void:
+			_toast("%s under attack" % nexus.display_label()))
 
 
 func _build_ui() -> void:
@@ -84,6 +94,18 @@ func _build_ui() -> void:
 	_status_label.offset_left = -430
 	_status_label.custom_minimum_size = Vector2(414, 0)
 	add_child(_status_label)
+
+	_result_label = RichTextLabel.new()
+	_result_label.bbcode_enabled = true
+	_result_label.fit_content = true
+	_result_label.scroll_active = false
+	_result_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_result_label.set_anchors_preset(Control.PRESET_CENTER)
+	_result_label.offset_left = -320
+	_result_label.offset_right = 320
+	_result_label.offset_top = -70
+	_result_label.visible = false
+	add_child(_result_label)
 
 	_toast_label = Label.new()
 	_toast_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -109,7 +131,7 @@ func _make_label(preset: int) -> RichTextLabel:
 
 func _controls_text() -> String:
 	return "\n".join([
-		"[b]MOBA prototype - combat sandbox[/b]",
+		"[b]MOBA prototype[/b]  [color=#ffd36b]%s[/color]" % _root.mode_name(),
 		"[color=#b9c2ce]WASD[/color]  move          [color=#b9c2ce]Mouse[/color] aim",
 		"[color=#b9c2ce]LMB[/color]   select + attack",
 		"[color=#b9c2ce]Q E R F[/color] abilities   [color=#b9c2ce]B[/color] recall",
@@ -121,6 +143,8 @@ func _controls_text() -> String:
 		"[color=#b9c2ce]F5[/color] to B base       [color=#b9c2ce]F6[/color] refill HP",
 		"[color=#b9c2ce]F7[/color] kill target     [color=#b9c2ce]F8[/color] kill enemies",
 		"[color=#b9c2ce]F9[/color] map debug       [color=#b9c2ce]F10[/color] combat debug",
+		"[color=#b9c2ce]F11[/color] switch mode    [color=#b9c2ce]F12[/color] destroy nexus",
+		"[color=#b9c2ce]Enter[/color] restart match",
 	])
 
 
@@ -220,9 +244,39 @@ func _sandbox_text() -> String:
 	var info := _director.describe()
 	var wave: float = info["next_wave"]
 	var wave_text := "off" if wave < 0.0 else "%.0fs" % wave
-	return "minions %d/%d   turrets %d   next wave %s" % [
-		info["minions_a"], info["minions_b"], info["turrets"], wave_text
+	return "minions %d/%d   turrets %d   next wave %s\n[right]%s[/right]" % [
+		info["minions_a"], info["minions_b"], info["turrets"], wave_text, _nexus_text()
 	]
+
+
+func _nexus_text() -> String:
+	var parts := PackedStringArray()
+	for nexus in _director.nexuses:
+		var color := COLOR_OK if nexus.team == _director.player_team else COLOR_BAD
+		if not nexus.is_alive():
+			parts.append("[color=%s]%s DOWN[/color]" % [COLOR_IDLE, nexus.display_label()])
+		else:
+			parts.append("[color=%s]%s %d%%[/color]" % [
+				color, nexus.display_label(), int(nexus.health.health_ratio() * 100.0)
+			])
+	return "  ".join(parts)
+
+
+func _on_match_ended(_outcome: int, winner_team: int) -> void:
+	var state := _director.match_state
+	var color := COLOR_OK if state.outcome == MatchState.Outcome.VICTORY else COLOR_BAD
+	_result_label.text = "\n".join([
+		"[center][font_size=96][color=%s]%s[/color][/font_size][/center]" % [color, state.banner_text()],
+		"[center]Team %s destroyed the enemy nexus after %s[/center]" % [
+			MapEnums.team_name(winner_team), _format_time(state.elapsed)
+		],
+		"[center][color=#b9c2ce]Enter[/color] restart    [color=#b9c2ce]F11[/color] switch mode[/center]",
+	])
+	_result_label.visible = true
+
+
+func _format_time(seconds: float) -> String:
+	return "%d:%02d" % [int(seconds) / 60, int(seconds) % 60]
 
 
 func _toast(message: String) -> void:

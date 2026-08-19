@@ -54,6 +54,7 @@ func build(layout: MapLayout, navigation: NavigationSetup) -> void:
 		_layers[layer] = holder
 
 	_draw_lanes()
+	_draw_structures()
 	_draw_camps()
 	_draw_turret_ranges()
 	_draw_spawns()
@@ -127,6 +128,19 @@ func _draw_lanes() -> void:
 		holder.add_child(river_line)
 
 
+## Nexus positions and minion spawns, which the solo arena relies on and the
+## three-lane map also benefits from.
+func _draw_structures() -> void:
+	var holder: Node3D = _layers[Layer.SPAWNS]
+	for nexus in _layout.nexuses:
+		var rim := PrototypeMeshes.ring(4.5, 0.3, PrototypeMeshes.team_color(nexus["team"]).lightened(0.3))
+		rim.name = "%s_Marker" % nexus["id"]
+		rim.position = MapShapes.to_world(nexus["position"], 0.5)
+		holder.add_child(rim)
+		_add_label(String(nexus["id"]), MapShapes.to_world(nexus["position"], 11.0),
+			PrototypeMeshes.team_color(nexus["team"]).lightened(0.4))
+
+
 func _draw_camps() -> void:
 	var holder: Node3D = _layers[Layer.CAMPS]
 	for camp in _layout.camps:
@@ -181,9 +195,9 @@ func _draw_objectives() -> void:
 
 func _draw_bounds() -> void:
 	var holder: Node3D = _layers[Layer.BOUNDS]
-	var h := _layout.play_field_half_size()
+	var e := _layout.play_half_extents()
 	var outline := PackedVector2Array([
-		Vector2(-h, -h), Vector2(h, -h), Vector2(h, h), Vector2(-h, h), Vector2(-h, -h)
+		Vector2(-e.x, -e.y), Vector2(e.x, -e.y), Vector2(e.x, e.y), Vector2(-e.x, e.y), Vector2(-e.x, -e.y)
 	])
 	var line := PrototypeMeshes.polyline(outline, COLOR_BOUNDS, 1.0)
 	line.name = "PlayFieldBounds"

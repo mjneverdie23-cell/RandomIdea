@@ -27,8 +27,10 @@ extends Resource
 @export_range(2, 40, 1) var route_samples: int = 12
 ## Lane fraction the column spawns at, measured from its own base.
 @export_range(0.02, 0.4, 0.01) var route_start: float = 0.14
-## Lane fraction the column marches to, measured from its own base.
-@export_range(0.5, 1.0, 0.01) var route_end: float = 0.97
+## Lane fraction the column marches to, measured from its own base. 1.0 is the
+## enemy base centre, which puts the last waypoint inside nexus aggro range so
+## a winning push actually finishes the game.
+@export_range(0.5, 1.0, 0.01) var route_end: float = 1.0
 
 @export_group("Safety")
 ## Hard cap so a long unattended run cannot fill the map with minions.

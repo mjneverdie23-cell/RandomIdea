@@ -25,6 +25,10 @@ var _direction: Vector2 = Vector2.ZERO
 var _vertical: float = 0.0
 var _facing: Vector3 = Vector3.FORWARD
 var _avoid_velocity: Vector3 = Vector3.ZERO
+## The navigation server rejects path queries until its first map sync, so a
+## destination asked for on the spawn frame is held until the map is live.
+var _navigation_ready: bool = false
+var _pending_destination: Variant = null
 var _dash_direction: Vector3 = Vector3.ZERO
 var _dash_speed: float = 0.0
 var _dash_time: float = 0.0
@@ -49,6 +53,23 @@ func setup(target_body: CharacterBody3D, stats_component: StatsComponent, use_ag
 		agent.max_speed = maxf(stats_component.value("move_speed"), 1.0)
 		body.add_child(agent)
 		agent.velocity_computed.connect(func(safe: Vector3) -> void: _avoid_velocity = safe)
+		_wait_for_navigation()
+	else:
+		_navigation_ready = true
+
+
+func _wait_for_navigation() -> void:
+	var tree := body.get_tree()
+	if tree == null:
+		_navigation_ready = true
+		return
+	await tree.physics_frame
+	await tree.physics_frame
+	_navigation_ready = true
+	if _pending_destination != null:
+		var point: Vector3 = _pending_destination
+		_pending_destination = null
+		move_to(point)
 
 
 func speed() -> float:
@@ -64,12 +85,17 @@ func set_direction(direction: Vector2) -> void:
 func move_to(point: Vector3) -> void:
 	if agent == null:
 		return
+	if not _navigation_ready:
+		_pending_destination = point
+		mode = Mode.IDLE
+		return
 	agent.target_position = point
 	mode = Mode.NAVIGATE
 
 
 func stop() -> void:
 	_direction = Vector2.ZERO
+	_pending_destination = null
 	mode = Mode.IDLE
 
 

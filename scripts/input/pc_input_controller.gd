@@ -13,6 +13,7 @@ extends Node
 ## B             recall
 ## Space         toggle camera lock
 ## Mouse wheel   zoom
+## Enter         restart the match
 ## F9            toggle the map debug view
 ##
 ## Abilities deliberately avoid W, A, S and D so no key ever means both "move"
@@ -63,6 +64,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_commands.request_camera_zoom(-1.0)
 	elif event.is_action_pressed("camera_zoom_out"):
 		_commands.request_camera_zoom(1.0)
+	elif event.is_action_pressed("restart_match"):
+		_commands.request_restart()
 	else:
 		for slot in ABILITY_ACTIONS:
 			if event.is_action_pressed(ABILITY_ACTIONS[slot]):

@@ -22,6 +22,10 @@ var jungles: Array[Dictionary] = []
 var camps: Array[Dictionary] = []
 var objectives: Array[Dictionary] = []
 var river: Dictionary = {}
+## Purely visual terrain props: {kind, position, radius, height}. They carry no
+## collision and no navigation meaning, so a layout can dress its terrain
+## without any builder learning about that map.
+var decor: Array[Dictionary] = []
 
 ## Union of these is walkable, minus the union of [member blocked_shapes].
 var walkable_shapes: Array[Dictionary] = []
@@ -57,6 +61,7 @@ func rebuild() -> void:
 	jungles.clear()
 	camps.clear()
 	objectives.clear()
+	decor.clear()
 	walkable_shapes.clear()
 	blocked_shapes.clear()
 	structure_shapes.clear()
@@ -430,15 +435,71 @@ func river_half_width_value() -> float:
 	return float(river["width"]) * 0.5 if not river.is_empty() else 0.0
 
 
+## Half width (X) and half length (Z) of the playable area. Square by default;
+## rectangular layouts such as [SoloLaneLayout] override this.
+func play_half_extents() -> Vector2:
+	return Vector2(config.map_half_size, config.map_half_size)
+
+
+## Play area plus the solid border the terrain builder rasterises.
+func outer_half_extents() -> Vector2:
+	return play_half_extents() + Vector2(config.map_border, config.map_border)
+
+
 func play_field_half_size() -> float:
-	return config.map_half_size
+	var extents := play_half_extents()
+	return maxf(extents.x, extents.y)
 
 
 func outer_half_size() -> float:
-	return config.map_half_size + config.map_border
+	var extents := outer_half_extents()
+	return maxf(extents.x, extents.y)
 
 
-## Axis-aligned bounds of the playable square on the XZ plane.
+## Axis-aligned bounds of the playable area on the XZ plane.
 func play_bounds() -> Rect2:
-	var h := play_field_half_size()
-	return Rect2(-h, -h, h * 2.0, h * 2.0)
+	var extents := play_half_extents()
+	return Rect2(-extents.x, -extents.y, extents.x * 2.0, extents.y * 2.0)
+
+
+# --- contract for map probes -------------------------------------------------
+
+## Identifiers this layout guarantees. A probe fails the map if one is missing.
+func required_ids() -> PackedStringArray:
+	var ids := PackedStringArray()
+	for collection in [bases, nexuses, spawn_points, lanes, turrets]:
+		for entry in collection:
+			ids.append(String(entry["id"]))
+	for entry in objectives:
+		ids.append(String(entry["id"]))
+	for entry in jungles:
+		ids.append(String(entry["id"]))
+	if not river.is_empty():
+		ids.append(String(river["id"]))
+	return ids
+
+
+## Everything a champion must be able to walk to from its own spawn. Structure
+## centres (turrets, nexuses) are solid on purpose and are left out.
+func reachability_targets() -> PackedStringArray:
+	var ids := PackedStringArray()
+	for entry in bases:
+		ids.append(String(entry["id"]))
+	for entry in spawn_points:
+		ids.append(String(entry["id"]))
+	for entry in lanes:
+		ids.append(String(entry["id"]))
+	for entry in objectives:
+		ids.append(String(entry["id"]))
+	for entry in jungles:
+		ids.append(String(entry["id"]))
+	for entry in camps:
+		ids.append(String(entry["id"]))
+	return ids
+
+
+## Where a team's minion wave enters the lane. Layouts with a dedicated minion
+## spawn override this; by default it is a fraction along the lane.
+func minion_spawn_point(team: int, lane: int, fallback_fraction: float) -> Vector2:
+	var fraction: float = fallback_fraction if team == MapEnums.Team.A else 1.0 - fallback_fraction
+	return lane_point(lane, fraction)

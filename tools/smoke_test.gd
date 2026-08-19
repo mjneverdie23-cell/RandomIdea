@@ -91,7 +91,7 @@ func _check_map() -> void:
 	_expect(int(description["camps"]) == 16, "expected 16 jungle camps")
 	_expect(int(description["turrets"]) >= 18, "expected at least 18 turrets")
 	_expect(int(description["wall_boxes"]) > 0, "no terrain walls were generated")
-	for id in MapProbe.REQUIRED_IDS:
+	for id in MapProbe.required_ids(map):
 		_expect(map.registry.has(id), "missing map identifier %s" % id)
 
 
@@ -350,6 +350,8 @@ func _isolate_arena() -> void:
 	for enemy in _root.director.enemy_champions:
 		if not is_instance_valid(enemy):
 			continue
+		if enemy.ai != null:
+			enemy.ai.enabled = false
 		enemy.targeting.clear_target()
 		enemy.teleport_to(enemy.spawn_point)
 		enemy.ai_destination = enemy.spawn_point

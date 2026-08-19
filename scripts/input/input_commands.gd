@@ -20,6 +20,7 @@ signal recall_cancelled()
 signal debug_toggle_requested()
 signal camera_lock_toggle_requested()
 signal camera_zoom_requested(delta: float)
+signal restart_requested()
 
 ## Desired movement on the XZ plane in world space, length 0..1.
 var move_direction: Vector2 = Vector2.ZERO
@@ -61,6 +62,11 @@ func request_camera_lock_toggle() -> void:
 
 func request_camera_zoom(delta: float) -> void:
 	camera_zoom_requested.emit(delta)
+
+
+## Restart the current match. Raised by the result screen or the Enter key.
+func request_restart() -> void:
+	restart_requested.emit()
 
 
 static func ability_name(slot: int) -> String:

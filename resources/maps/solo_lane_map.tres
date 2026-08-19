@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="SoloLaneConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/map/solo_lane_config.gd" id="1_config"]
+
+[resource]
+script = ExtResource("1_config")
+map_half_size = 27.0
+map_border = 7.0
+lane_width = 14.0
+lane_length = 54.0
+river_width = 0.0
+jungle_width = 0.0
+jungle_entrance_width = 2.0
+camp_radius = 1.0
+jungle_wall_radius = 0.0
+base_radius = 15.0
+nexus_offset = 6.0
+spawn_offset = 11.0
+turret_base_offset = 17.0
+turret_spacing = 20.0
+turret_reference_length = 54.0
+turret_range = 13.0
+turret_radius = 1.9
+turret_height = 7.0
+objective_radius = 4.0
+objective_offset = 5.0
+terrain_cell_size = 1.25
+wall_height = 5.0
+nav_cell_size = 0.25
+nav_cell_height = 0.25
+nav_agent_radius = 1.25
+nav_agent_height = 2.0
+nav_agent_max_climb = 0.5
+nav_agent_max_slope = 30.0
+map_half_length = 72.0
+side_clearing_count = 3
+side_clearing_radius = 6.5
+side_clearing_span = 26.0
+rock_count = 2
+rock_radius = 2.25
+minion_spawn_offset = 9.0
+inner_tower_offset = 17.0
+outer_tower_offset = 20.0

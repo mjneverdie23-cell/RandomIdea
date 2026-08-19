@@ -153,6 +153,9 @@ func _describe(unit: Node3D) -> String:
 			parts.append("respawn %.1fs" % unit.respawn_remaining())
 		else:
 			parts.append("%d/%d" % [int(unit.health.current), int(unit.health.maximum)])
+			var ai_state: String = unit.ai_state_name()
+			if not ai_state.is_empty():
+				parts.append(ai_state)
 			parts.append(_cooldown_text(unit))
 	elif unit.kind == Unit.Kind.MINION:
 		# Deliberately terse: thirty of these are on screen at once.

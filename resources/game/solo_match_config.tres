@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/combat/match_config.gd" id="1_script"]
 [ext_resource type="Resource" path="res://resources/units/champion_loadout.tres" id="2_player"]
 [ext_resource type="Resource" path="res://resources/units/enemy_loadout.tres" id="3_enemy"]
-[ext_resource type="Resource" path="res://resources/game/wave_config.tres" id="4_wave"]
+[ext_resource type="Resource" path="res://resources/game/solo_wave_config.tres" id="4_wave"]
 [ext_resource type="Resource" path="res://resources/units/turret_lane.tres" id="5_lane_turret"]
 [ext_resource type="Resource" path="res://resources/units/turret_nexus.tres" id="6_nexus_turret"]
 [ext_resource type="Resource" path="res://resources/units/nexus.tres" id="7_nexus"]
@@ -21,6 +21,6 @@ nexus_turret_stats = ExtResource("6_nexus_turret")
 turret_tier_health = PackedFloat32Array(1.3, 1.15, 1)
 spawn_turret_controllers = true
 enemy_champion_ai = true
-starting_enemy_champions = 2
+starting_enemy_champions = 1
 ai_push_target = 0.5
 combat_debug_on_start = true

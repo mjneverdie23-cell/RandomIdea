@@ -16,6 +16,9 @@ signal map_built(controller: MapController)
 ## Map description. When left empty a default configuration is created, so the
 ## scene is playable out of the box.
 @export var config: MapConfig
+## [MapLayout] subclass that turns the config into geometry. Left empty it uses
+## the three-lane [MapLayout]; a game mode supplies its own for another map.
+@export var layout_script: Script
 @export var build_on_ready: bool = true
 @export var start_with_debug_visible: bool = false
 
@@ -47,7 +50,7 @@ func is_built() -> bool:
 func build() -> void:
 	if config == null:
 		config = MapConfig.new()
-	layout = MapLayout.new(config)
+	layout = _create_layout()
 	registry.clear()
 	_ensure_children()
 
@@ -58,7 +61,7 @@ func build() -> void:
 	objectives.build(layout, registry)
 	spawns.build(layout, registry)
 
-	navigation.configure(config)
+	navigation.configure(layout)
 	navigation.rebuild()
 
 	debug_renderer.build(layout, navigation)
@@ -66,6 +69,17 @@ func build() -> void:
 
 	_built = true
 	map_built.emit(self)
+
+
+## Instantiates the configured layout, falling back to the three-lane default.
+func _create_layout() -> MapLayout:
+	if layout_script == null:
+		return MapLayout.new(config)
+	var created: Variant = layout_script.new(config)
+	if created is MapLayout:
+		return created
+	push_error("MapController: layout_script does not produce a MapLayout; using the default.")
+	return MapLayout.new(config)
 
 
 func _ensure_children() -> void:

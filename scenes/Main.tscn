@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/game_root.gd" id="1_root"]
 [ext_resource type="Script" path="res://scripts/map/map_controller.gd" id="2_map"]
@@ -10,7 +10,8 @@
 [ext_resource type="Script" path="res://scripts/game/game_director.gd" id="8_director"]
 [ext_resource type="Script" path="res://scripts/input/dev_input_controller.gd" id="9_dev"]
 [ext_resource type="Script" path="res://scripts/game/combat_debug_overlay.gd" id="10_combatdbg"]
-[ext_resource type="Resource" path="res://resources/game/match_config.tres" id="11_match"]
+[ext_resource type="Resource" path="res://resources/modes/full_moba.tres" id="12_full"]
+[ext_resource type="Resource" path="res://resources/modes/solo_lane.tres" id="13_solo"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.145098, 0.203922, 0.290196, 1)
@@ -34,6 +35,7 @@ tonemap_white = 1.4
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_root")
+modes = [ExtResource("12_full"), ExtResource("13_solo")]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Env")
@@ -47,6 +49,7 @@ directional_shadow_max_distance = 240.0
 [node name="Map" type="Node3D" parent="."]
 script = ExtResource("2_map")
 config = ExtResource("7_mapcfg")
+build_on_ready = false
 
 [node name="Units" type="Node3D" parent="."]
 
@@ -69,7 +72,6 @@ script = ExtResource("9_dev")
 
 [node name="GameDirector" type="Node3D" parent="."]
 script = ExtResource("8_director")
-config = ExtResource("11_match")
 
 [node name="CombatDebug" type="Node3D" parent="."]
 script = ExtResource("10_combatdbg")

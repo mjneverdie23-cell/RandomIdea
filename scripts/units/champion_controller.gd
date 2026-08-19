@@ -20,6 +20,8 @@ signal target_selected(target: Node3D)
 @export var ai_enabled: bool = false
 
 var abilities: AbilityComponent
+## Set for AI champions; player champions leave it null and read the bus.
+var ai: ChampionAi
 var commands: InputCommands
 ## Fountain position used by recall and respawn.
 var spawn_point: Vector3 = Vector3.ZERO
@@ -89,8 +91,8 @@ func _build_selection_ring() -> void:
 
 func _think(delta: float) -> void:
 	abilities.tick(delta)
-	# Validates the current target (dropping dead ones) and, for AI champions,
-	# acquires a new one.
+	# Drops dead or invalid targets. Acquisition belongs to the brain (AI) or to
+	# the click handler (player), so nothing re-targets behind their back.
 	targeting.tick(delta, loadout.ai_aggro_range if loadout != null else 16.0)
 	if ai_enabled:
 		_think_ai(delta)
@@ -133,33 +135,31 @@ func _chase_selected_target() -> void:
 	movement.move_to(target.global_position)
 
 
-func _think_ai(_delta: float) -> void:
-	if targeting.is_target_valid(INF):
-		var target := targeting.current_target
-		if targeting.distance_to_target() <= attack_range():
-			movement.stop()
-			movement.face_towards(target.global_position)
-		else:
-			movement.move_to(target.global_position)
-		_maybe_cast_ai_ability()
+## Attaches a brain. Without one an AI champion just holds its ground.
+func attach_ai(brain: ChampionAi) -> void:
+	ai = brain
+	ai_enabled = true
+	targeting.auto_acquire = false  # the brain decides what to shoot
+	add_child(brain)
+
+
+func ai_state_name() -> String:
+	return ai.state_name() if ai != null else ""
+
+
+func _think_ai(delta: float) -> void:
+	if ai != null:
+		ai.think(delta)
 		return
-	if ai_destination != Vector3.ZERO:
+	# No brain attached: hold position and shoot whatever wanders into range.
+	targeting.tick(delta, attack_range())
+	if targeting.is_target_valid(attack_range()):
+		movement.stop()
+		movement.face_towards(targeting.current_target.global_position)
+	elif ai_destination != Vector3.ZERO:
 		movement.move_to(ai_destination)
 	else:
 		movement.stop()
-
-
-## Fires whatever is off cooldown at the current target. Deliberately dumb.
-func _maybe_cast_ai_ability() -> void:
-	var target := targeting.current_target
-	for slot in abilities.abilities.size():
-		var ability := abilities.ability_for(slot)
-		if ability == null or not abilities.is_ready(slot):
-			continue
-		if ability.cast_range > 0.0 and targeting.distance_to_target() > ability.cast_range:
-			continue
-		abilities.try_cast(slot, target.global_position)
-		return
 
 
 func _auto_attack() -> void:

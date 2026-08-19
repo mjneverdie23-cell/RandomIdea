@@ -15,7 +15,8 @@ var _config: MapConfig
 var _baked := false
 
 
-func configure(config: MapConfig) -> void:
+func configure(layout: MapLayout) -> void:
+	var config := layout.config
 	_config = config
 	var mesh := NavigationMesh.new()
 	mesh.cell_size = config.nav_cell_size
@@ -38,9 +39,9 @@ func configure(config: MapConfig) -> void:
 	mesh.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN
 	mesh.geometry_source_group_name = TerrainBuilder.NAV_SOURCE_GROUP
 
-	var extent := config.map_half_size + config.map_border + 4.0
+	var extents := layout.outer_half_extents() + Vector2(4.0, 4.0)
 	mesh.filter_baking_aabb = AABB(
-		Vector3(-extent, -4.0, -extent), Vector3(extent * 2.0, 8.0, extent * 2.0)
+		Vector3(-extents.x, -4.0, -extents.y), Vector3(extents.x * 2.0, 8.0, extents.y * 2.0)
 	)
 
 	navigation_mesh = mesh

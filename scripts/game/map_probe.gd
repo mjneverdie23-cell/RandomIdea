@@ -7,34 +7,15 @@ extends RefCounted
 ## acceptance criteria: every gameplay space is on the navigation mesh and
 ## reachable from a team's spawn without any hardcoded route.
 
-## Identifiers a playable map must expose, checked on every run.
-const REQUIRED_IDS := [
-	"TEAM_A_SPAWN", "TEAM_B_SPAWN",
-	"TEAM_A_NEXUS", "TEAM_B_NEXUS",
-	"TEAM_A_BASE", "TEAM_B_BASE",
-	"TOP_LANE", "MID_LANE", "BOT_LANE", "RIVER",
-	"TOP_OUTER_TURRET_A", "TOP_OUTER_TURRET_B",
-	"MID_OUTER_TURRET_A", "MID_OUTER_TURRET_B",
-	"BOT_OUTER_TURRET_A", "BOT_OUTER_TURRET_B",
-	"TOP_OBJECTIVE", "BOT_OBJECTIVE",
-	"JUNGLE_A_TOP", "JUNGLE_A_BOT", "JUNGLE_B_TOP", "JUNGLE_B_BOT",
-]
+## Identifiers a playable map must expose. Each [MapLayout] declares its own,
+## so this probe works on any map the layout layer can describe.
+static func required_ids(map: MapController) -> PackedStringArray:
+	return map.layout.required_ids()
 
 
 ## Every destination a champion must be able to walk to from its own spawn.
 static func reachability_targets(map: MapController) -> PackedStringArray:
-	var ids := PackedStringArray([
-		# Structure centres (nexus, turrets) are solid on purpose, so the enemy
-		# base is probed through its open ground and fountain.
-		"TEAM_B_SPAWN", "TEAM_B_BASE", "TOP_OBJECTIVE", "BOT_OBJECTIVE",
-	])
-	for lane in [MapEnums.Lane.TOP, MapEnums.Lane.MID, MapEnums.Lane.BOT]:
-		ids.append("%s_LANE" % MapEnums.lane_name(lane))
-	for jungle in map.layout.jungles:
-		ids.append(String(jungle["id"]))
-	for camp in map.layout.camps:
-		ids.append(String(camp["id"]))
-	return ids
+	return map.layout.reachability_targets()
 
 
 ## Runs the full check. Returns a report dictionary; [code]ok[/code] is true
@@ -50,14 +31,15 @@ static func run(map: MapController, tolerance: float = 2.5) -> Dictionary:
 		"summary": "",
 	}
 
-	for id in REQUIRED_IDS:
+	for id in required_ids(map):
 		if not map.registry.has(id):
 			report["missing_ids"].append(id)
 			report["ok"] = false
 
-	var origin: Variant = _navigable_or_null(map, map.position_of("TEAM_A_SPAWN"), tolerance)
+	var spawn_id := map.spawns.spawn_id_for_team(MapEnums.Team.A)
+	var origin: Variant = _navigable_or_null(map, map.position_of(spawn_id), tolerance)
 	if origin == null:
-		report["off_navmesh"].append("TEAM_A_SPAWN")
+		report["off_navmesh"].append(spawn_id)
 		report["ok"] = false
 		report["summary"] = "Team A spawn is not on the navigation mesh."
 		return report
@@ -77,9 +59,10 @@ static func run(map: MapController, tolerance: float = 2.5) -> Dictionary:
 			report["unreachable"].append(id)
 			report["ok"] = false
 
-	report["summary"] = "%d/%d destinations reachable from TEAM_A_SPAWN (%d nav polygons)." % [
+	report["summary"] = "%d/%d destinations reachable from %s (%d nav polygons)." % [
 		report["checked"] - report["unreachable"].size() - report["off_navmesh"].size(),
 		report["checked"],
+		spawn_id,
 		report["nav_polygons"],
 	]
 	return report

@@ -115,8 +115,12 @@ func lane_route(team: int, lane: int) -> PackedVector3Array:
 	var out := PackedVector3Array()
 	if map == null or map.layout == null:
 		return out
+	# The first waypoint is where the layout says minions enter the world; the
+	# rest are sampled along the lane towards the enemy base.
+	var entry := map.layout.minion_spawn_point(team, lane, config.route_start)
+	out.append(Vector3(entry.x, 0.0, entry.y))
 	var samples: int = maxi(config.route_samples, 2)
-	for i in samples:
+	for i in range(1, samples):
 		var progress := float(i) / float(samples - 1)
 		var fraction: float = lerpf(config.route_start, config.route_end, progress)
 		if team == MapEnums.Team.B:

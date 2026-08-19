@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="GameModeConfig" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/game_mode_config.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/maps/default_map.tres" id="2_map"]
+[ext_resource type="Resource" path="res://resources/game/match_config.tres" id="3_match"]
+
+[resource]
+script = ExtResource("1_script")
+id = "full_moba"
+display_name = "Full MOBA"
+kind = 0
+map_config = ExtResource("2_map")
+match_config = ExtResource("3_match")
