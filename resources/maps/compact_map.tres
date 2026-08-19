@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="MapConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/map/map_config.gd" id="1_config"]
+
+[resource]
+script = ExtResource("1_config")
+map_half_size = 44.0
+map_border = 6.0
+lane_width = 10.0
+lane_length = 31.0
+river_width = 11.0
+jungle_width = 7.5
+jungle_entrance_width = 6.0
+camp_radius = 2.6
+jungle_wall_radius = 1.8
+base_radius = 12.0
+nexus_offset = 5.0
+spawn_offset = 8.5
+turret_base_offset = 13.0
+turret_spacing = 15.0
+turret_reference_length = 62.0
+turret_range = 10.0
+turret_radius = 1.5
+turret_height = 5.5
+objective_radius = 8.0
+objective_offset = 28.0
+terrain_cell_size = 1.25
+wall_height = 5.0
+nav_cell_size = 0.25
+nav_cell_height = 0.25
+nav_agent_radius = 1.25
+nav_agent_height = 2.0
+nav_agent_max_climb = 0.5
+nav_agent_max_slope = 30.0
