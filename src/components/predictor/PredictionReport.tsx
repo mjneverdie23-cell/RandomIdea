@@ -1,6 +1,6 @@
 import { ChampionArt } from '../ChampionArt.tsx';
 import { ROLE_SHORT, type Side } from '../../domain/types.ts';
-import type { Notice, Prediction, SideScore } from '../../predictor/types.ts';
+import type { Notice, PickLine, Prediction, SideScore, WinLoss } from '../../predictor/types.ts';
 
 /**
  * Percentage that never claims a certainty it doesn't have.
@@ -293,9 +293,10 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
             </div>
             <div className="lane-stat">
               <span className="lane-wr">{(pick.winRate * 100).toFixed(0)}%</span>
-              <span className="dim">{pick.note}</span>
+              <span className="dim">{scopeLabel(pick)}</span>
               {pick.player && <span className="lane-player">{pick.player}</span>}
             </div>
+            <LaneRecords pick={pick} />
             {(pick.counters.length > 0 || pick.counteredBy.length > 0 || pick.synergy.length > 0) && (
               <div className="lane-edges">
                 <EdgeList label="counters" tone="good" champions={pick.counters} />
@@ -307,6 +308,79 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
         </article>
       ))}
     </div>
+  );
+}
+
+/** Where the scored number came from, in the reader's words. */
+function scopeLabel(pick: PickLine): string {
+  switch (pick.scope) {
+    case 'split':
+      return pick.splitLabel ? `${pick.splitLabel} form` : 'current split';
+    case 'career':
+      return pick.splitRecord ? 'career — split sample too thin' : 'career — first time this split';
+    case 'team':
+      return 'team record, roster unknown';
+    default:
+      return 'first-time pick';
+  }
+}
+
+/**
+ * Both records side by side, split and career.
+ *
+ * Scoring uses the narrowest record it has, but the number it discards is
+ * exactly the one a reader wants: a player who is 50% on Yone across his career
+ * and has not touched it this split reads very differently from one who is 50%
+ * on it right now. Both are shown, with the scored one marked, so the tally can
+ * be checked rather than taken on faith.
+ */
+function LaneRecords({ pick }: { pick: PickLine }) {
+  if (!pick.splitRecord && !pick.careerRecord) {
+    return <p className="lane-note dim">{pick.note}</p>;
+  }
+  return (
+    <div className="lane-records">
+      <RecordChip
+        label={pick.splitLabel ?? 'this split'}
+        record={pick.splitRecord}
+        scored={pick.scope === 'split'}
+        empty="not picked yet"
+      />
+      <RecordChip
+        label="career"
+        record={pick.careerRecord}
+        scored={pick.scope === 'career'}
+        empty="none"
+      />
+    </div>
+  );
+}
+
+function RecordChip({
+  label,
+  record,
+  scored,
+  empty,
+}: {
+  label: string;
+  record: WinLoss | null;
+  scored: boolean;
+  empty: string;
+}) {
+  return (
+    <span className={`lane-record${scored ? ' is-scored' : ''}`}>
+      <span className="lane-record-label">{label}</span>
+      {record && record.games > 0 ? (
+        <>
+          <strong>{Math.round((record.wins / record.games) * 100)}%</strong>
+          <span className="dim">
+            {record.wins}W/{record.games}
+          </span>
+        </>
+      ) : (
+        <span className="dim">{empty}</span>
+      )}
+    </span>
   );
 }
 

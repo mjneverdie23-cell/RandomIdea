@@ -11,14 +11,14 @@ import {
   behaviorTendencies,
   championWinRate,
   predict,
+  splitSubject,
   UNPLAYED_WIN_RATE,
-  recordKey,
   seriesWinProbability,
 } from './engine.ts';
 import { emptyPredictorModel } from './derive.ts';
 import { makeChampion } from '../domain/champions.ts';
 import { ROLES, type Champion, type Role } from '../domain/types.ts';
-import type { GoldTempo, PredictionInput, PredictorModel, TeamBehavior } from './types.ts';
+import type { GoldTempo, PredictionInput, PredictorModel, TeamBehavior, WinLoss } from './types.ts';
 
 const champ = (name: string): Champion => makeChampion(name)!;
 
@@ -45,19 +45,30 @@ function input(overrides: Partial<PredictionInput> = {}): PredictionInput {
   };
 }
 
-/** Give one team a perfect record on every champion in its draft. */
-function withRecords(
-  team: string,
-  competition: string,
-  draft: Champion[],
-  wins: number,
-  games: number,
-): Map<string, { wins: number; games: number }> {
-  const map = new Map<string, { wins: number; games: number }>();
-  ROLES.forEach((role, index) => {
-    map.set(recordKey(competition, team, role, draft[index]!.id), { wins, games });
-  });
-  return map;
+/** The starter a fixture team fields in a role. */
+const starter = (team: string, role: Role): string => `${team} ${role}`;
+
+/**
+ * Records are keyed by player, so a fixture needs a roster to be readable at
+ * all: without one the engine has nobody to look up. Each named team fields a
+ * starter per role and carries the same record on every champion in its draft.
+ */
+function withHistory(
+  ...entries: [team: string, draft: Champion[], wins: number, games: number][]
+): Partial<PredictorModel> {
+  const playerSplitRecord = new Map<string, WinLoss>();
+  const rosters = new Map<string, Partial<Record<Role, string>>>();
+
+  for (const [team, draft, wins, games] of entries) {
+    const roster: Partial<Record<Role, string>> = {};
+    ROLES.forEach((role, index) => {
+      const player = starter(team, role);
+      roster[role] = player;
+      playerSplitRecord.set(anywhereKey(player, role, draft[index]!.id), { wins, games });
+    });
+    rosters.set(team.toLowerCase(), roster);
+  }
+  return { playerSplitRecord, rosters };
 }
 
 /** A team with a game count but every read too thin to report. */
@@ -121,42 +132,115 @@ describe('seriesWinProbability', () => {
 });
 
 describe('championWinRate', () => {
-  it('uses the selected competition when the team has played there', () => {
-    const m = model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 3, 4) });
-    const read = championWinRate(m, 'LCK', 'Blue Team', DRAFT_A[0]!, 'top');
+  const TOP = DRAFT_A[0]!;
+  /** A team whose top laner is a named player, so records have an owner. */
+  const rosterOnly = (team: string, player: string): Map<string, Partial<Record<Role, string>>> =>
+    new Map([[team.toLowerCase(), { top: player }]]);
+
+  it('scores from what the starter has done this split', () => {
+    const m = model(withHistory(['Blue Team', DRAFT_A, 3, 4]));
+    const read = championWinRate(m, 'Blue Team', 'top', TOP);
     expect(read.winRate).toBe(0.75);
-    expect(read.scope).toBe('competition');
+    expect(read.scope).toBe('split');
+    expect(read.player).toBe(starter('Blue Team', 'top'));
     expect(read.note).toContain('3W/4');
   });
 
-  it('falls back to the full history rather than reporting a bare 50%', () => {
-    const anywhere = new Map([
-      [anywhereKey('Blue Team', 'top', DRAFT_A[0]!.id), { wins: 8, games: 10 }],
-    ]);
-    const m = model({ championRecordAnywhere: anywhere });
-    const read = championWinRate(m, 'WORLDS', 'Blue Team', DRAFT_A[0]!, 'top');
+  it('falls back to the career record when the split has no games yet', () => {
+    const m = model({
+      rosters: rosterOnly('Blue Team', 'Faker'),
+      playerCareerRecord: new Map([[anywhereKey('Faker', 'top', TOP.id), { wins: 8, games: 10 }]]),
+    });
+    const read = championWinRate(m, 'Blue Team', 'top', TOP);
     expect(read.winRate).toBe(0.8);
-    expect(read.scope).toBe('anywhere');
-    expect(read.note).toContain('all competitions');
+    expect(read.scope).toBe('career');
+    expect(read.note).toContain('first time this split');
+  });
+
+  it('reports both records, whichever one it scored from', () => {
+    // 50% on it last split, untouched this one: the report needs both numbers.
+    const m = model({
+      rosters: rosterOnly('Blue Team', 'Faker'),
+      playerCareerRecord: new Map([[anywhereKey('Faker', 'top', TOP.id), { wins: 5, games: 10 }]]),
+    });
+    const read = championWinRate(m, 'Blue Team', 'top', TOP);
+    expect(read.careerRecord).toEqual({ wins: 5, games: 10 });
+    expect(read.splitRecord).toBeNull();
+
+    const both = model({
+      rosters: rosterOnly('Blue Team', 'Faker'),
+      playerSplitRecord: new Map([[anywhereKey('Faker', 'top', TOP.id), { wins: 2, games: 2 }]]),
+      playerCareerRecord: new Map([[anywhereKey('Faker', 'top', TOP.id), { wins: 7, games: 12 }]]),
+    });
+    const read2 = championWinRate(both, 'Blue Team', 'top', TOP);
+    expect(read2.winRate).toBe(1);
+    expect(read2.splitRecord).toEqual({ wins: 2, games: 2 });
+    expect(read2.careerRecord).toEqual({ wins: 7, games: 12 });
+  });
+
+  it('does not let a single split game overwrite a career', () => {
+    // One loss this split is 0%, which would wipe out an 8-12 career record.
+    const m = model({
+      rosters: rosterOnly('Blue Team', 'Faker'),
+      playerSplitRecord: new Map([[anywhereKey('Faker', 'top', TOP.id), { wins: 0, games: 1 }]]),
+      playerCareerRecord: new Map([[anywhereKey('Faker', 'top', TOP.id), { wins: 8, games: 12 }]]),
+    });
+    const read = championWinRate(m, 'Blue Team', 'top', TOP);
+    expect(read.scope).toBe('career');
+    expect(read.winRate).toBeCloseTo(8 / 12, 10);
+    expect(read.note).toContain('only 1 this split');
+    // Still reported, so the reader sees why the career number was used.
+    expect(read.splitRecord).toEqual({ wins: 0, games: 1 });
+
+    // A second game clears the bar and the split takes over.
+    m.playerSplitRecord.set(anywhereKey('Faker', 'top', TOP.id), { wins: 0, games: 2 });
+    expect(championWinRate(m, 'Blue Team', 'top', TOP).scope).toBe('split');
+  });
+
+  it('names the split the player is actually in', () => {
+    const m = model({
+      rosters: rosterOnly('BLG', 'Bin'),
+      currentSplitOf: new Map([[splitSubject('player', 'Bin'), '2026|Split 3']]),
+      playerSplitRecord: new Map([[anywhereKey('Bin', 'top', TOP.id), { wins: 3, games: 4 }]]),
+    });
+    const read = championWinRate(m, 'BLG', 'top', TOP);
+    expect(read.splitLabel).toBe('Split 3');
+    expect(read.note).toContain('in Split 3');
+  });
+
+  it('ignores the departed player after a roster change', () => {
+    // Zeus went 0-4 on this champion; Doran, who now starts, is 3-4. The old
+    // number must not follow the jersey.
+    const records = new Map([
+      [anywhereKey('Zeus', 'top', TOP.id), { wins: 0, games: 4 }],
+      [anywhereKey('Doran', 'top', TOP.id), { wins: 3, games: 4 }],
+    ]);
+    const m = model({ rosters: rosterOnly('T1', 'Doran'), playerSplitRecord: records });
+    const read = championWinRate(m, 'T1', 'top', TOP);
+    expect(read.winRate).toBe(0.75);
+    expect(read.player).toBe('Doran');
   });
 
   it('credits a full win rate to a champion with no recorded games', () => {
     // A pro pulling out an unplayed champion has prepared it; nobody
     // first-times one on stage.
-    const read = championWinRate(model(), 'LCK', 'Blue Team', DRAFT_A[0]!, 'top');
+    const read = championWinRate(model(), 'Blue Team', 'top', TOP);
     expect(read.winRate).toBe(UNPLAYED_WIN_RATE);
     expect(read.winRate).toBe(1);
     expect(read.scope).toBe('none');
     expect(read.note).toContain('first-time pick');
   });
 
-  it('does not treat a champion played elsewhere as first-time', () => {
-    const anywhere = new Map([
-      [anywhereKey('Blue Team', 'top', DRAFT_A[0]!.id), { wins: 1, games: 4 }],
-    ]);
-    const read = championWinRate(model({ championRecordAnywhere: anywhere }), 'WORLDS', 'Blue Team', DRAFT_A[0]!, 'top');
+  it('uses the team record only when the roster is unknown', () => {
+    const teamRecord = new Map([[anywhereKey('Blue Team', 'top', TOP.id), { wins: 1, games: 4 }]]);
+    const read = championWinRate(model({ teamCareerRecord: teamRecord }), 'Blue Team', 'top', TOP);
     expect(read.winRate).toBe(0.25);
-    expect(read.scope).toBe('anywhere');
+    expect(read.scope).toBe('team');
+    expect(read.player).toBeNull();
+
+    // With a starter identified, their own blank record wins over the team's.
+    const named = model({ rosters: rosterOnly('Blue Team', 'Doran'), teamCareerRecord: teamRecord });
+    expect(championWinRate(named, 'Blue Team', 'top', TOP).scope).toBe('none');
   });
 });
 
@@ -174,7 +258,7 @@ describe('predict — point tally', () => {
   it('ranks a played champion below an unplayed one when the record is poor', () => {
     // Red's picks are all first-time (1.00 each); blue's are known and bad.
     const result = predict(
-      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 1, 10) }),
+      model(withHistory(['Blue Team', DRAFT_A, 1, 10])),
       input(),
     );
     expect(result.blue.winRateBase).toBeCloseTo(0.5, 10);
@@ -184,12 +268,7 @@ describe('predict — point tally', () => {
 
   it('favours the team with the stronger champion history', () => {
     const result = predict(
-      model({
-        championRecord: new Map([
-          ...withRecords('Blue Team', 'LCK', DRAFT_A, 9, 10),
-          ...withRecords('Red Team', 'LCK', DRAFT_B, 3, 10),
-        ]),
-      }),
+      model(withHistory(['Blue Team', DRAFT_A, 9, 10], ['Red Team', DRAFT_B, 3, 10])),
       input(),
     );
     expect(result.blue.winRateBase).toBeCloseTo(4.5, 10);
@@ -200,7 +279,7 @@ describe('predict — point tally', () => {
 
   it('caps the win-rate base at one point per lane', () => {
     const result = predict(
-      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 10, 10) }),
+      model(withHistory(['Blue Team', DRAFT_A, 10, 10])),
       input(),
     );
     expect(result.blue.winRateBase).toBe(5);
@@ -380,10 +459,7 @@ describe('predict — point tally', () => {
     const result = predict(
       model({
         metaByRole,
-        championRecord: new Map([
-          ...withRecords('Blue Team', 'LCK', DRAFT_A, 10, 10),
-          ...withRecords('Red Team', 'LCK', DRAFT_B, 2, 10),
-        ]),
+        ...withHistory(['Blue Team', DRAFT_A, 10, 10], ['Red Team', DRAFT_B, 2, 10]),
       }),
       input({ blue: { ...input().blue, motivation: 'tank incentive' } }),
     );
@@ -394,7 +470,7 @@ describe('predict — point tally', () => {
     const metaByRole = new Map<Role, Set<string>>();
     ROLES.forEach((role, index) => metaByRole.set(role, new Set([DRAFT_A[index]!.id])));
     const result = predict(
-      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 8, 10), metaByRole }),
+      model({ ...withHistory(['Blue Team', DRAFT_A, 8, 10]), metaByRole }),
       input(),
     );
     const { blue } = result;
@@ -418,7 +494,7 @@ describe('predict — series probabilities', () => {
   });
 
   it('accounts for games already won', () => {
-    const m = model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 9, 10) });
+    const m = model(withHistory(['Blue Team', DRAFT_A, 9, 10]));
     const level = predict(m, input({ seriesLength: 'BO5' }));
     const ahead = predict(m, input({ seriesLength: 'BO5', scoreBlue: 2, scoreRed: 0 }));
     expect(ahead.needBlue).toBe(1);
@@ -427,7 +503,7 @@ describe('predict — series probabilities', () => {
 
   it('keeps the two sides complementary', () => {
     const result = predict(
-      model({ championRecord: withRecords('Blue Team', 'LCK', DRAFT_A, 7, 10) }),
+      model(withHistory(['Blue Team', DRAFT_A, 7, 10])),
       input({ seriesLength: 'BO5', scoreBlue: 1, scoreRed: 1 }),
     );
     expect(result.gameProbBlue + result.gameProbRed).toBeCloseTo(1, 10);
@@ -665,13 +741,12 @@ describe('predict — early-game gold tempo', () => {
 describe('predict — first-time picks', () => {
   it('rewards the side that pulled out an unplayed champion', () => {
     // Both sides have a solid record on four lanes; blue's mid is brand new.
-    const known = new Map([
-      ...withRecords('Blue Team', 'LCK', DRAFT_A, 6, 10),
-      ...withRecords('Red Team', 'LCK', DRAFT_B, 6, 10),
-    ]);
-    known.delete(recordKey('LCK', 'Blue Team', 'mid', DRAFT_A[2]!.id));
+    const known = withHistory(['Blue Team', DRAFT_A, 6, 10], ['Red Team', DRAFT_B, 6, 10]);
+    known.playerSplitRecord!.delete(
+      anywhereKey(starter('Blue Team', 'mid'), 'mid', DRAFT_A[2]!.id),
+    );
 
-    const result = predict(model({ championRecord: known }), input());
+    const result = predict(model(known), input());
     const surprise = result.blue.picks.find((pick) => pick.role === 'mid')!;
     expect(surprise.scope).toBe('none');
     expect(surprise.winRate).toBe(1);

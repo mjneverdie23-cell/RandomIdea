@@ -7,7 +7,7 @@ import {
   latestSeason,
   streakOf,
 } from './derive.ts';
-import { anywhereKey, recordKey } from './engine.ts';
+import { anywhereKey, splitSubject } from './engine.ts';
 import { makeChampion } from '../domain/champions.ts';
 import { ROLES, type Game, type GoldDiffTrack, type Side } from '../domain/types.ts';
 
@@ -23,7 +23,11 @@ interface GameSpec {
   gameNumber?: number;
   competition?: Game['competition'];
   season?: string;
+  split?: string;
   patch?: string;
+  /** Starter names in role order; defaults to `<team>-<role>`. */
+  bluePlayers?: string[];
+  redPlayers?: string[];
   seriesFormat?: Game['seriesFormat'];
   blueDraft?: string[];
   redDraft?: string[];
@@ -38,14 +42,20 @@ const DEFAULT_BLUE = ['Aatrox', 'Viego', 'Azir', 'Jinx', 'Thresh'];
 const DEFAULT_RED = ['Gnar', 'Sejuani', 'Orianna', 'Ezreal', 'Nautilus'];
 
 function makeGame(spec: GameSpec): Game {
-  const build = (side: Side, teamName: string, draft: string[], gold: GoldDiffTrack | null) => ({
+  const build = (
+    side: Side,
+    teamName: string,
+    draft: string[],
+    gold: GoldDiffTrack | null,
+    names: string[] | undefined,
+  ) => ({
     side,
     teamName,
     teamId: null,
     tag: teamName.slice(0, 3).toUpperCase(),
     players: ROLES.map((role, index) => ({
       role,
-      playerName: `${teamName}-${role}`,
+      playerName: names?.[index] ?? `${teamName}-${role}`,
       playerId: null,
       champion: makeChampion(draft[index]!)!,
     })),
@@ -77,15 +87,15 @@ function makeGame(spec: GameSpec): Game {
     sourceLeague: spec.competition ?? 'LCK',
     tournamentLabel: 'Test',
     season: spec.season ?? '2026',
-    split: 'Spring',
+    split: spec.split ?? 'Spring',
     date: new Date(START + spec.day * DAY + (spec.hour ?? 0) * 3600_000).toISOString(),
     patch: spec.patch ?? '16.01',
     stage: { kind: 'regular', label: 'Regular Season', elimination: false },
     seriesFormat: spec.seriesFormat ?? 'BO3',
     seriesFormatInferred: true,
     gameNumber: spec.gameNumber ?? 1,
-    blue: build('blue', spec.blue, spec.blueDraft ?? DEFAULT_BLUE, blueGold),
-    red: build('red', spec.red, spec.redDraft ?? DEFAULT_RED, redGold),
+    blue: build('blue', spec.blue, spec.blueDraft ?? DEFAULT_BLUE, blueGold, spec.bluePlayers),
+    red: build('red', spec.red, spec.redDraft ?? DEFAULT_RED, redGold, spec.redPlayers),
     winner: spec.winner,
     durationSeconds: 1800,
     demo: false,
@@ -187,31 +197,103 @@ describe('deriveMeta', () => {
 });
 
 describe('buildPredictorModel — champion records', () => {
+  const aatrox = makeChampion('Aatrox')!;
   const games = [
     makeGame({ id: 'a', blue: 'T1', red: 'GenG', winner: 'blue', day: 0 }),
     makeGame({ id: 'b', blue: 'T1', red: 'GenG', winner: 'red', day: 5 }),
     makeGame({ id: 'c', blue: 'T1', red: 'GenG', winner: 'blue', day: 40, competition: 'WORLDS' }),
   ];
 
-  it('counts wins per competition, team, role and champion', () => {
+  it('counts wins per player, role and champion', () => {
     const model = buildPredictorModel(games);
-    const aatrox = makeChampion('Aatrox')!;
-    expect(model.championRecord.get(recordKey('LCK', 'T1', 'top', aatrox.id))).toEqual({
-      wins: 1,
-      games: 2,
-    });
-    expect(model.championRecord.get(recordKey('WORLDS', 'T1', 'top', aatrox.id))).toEqual({
-      wins: 1,
-      games: 1,
+    expect(model.playerCareerRecord.get(anywhereKey('T1-top', 'top', aatrox.id))).toEqual({
+      wins: 2,
+      games: 3,
     });
   });
 
-  it('also keeps a competition-agnostic record', () => {
+  it('keeps a team-level record for when the roster is unknown', () => {
     const model = buildPredictorModel(games);
-    const aatrox = makeChampion('Aatrox')!;
-    expect(model.championRecordAnywhere.get(anywhereKey('T1', 'top', aatrox.id))).toEqual({
+    expect(model.teamCareerRecord.get(anywhereKey('T1', 'top', aatrox.id))).toEqual({
       wins: 2,
       games: 3,
+    });
+  });
+
+  it('scopes the split record to the split a player is currently in', () => {
+    const model = buildPredictorModel([
+      makeGame({ id: 'spring', blue: 'T1', red: 'GenG', winner: 'blue', day: 0, split: 'Spring' }),
+      makeGame({ id: 'summer', blue: 'T1', red: 'GenG', winner: 'blue', day: 120, split: 'Summer' }),
+    ]);
+    expect(model.currentSplitOf.get(splitSubject('player', 'T1-top'))).toBe('2026|Summer');
+    expect(model.playerSplitRecord.get(anywhereKey('T1-top', 'top', aatrox.id))).toEqual({
+      wins: 1,
+      games: 1,
+    });
+    // The career record still holds both.
+    expect(model.playerCareerRecord.get(anywhereKey('T1-top', 'top', aatrox.id))!.games).toBe(2);
+  });
+
+  it('gives each league its own current split, not one global label', () => {
+    // Split labels are per-league: the LCK is in "Summer" the same week the
+    // LPL is in "Split 3". A single newest-label rule left the LPL with no
+    // current-split record at all.
+    const model = buildPredictorModel([
+      makeGame({
+        id: 'lpl',
+        blue: 'BLG',
+        red: 'JDG',
+        winner: 'blue',
+        day: 0,
+        competition: 'LPL',
+        split: 'Split 3',
+      }),
+      makeGame({ id: 'lck', blue: 'T1', red: 'GenG', winner: 'blue', day: 1, split: 'Summer' }),
+    ]);
+    expect(model.currentSplitOf.get(splitSubject('team', 'BLG'))).toBe('2026|Split 3');
+    expect(model.currentSplitOf.get(splitSubject('team', 'T1'))).toBe('2026|Summer');
+    expect(model.playerSplitRecord.get(anywhereKey('BLG-top', 'top', aatrox.id))!.games).toBe(1);
+    expect(model.playerSplitRecord.get(anywhereKey('T1-top', 'top', aatrox.id))!.games).toBe(1);
+  });
+
+  it('does not carry a departed player’s record onto their replacement', () => {
+    // Zeus loses four on Aatrox, Doran replaces him and wins three of four.
+    const zeus = Array.from({ length: 4 }, (_, i) =>
+      makeGame({
+        id: `z${i}`,
+        blue: 'T1',
+        red: 'GenG',
+        winner: 'red',
+        day: i,
+        bluePlayers: ['Zeus', 'Oner', 'Faker', 'Gumayusi', 'Keria'],
+      }),
+    );
+    const doran = ['blue', 'blue', 'blue', 'red'].map((winner, i) =>
+      makeGame({
+        id: `d${i}`,
+        blue: 'T1',
+        red: 'GenG',
+        winner: winner as Side,
+        day: 10 + i,
+        bluePlayers: ['Doran', 'Oner', 'Faker', 'Gumayusi', 'Keria'],
+      }),
+    );
+    const model = buildPredictorModel([...zeus, ...doran]);
+
+    expect(model.playerCareerRecord.get(anywhereKey('Zeus', 'top', aatrox.id))).toEqual({
+      wins: 0,
+      games: 4,
+    });
+    expect(model.playerCareerRecord.get(anywhereKey('Doran', 'top', aatrox.id))).toEqual({
+      wins: 3,
+      games: 4,
+    });
+    // The starter is the one who played most recently, so the scored read is
+    // Doran's 3-4 rather than the team's combined 3-8.
+    expect(model.rosters.get('t1')!.top).toBe('Doran');
+    expect(model.teamCareerRecord.get(anywhereKey('T1', 'top', aatrox.id))).toEqual({
+      wins: 3,
+      games: 8,
     });
   });
 
@@ -220,8 +302,7 @@ describe('buildPredictorModel — champion records', () => {
       makeGame({ id: 'old', blue: 'T1', red: 'GenG', winner: 'blue', day: 0, season: '2024' }),
       makeGame({ id: 'new', blue: 'T1', red: 'GenG', winner: 'blue', day: 400, season: '2026' }),
     ]);
-    const aatrox = makeChampion('Aatrox')!;
-    expect(model.championRecordAnywhere.get(anywhereKey('T1', 'top', aatrox.id))!.games).toBe(2);
+    expect(model.playerCareerRecord.get(anywhereKey('T1-top', 'top', aatrox.id))!.games).toBe(2);
     expect(model.formSeason).toBe('2026');
   });
 });

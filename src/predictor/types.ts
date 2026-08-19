@@ -125,10 +125,16 @@ export interface ChampionEdges {
 
 /** Everything the engine needs, derived once from the enabled games. */
 export interface PredictorModel {
-  /** `competition|team|role|championId` -> record. */
-  championRecord: Map<string, WinLoss>;
-  /** `team|role|championId` -> record, across every competition. */
-  championRecordAnywhere: Map<string, WinLoss>;
+  /** `player|role|championId` -> record inside the current split. */
+  playerSplitRecord: Map<string, WinLoss>;
+  /** `player|role|championId` -> record across everything loaded. */
+  playerCareerRecord: Map<string, WinLoss>;
+  /** Same, keyed by team — used only when the roster is unknown. */
+  teamSplitRecord: Map<string, WinLoss>;
+  teamCareerRecord: Map<string, WinLoss>;
+  /** `season|split` the scoped data ends in, or `null` when empty. */
+  /** Split key (`season|split`) each player and team is currently in. */
+  currentSplitOf: Map<string, string>;
   /** Champion ids that cleared the pick-rate bar on the newest patches. */
   metaByRole: Map<Role, Set<string>>;
   metaPatches: string[];
@@ -186,8 +192,14 @@ export interface PickLine {
   winRate: number;
   /** How the win rate was arrived at, e.g. `7W/11 (64%)`. */
   note: string;
-  /** Whether the sample came from the selected competition or everywhere. */
-  scope: 'competition' | 'anywhere' | 'none';
+  /** Which record produced the number, narrowest first. */
+  scope: 'split' | 'career' | 'team' | 'none';
+  /** This player on this champion in the current split, when they have played it. */
+  splitRecord: WinLoss | null;
+  /** The same across every loaded season. */
+  careerRecord: WinLoss | null;
+  /** Which split "this split" is for this player, e.g. `Summer`. */
+  splitLabel: string | null;
   meta: boolean;
   counters: Champion[];
   counteredBy: Champion[];

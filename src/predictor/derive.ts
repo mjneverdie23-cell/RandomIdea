@@ -30,7 +30,7 @@ import {
   type Role,
   type Side,
 } from '../domain/types.ts';
-import { anywhereKey, recordKey } from './engine.ts';
+import { anywhereKey, splitSubject } from './engine.ts';
 import type {
   GoldTempo,
   PredictorModel,
@@ -69,24 +69,97 @@ function rate(wins: number, total: number): number | null {
 /* Champion records                                                    */
 /* ------------------------------------------------------------------ */
 
-function buildChampionRecords(games: readonly Game[]): {
-  scoped: Map<string, WinLoss>;
-  anywhere: Map<string, WinLoss>;
-} {
-  const scoped = new Map<string, WinLoss>();
-  const anywhere = new Map<string, WinLoss>();
+/** Season + split, which is what "this split" means for a form read. */
+export function splitKeyOf(game: Game): string {
+  return `${game.season}|${game.split ?? ''}`;
+}
+
+/**
+ * Which split each player and team is currently in.
+ *
+ * Split labels are per-league, not a shared calendar: on the same weekend the
+ * LCK is in "Summer", the LPL is in "Split 3", the LEC is in "Rounds 3-4" and
+ * an international event carries no split at all. Taking one global "newest
+ * split" from the newest game in the file therefore left every team outside
+ * that one league with no current-split record at all — measured on the 2026
+ * export, only 190 of 600 lanes got a split read, and the rest silently fell
+ * back to career.
+ *
+ * So each subject gets their own: the split their most recent game sits in.
+ * With history cut at kickoff that is the split they are in as of that game,
+ * and a player who transfers mid-year moves to their new league's split
+ * immediately.
+ */
+export function currentSplits(games: readonly Game[]): Map<string, string> {
+  const seenAt = new Map<string, number>();
+  const splits = new Map<string, string>();
 
   for (const game of games) {
+    const at = Date.parse(game.date);
+    const key = splitKeyOf(game);
     for (const side of [game.blue, game.red] as const) {
-      const won = game.winner === side.side;
-      for (const player of side.players) {
-        const { role, champion } = player;
-        bump(scoped, recordKey(game.competition, side.teamName, role, champion.id), won);
-        bump(anywhere, anywhereKey(side.teamName, role, champion.id), won);
+      const subjects = [
+        splitSubject('team', side.teamName),
+        ...side.players.map((player) => splitSubject('player', player.playerName)),
+      ];
+      for (const subject of subjects) {
+        if ((seenAt.get(subject) ?? -Infinity) >= at) continue;
+        seenAt.set(subject, at);
+        splits.set(subject, key);
       }
     }
   }
-  return { scoped, anywhere };
+  return splits;
+}
+
+/**
+ * Champion records, keyed by the player who actually piloted the champion.
+ *
+ * Team-keyed records carried a departed player's results into their
+ * replacement's number: swap a top laner who went 0-4 on Gnar for one who is
+ * 3-4 on it and the team's Gnar record still reads 3-8. Records follow the
+ * player, so a roster change is reflected immediately and a transfer takes the
+ * player's history with them.
+ *
+ * Four maps, because the useful answer depends on what exists:
+ *   - `playerSplit`   this player, this champion, in the current split
+ *   - `playerCareer`  this player, this champion, across everything loaded
+ *   - `teamSplit` / `teamCareer`  fallbacks for when the roster is unknown,
+ *     e.g. a team with no games in the scoped window
+ */
+function buildChampionRecords(
+  games: readonly Game[],
+  splits: Map<string, string>,
+): {
+  playerSplit: Map<string, WinLoss>;
+  playerCareer: Map<string, WinLoss>;
+  teamSplit: Map<string, WinLoss>;
+  teamCareer: Map<string, WinLoss>;
+} {
+  const playerSplit = new Map<string, WinLoss>();
+  const playerCareer = new Map<string, WinLoss>();
+  const teamSplit = new Map<string, WinLoss>();
+  const teamCareer = new Map<string, WinLoss>();
+
+  for (const game of games) {
+    const splitKey = splitKeyOf(game);
+    for (const side of [game.blue, game.red] as const) {
+      const won = game.winner === side.side;
+      const teamInSplit = splits.get(splitSubject('team', side.teamName)) === splitKey;
+      for (const player of side.players) {
+        const { role, champion, playerName } = player;
+        const playerKey = anywhereKey(playerName, role, champion.id);
+        const teamKey = anywhereKey(side.teamName, role, champion.id);
+        bump(playerCareer, playerKey, won);
+        bump(teamCareer, teamKey, won);
+        if (splits.get(splitSubject('player', playerName)) === splitKey) {
+          bump(playerSplit, playerKey, won);
+        }
+        if (teamInSplit) bump(teamSplit, teamKey, won);
+      }
+    }
+  }
+  return { playerSplit, playerCareer, teamSplit, teamCareer };
 }
 
 /* ------------------------------------------------------------------ */
@@ -647,7 +720,8 @@ export function buildPredictorModel(
   games: readonly Game[],
   ratings: Map<string, TeamRating> = new Map(),
 ): PredictorModel {
-  const { scoped, anywhere } = buildChampionRecords(games);
+  const splits = currentSplits(games);
+  const records = buildChampionRecords(games, splits);
   const { metaByRole, patches } = deriveMeta(games);
 
   const formSeason = latestSeason(games);
@@ -658,8 +732,11 @@ export function buildPredictorModel(
   const { byCompetition: teamsByCompetition, all: allTeams } = deriveTeams(games);
 
   return {
-    championRecord: scoped,
-    championRecordAnywhere: anywhere,
+    playerSplitRecord: records.playerSplit,
+    playerCareerRecord: records.playerCareer,
+    teamSplitRecord: records.teamSplit,
+    teamCareerRecord: records.teamCareer,
+    currentSplitOf: splits,
     metaByRole,
     metaPatches: patches,
     metaPickRateThreshold: META_PICK_RATE,
@@ -686,8 +763,11 @@ export function emptyPredictorModel(): PredictorModel {
     championsByRole.set(role, []);
   }
   return {
-    championRecord: new Map(),
-    championRecordAnywhere: new Map(),
+    playerSplitRecord: new Map(),
+    playerCareerRecord: new Map(),
+    teamSplitRecord: new Map(),
+    teamCareerRecord: new Map(),
+    currentSplitOf: new Map(),
     metaByRole,
     metaPatches: [],
     metaPickRateThreshold: META_PICK_RATE,

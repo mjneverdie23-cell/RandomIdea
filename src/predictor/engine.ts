@@ -165,64 +165,133 @@ function logistic(margin: number): number {
 /* Lookups                                                             */
 /* ------------------------------------------------------------------ */
 
-export function recordKey(competition: string, team: string, role: Role, championId: string): string {
-  return `${competition}|${team.toLowerCase()}|${role}|${championId}`;
+export function anywhereKey(subject: string, role: Role, championId: string): string {
+  return `${subject.toLowerCase()}|${role}|${championId}`;
 }
 
-export function anywhereKey(team: string, role: Role, championId: string): string {
-  return `${team.toLowerCase()}|${role}|${championId}`;
+/** Key for "which split is this player / team currently in". */
+export function splitSubject(kind: 'player' | 'team', name: string): string {
+  return `${kind}|${name.toLowerCase()}`;
 }
 
-export interface WinRateRead {
-  winRate: number;
-  note: string;
-  scope: 'competition' | 'anywhere' | 'none';
+/** Human name for a split key: `2026|Summer` reads as `Summer`, `2026|` as `2026`. */
+export function splitLabel(key: string | null | undefined): string | null {
+  if (!key) return null;
+  const [season = '', split = ''] = key.split('|');
+  return split || season || null;
 }
 
 /**
- * Historical win rate for one team on one champion in one role.
+ * Games a player needs in the current split before it outranks their career.
  *
- * The selected competition is the primary scope, because how a team plays at
- * Worlds is not how they play in their home league. When they have simply
- * never played that champion there, we widen to their full history rather than
- * dropping straight to the unplayed case — an international event otherwise
- * treats a champion the team plays constantly at home as brand new. Only a
- * champion with no record anywhere counts as a first-time pick. The scope that
- * produced the number is reported so the UI can show it.
+ * One game is 0% or 100% and nothing in between, which would let a single
+ * result overwrite a career's worth of evidence. Two is still a thin read, but
+ * it is a read; below that the longer record is the better estimate. Both
+ * numbers reach the report either way, so nothing is hidden by this choice.
  */
-export function championWinRate(
-  model: PredictorModel,
-  competition: string | null,
-  team: string,
-  champion: Champion,
-  role: Role,
-): WinRateRead {
-  const scoped = competition
-    ? model.championRecord.get(recordKey(competition, team, role, champion.id))
-    : undefined;
-  if (scoped && scoped.games > 0) {
-    return { winRate: scoped.wins / scoped.games, note: describe(scoped), scope: 'competition' };
-  }
+export const MIN_SPLIT_SAMPLE = 2;
 
-  const anywhere = model.championRecordAnywhere.get(anywhereKey(team, role, champion.id));
-  if (anywhere && anywhere.games > 0) {
-    return {
-      winRate: anywhere.wins / anywhere.games,
-      note: `${describe(anywhere)} · all competitions`,
-      scope: 'anywhere',
-    };
-  }
+/** Where a win rate came from, narrowest first. */
+export type WinRateScope = 'split' | 'career' | 'team' | 'none';
 
-  return {
-    winRate: UNPLAYED_WIN_RATE,
-    note: 'no recorded games — first-time pick',
-    scope: 'none',
-  };
+export interface WinRateRead {
+  winRate: number;
+  /** How the number was arrived at, e.g. `7W/11 (64%)`. */
+  note: string;
+  scope: WinRateScope;
+  /** This player on this champion in the current split, when they have played it. */
+  splitRecord: WinLoss | null;
+  /** The same across everything loaded. */
+  careerRecord: WinLoss | null;
+  /** Who the record belongs to — the starter in that role, when known. */
+  player: string | null;
+  /** The split "this split" refers to for this player, e.g. `Summer`. */
+  splitLabel: string | null;
 }
 
 function describe(record: WinLoss): string {
   const pct = Math.round((record.wins / record.games) * 100);
   return `${record.wins}W/${record.games} (${pct}%)`;
+}
+
+/**
+ * Historical win rate for the player who will pilot this champion.
+ *
+ * Keyed on the player rather than the team, because a roster change otherwise
+ * drags the departed player's results into their replacement's number. The
+ * starter is whoever last played that role for the team, so with history cut at
+ * kickoff it is the starter as of that game.
+ *
+ * Preference order, narrowest first: what they have done on it **this split**,
+ * then their whole career on it, then the team's record as a last resort when
+ * the roster is unknown, then the first-time-pick credit. Both the split and
+ * career records are returned whether or not they were the one used, so the
+ * report can show a player who was 50% on Yone last split and has not touched
+ * it this one.
+ */
+export function championWinRate(
+  model: PredictorModel,
+  team: string,
+  role: Role,
+  champion: Champion,
+): WinRateRead {
+  const player = model.rosters.get(team.toLowerCase())?.[role] ?? null;
+
+  const splitRecord = player
+    ? (model.playerSplitRecord.get(anywhereKey(player, role, champion.id)) ?? null)
+    : null;
+  const careerRecord = player
+    ? (model.playerCareerRecord.get(anywhereKey(player, role, champion.id)) ?? null)
+    : null;
+  const label = splitLabel(
+    player ? model.currentSplitOf.get(splitSubject('player', player)) : undefined,
+  );
+
+  const base = { splitRecord, careerRecord, player, splitLabel: label };
+
+  if (splitRecord && splitRecord.games >= MIN_SPLIT_SAMPLE) {
+    return {
+      ...base,
+      winRate: splitRecord.wins / splitRecord.games,
+      note: `${describe(splitRecord)} in ${label ?? 'the current split'}`,
+      scope: 'split',
+    };
+  }
+  if (careerRecord && careerRecord.games > 0) {
+    const thin = splitRecord ? ` · only ${splitRecord.games} this split` : ' · first time this split';
+    return {
+      ...base,
+      winRate: careerRecord.wins / careerRecord.games,
+      note: `${describe(careerRecord)} career${thin}`,
+      scope: 'career',
+    };
+  }
+
+  // No player identified — fall back to the team so an unknown roster doesn't
+  // turn every lane into a first-time pick.
+  if (!player) {
+    const teamKey = anywhereKey(team, role, champion.id);
+    const teamSplit = model.teamSplitRecord.get(teamKey) ?? null;
+    const teamRecord =
+      teamSplit && teamSplit.games >= MIN_SPLIT_SAMPLE
+        ? teamSplit
+        : (model.teamCareerRecord.get(teamKey) ?? null);
+    if (teamRecord && teamRecord.games > 0) {
+      return {
+        ...base,
+        winRate: teamRecord.wins / teamRecord.games,
+        note: `${describe(teamRecord)} · team record, roster unknown`,
+        scope: 'team',
+      };
+    }
+  }
+
+  return {
+    ...base,
+    winRate: UNPLAYED_WIN_RATE,
+    note: 'no recorded games — first-time pick',
+    scope: 'none',
+  };
 }
 
 export function isMeta(model: PredictorModel, champion: Champion, role: Role): boolean {
@@ -277,7 +346,7 @@ function scoreSide(
   ROLES.forEach((role, index) => {
     const champion = input.champions[index];
     if (!champion) return;
-    const read = championWinRate(model, input.competition, input.team, champion, role);
+    const read = championWinRate(model, input.team, role, champion);
     const meta = isMeta(model, champion, role);
     winRateBase += read.winRate;
     if (meta) metaCount += 1;
@@ -286,10 +355,13 @@ function scoreSide(
     picks.push({
       role,
       champion,
-      player: roster[role] ?? null,
+      player: read.player ?? roster[role] ?? null,
       winRate: read.winRate,
       note: read.note,
       scope: read.scope,
+      splitRecord: read.splitRecord,
+      careerRecord: read.careerRecord,
+      splitLabel: read.splitLabel,
       meta,
       ...edges,
     });

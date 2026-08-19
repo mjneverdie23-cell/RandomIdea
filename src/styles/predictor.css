@@ -847,6 +847,40 @@
   color: var(--violet);
 }
 
+.lane-note {
+  font-size: 0.76rem;
+  margin: 0;
+}
+
+.lane-records {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 0.72rem;
+}
+
+.lane-record {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+}
+
+/* The one the point tally actually used. */
+.lane-record.is-scored {
+  border-color: var(--violet);
+  background: color-mix(in srgb, var(--violet) 12%, transparent);
+}
+
+.lane-record-label {
+  font-family: var(--font-sans);
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
 .lane-edges {
   display: flex;
   flex-wrap: wrap;

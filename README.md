@@ -209,7 +209,7 @@ higher total is the predicted winner.
 
 | Line item | What it adds |
 | --- | --- |
-| Win-rate base | The five champions' historical win rates for that team in that role, capped at 1.00 per lane. A champion with no recorded games counts as 1.00 |
+| Win-rate base | The five champions' historical win rates for **the player starting that lane**, capped at 1.00 per lane. A champion with no recorded games counts as 1.00 |
 | Meta champions | +1 per champion clearing the pick-rate bar on the newest patches |
 | Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
 | Form edge | Up to +1 for the better current-season series record |
@@ -263,11 +263,25 @@ Everything is derived from the seasons you have imported — there is no separat
 data file to build or keep in sync. Two different time scopes are used
 deliberately:
 
-- **Champion win rates** span every enabled season, because how well a team
-  plays a champion is a durable signal and thin samples are the main way this
-  model goes wrong. A team that has never played a champion in the selected
-  competition falls back to its record everywhere, and the report says which
-  scope produced each number.
+- **Champion win rates** belong to the **player**, not the team, and prefer the
+  split that player is currently in. A team-keyed record dragged a departed
+  player's results into their replacement's number: swap a top laner who went
+  0-4 on a champion for one who is 3-4 on it and the team still read 3-8.
+  Records now follow the player, so a roster change counts immediately and a
+  transfer takes the player's history with them.
+
+  The current split is worked out per player, not globally, because split
+  labels are per-league — on the same weekend the LCK is in *Summer*, the LPL
+  in *Split 3* and the LEC in *Rounds 3-4*. A player needs at least two games
+  in their current split before it outranks their career record; one game is
+  0% or 100% and nothing in between, which would let a single result overwrite
+  a career's worth of evidence.
+
+  The per-lane detail shows **both** numbers side by side — split and career,
+  with the scored one marked — so a player who is 50% on Yone across his career
+  and has not touched it this split reads differently from one who is 50% on it
+  right now. Where no roster is known the team's own record stands in, and the
+  report says so.
 - **Standings and behaviour** cover the most recent season only. These are
   current-form reads; averaging five seasons together would wash out exactly
   the signal they exist to provide.
@@ -565,7 +579,8 @@ duplicates, exact counts, impossible configs), patch meta aggregation,
 leaderboard ranking/filtering, and the predictor (every point rule and its
 boundaries, series/sweep probability against hand-computed values, win-rate
 scope fallback, behaviour narration thresholds, meta derivation, standings and
-series reconstruction, ratings parsing with fuzzy team matching, and the match
+series reconstruction, player-scoped records across a roster change, per-league
+split scoping, ratings parsing with fuzzy team matching, and the match
 paste reader — lenient JSON repair, role and competition aliases, score/game
 number reconciliation, and that no winner is ever read).
 
