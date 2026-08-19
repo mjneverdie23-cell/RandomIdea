@@ -51,7 +51,7 @@ func _run() -> void:
 	await _check_lane_traversal()
 	_check_sandbox()
 	await _check_waves()
-	_check_no_ai_opponent()
+	await _check_ai_opponent()
 	await _check_nexus_siege()
 	await _capture_screenshots()
 	await _check_victory()
@@ -164,11 +164,16 @@ func _check_sandbox() -> void:
 	for id in ["SOLO_NEXUS_A", "SOLO_NEXUS_B"]:
 		var nexus := director.nexus_for(id)
 		_expect(nexus != null and nexus.is_alive(), "%s has no living controller" % id)
-	# Solo Lane is 1v1 between humans: offline seats one player and nobody else.
-	_expect(director.enemy_champions.is_empty(), "Solo Lane must not spawn an AI opponent")
+	# Solo Lane seats one human. Offline the empty team is filled by a bot; in a
+	# networked match that seat is held for the second player instead.
 	_expect(director.session != null and director.session.player_count() == 1,
 		"offline Solo Lane should seat exactly one local player")
 	_expect(director.session.is_running(), "the offline match did not start")
+	_expect(director.enemy_champions.size() == 1,
+		"offline Solo Lane should spawn one AI opponent, got %d" % director.enemy_champions.size())
+	director.ai_opponents_enabled = false
+	_expect(director.ai_opponent_count() == 0, "the AI opponent toggle had no effect")
+	director.ai_opponents_enabled = true
 
 	var spawn := _root.map.position_of("SOLO_SPAWN_A")
 	_expect(director.player.global_position.distance_to(spawn) < 3.0,
@@ -201,15 +206,26 @@ func _check_waves() -> void:
 	_expect(travelled > 1.5, "solo minions did not navigate down the lane")
 
 
-## The second champion comes from a second human, never from a brain.
-func _check_no_ai_opponent() -> void:
+## Offline the opponent is a bot on the other team; it must actually play.
+func _check_ai_opponent() -> void:
 	var champions := 0
 	for unit in Battle.all():
 		if unit.kind == Unit.Kind.CHAMPION:
 			champions += 1
-			_expect(unit.ai == null, "%s has an AI brain attached" % unit.display_label())
-	print("[SoloTest] champions in an offline solo match: %d" % champions)
-	_expect(champions == 1, "expected exactly the local champion offline, found %d" % champions)
+	_expect(champions == 2, "expected the player and one bot offline, found %d" % champions)
+
+	var enemy: ChampionController = _root.director.enemy_champions[0]
+	_expect(enemy.team == MapEnums.Team.B, "the AI opponent is not on team B")
+	_expect(enemy.ai != null, "the AI opponent has no brain")
+	_expect(enemy.owner_peer_id == 0, "the AI opponent should belong to no peer")
+	if enemy.ai == null:
+		return
+	var start := enemy.global_position
+	await _settle_physics(180)
+	var travelled := enemy.global_position.distance_to(start)
+	print("[SoloTest] AI opponent state %s, moved %.1f m" % [enemy.ai.state_name(), travelled])
+	_expect(travelled > 1.0, "the AI opponent did not navigate the lane")
+	_expect(_root.map.is_inside_play_field(enemy.global_position), "the AI opponent left the arena")
 
 
 ## A minion parked next to the enemy nexus must damage it. The lane is cleared

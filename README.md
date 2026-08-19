@@ -7,15 +7,20 @@ death, respawn and win conditions. Everything on screen is primitive geometry
 generated at runtime; the point of the project is the *gameplay spaces,
 navigation, combat loop and architecture*, not the art.
 
+**[docs/HANDBOOK.md](docs/HANDBOOK.md)** is the customization guide: where to
+change what, how to add maps, modes, abilities and units, how to replace the
+prototype art, and the invariants that keep it all decoupled.
+
 ## Game modes
 
 | Mode | Map | Players |
 |---|---|---|
 | **Full MOBA** | three lanes, jungle, river, two neutral objectives | 1 + AI |
-| **Solo Lane** | one lane, two towers and one nexus per team | **1v1, both human** |
+| **Solo Lane** | one lane, two towers and one nexus per team | 1v1 human, or 1 + AI offline |
 
-Pressing Play opens a small menu: pick a mode, then **Play Offline**, **Host
-Match** or **Join Match**. A mode is a `GameModeConfig` resource naming a
+Pressing Play opens a small menu: pick a mode, tick **AI opponent** if you want
+a bot to fill the empty team, then **Play Offline**, **Host Match** or **Join
+Match**. A mode is a `GameModeConfig` resource naming a
 `MapConfig`, the `MapLayout` subclass that builds it, and a `MatchConfig`;
 adding a third mode means adding a resource, not a code path.
 
@@ -51,7 +56,8 @@ Input -> InputCommands -> [CommandRelay] -> ChampionController -> Components
 
 ```bash
 godot --path .                                   # menu
-godot --path . -- --mode=solo_lane               # offline, straight in
+godot --path . -- --mode=solo_lane               # offline vs a bot
+godot --path . -- --mode=solo_lane --no-ai       # offline, empty lane
 godot --path . -- --mode=solo_lane --host        # host and wait for an opponent
 godot --path . -- --mode=solo_lane --join=10.0.0.5 --port=8642
 godot --headless --path . -- --mode=solo_lane --dedicated-server
@@ -502,8 +508,9 @@ raises `match_ended`. The HUD shows a `VICTORY`/`DEFEAT` banner with the match
 time and the restart hint. `Enter` reloads the mode, `F11` reloads into the
 other one.
 
-`ChampionAi` is still available and still drives the Full MOBA's enemy
-champions, but **Solo Lane never uses it** — that mode is 1v1 between humans.
+`ChampionAi` drives the Full MOBA's enemy champions and Solo Lane's offline
+opponent. A **networked** match never uses it: those seats belong to humans, so
+`GameDirector.ai_opponent_count()` returns zero whenever `Net` is not offline.
 It is a small state machine that only reads and writes the champion's existing
 components:
 

@@ -34,6 +34,9 @@ var spawner: NetworkSpawner
 const STRUCTURE_NET_ID_BASE := 1000000
 
 var player: ChampionController
+## Fill empty team seats with AI champions. Offline only: a networked match
+## keeps its seats for humans, and the second seat is what it waits for.
+var ai_opponents_enabled: bool = true
 var match_started: bool = false
 var waves: MinionWaveSpawner
 var turrets: Array[TurretController] = []
@@ -86,10 +89,19 @@ func begin_match() -> void:
 	if session != null:
 		for player_session in session.sessions():
 			_spawn_session_champion(player_session)
-	for i in config.starting_enemy_champions:
+	for i in ai_opponent_count():
 		spawn_enemy_champion()
 	if config.wave != null and config.wave.auto_start:
 		waves.start()
+
+
+## How many AI champions this match should add. A networked match never adds
+## any: every seat belongs to a human, and an empty one means the match has not
+## started yet.
+func ai_opponent_count() -> int:
+	if not Net.is_offline() or not ai_opponents_enabled:
+		return 0
+	return config.starting_enemy_champions
 
 
 ## Champion for one seated player, owned by that player's peer.

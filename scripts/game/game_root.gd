@@ -82,7 +82,8 @@ func _resolve_launch() -> Dictionary:
 	return _launch_from_command_line()
 
 
-## `--mode=<id> --host | --join=<address> [--port=<n>] | --dedicated-server`
+## `--mode=<id> [--ai|--no-ai] --host | --join=<address> [--port=<n>]`
+## `--dedicated-server`
 func _launch_from_command_line() -> Dictionary:
 	var request: Dictionary = {}
 	for arg in OS.get_cmdline_user_args() + OS.get_cmdline_args():
@@ -97,6 +98,10 @@ func _launch_from_command_line() -> Dictionary:
 			request["address"] = arg.substr(7)
 		elif arg.begins_with("--port="):
 			request["port"] = int(arg.substr(7))
+		elif arg == "--ai":
+			request["ai_opponent"] = true
+		elif arg == "--no-ai":
+			request["ai_opponent"] = false
 	if request.is_empty():
 		return request
 	if not request.has("net"):
@@ -127,6 +132,9 @@ func start_session(request: Dictionary) -> void:
 
 	session.open(_required_players(net_mode))
 	director.player_team = player_team
+	# An offline match can fill the empty team with a bot; a networked one
+	# keeps that seat for the other player.
+	director.ai_opponents_enabled = bool(request.get("ai_opponent", true))
 	director.setup(map, commands, units, session, spawner)
 	director.start()
 

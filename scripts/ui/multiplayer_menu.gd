@@ -16,6 +16,7 @@ const NET_CLIENT := "client"
 var modes: Array[GameModeConfig] = []
 
 var _mode_picker: OptionButton
+var _ai_toggle: CheckBox
 var _address_field: LineEdit
 var _port_field: LineEdit
 var _status: Label
@@ -73,6 +74,12 @@ func _build_ui(default_port: int) -> void:
 			_mode_picker.selected = i
 	_panel.add_child(_mode_picker)
 
+	_ai_toggle = CheckBox.new()
+	_ai_toggle.text = "AI opponent (offline only)"
+	_ai_toggle.button_pressed = true
+	_ai_toggle.tooltip_text = "Fills the empty team with a bot so you can play alone."
+	_panel.add_child(_ai_toggle)
+
 	_add_button("Play Offline", func() -> void: _launch(NET_OFFLINE))
 
 	_add_hint("LAN / Online — host shows its address, the other side types it in.")
@@ -126,6 +133,7 @@ func _launch(net_mode: String) -> void:
 	launch_requested.emit({
 		"mode_id": selected_mode_id(),
 		"net": net_mode,
+		"ai_opponent": _ai_toggle == null or _ai_toggle.button_pressed,
 		"address": _address_field.text.strip_edges(),
 		"port": int(_port_field.text) if _port_field.text.is_valid_int() else 0,
 	})
