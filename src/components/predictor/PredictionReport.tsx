@@ -320,14 +320,18 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
 /** Where the scored number came from, in the reader's words. */
 function scopeLabel(pick: PickLine): string {
   switch (pick.scope) {
+    case 'blend':
+      return `${pick.splitLabel ?? 'split'} and career, averaged`;
     case 'split':
       return pick.splitLabel ? `${pick.splitLabel} form` : 'current split';
     case 'career':
       return pick.splitRecord ? 'career — split sample too thin' : 'career — first time this split';
     case 'team':
-      return 'team record, roster unknown';
+      return pick.player ? 'team record' : 'team record, roster unknown';
+    case 'none':
+      return 'off-meta with no record — prepared surprise';
     default:
-      return 'first-time pick';
+      return 'no record either way — treated as even';
   }
 }
 
@@ -349,13 +353,14 @@ function LaneRecords({ pick }: { pick: PickLine }) {
       <RecordChip
         label={pick.splitLabel ?? 'this split'}
         record={pick.splitRecord}
-        scored={pick.scope === 'split'}
+        // A blend is scored from both, so both are marked.
+        scored={pick.scope === 'split' || pick.scope === 'blend'}
         empty="not picked yet"
       />
       <RecordChip
         label="career"
         record={pick.careerRecord}
-        scored={pick.scope === 'career'}
+        scored={pick.scope === 'career' || pick.scope === 'blend'}
         empty="none"
       />
     </div>

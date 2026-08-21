@@ -197,7 +197,7 @@ export interface PickLine {
   /** How the win rate was arrived at, e.g. `7W/11 (64%)`. */
   note: string;
   /** Which record produced the number, narrowest first. */
-  scope: 'split' | 'career' | 'team' | 'none';
+  scope: 'blend' | 'split' | 'career' | 'team' | 'none' | 'unknown';
   /** This player on this champion in the current split, when they have played it. */
   splitRecord: WinLoss | null;
   /** The same across every loaded season. */

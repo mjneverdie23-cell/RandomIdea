@@ -209,7 +209,7 @@ higher total is the predicted winner.
 
 | Line item | What it adds |
 | --- | --- |
-| Win-rate base | The five champions' historical win rates for **the player starting that lane**, capped at 1.00 per lane. A champion with no recorded games counts as 1.00 |
+| Win-rate base | The five champions' win rates for **the player starting that lane** — current split and career averaged — capped at 1.00 per lane. An off-meta champion they have no record on counts as 1.00 |
 | Meta champions | +1 per champion clearing the pick-rate bar on the newest patches (5% of games in that role, and at least 4 actual picks) |
 | Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
 | Form edge | Up to +1 for the better current-season series record |
@@ -277,11 +277,23 @@ deliberately:
   0% or 100% and nothing in between, which would let a single result overwrite
   a career's worth of evidence.
 
-  The per-lane detail shows **both** numbers side by side — split and career,
-  with the scored one marked — so a player who is 50% on Yone across his career
-  and has not touched it this split reads differently from one who is 50% on it
-  right now. Where no roster is known the team's own record stands in, and the
-  report says so.
+  When both records exist they are **averaged**. Career already contains the
+  split games, so the mean is a 50/50 blend that leans on recent form without
+  letting it erase what came before: a player who is 1-3 on a champion this
+  split but 20-5 across his career is neither a 25% pick nor an 80% one.
+
+  The per-lane detail shows **both** numbers side by side, with whichever fed
+  the score marked — so a player who is 50% on Yone across his career and has
+  not touched it this split reads differently from one who is 50% on it right
+  now.
+
+  With no record for that player, an **off-meta** champion is credited a full
+  1.00: nobody first-times an off-meta pick on stage, so it is prepared and
+  aimed at this opponent. A *meta* champion they simply have not been handed
+  says nothing about preparation, and falls back to the team's record on it, or
+  a neutral 50%. The test is off-meta rather than "nobody has ever played it",
+  because Swain had seven recorded games in 2026 before Knight's MSI pick — a
+  literal never-played rule would not have fired for the case it exists for.
 - **Standings and behaviour** cover the most recent season only. These are
   current-form reads; averaging five seasons together would wash out exactly
   the signal they exist to provide.
@@ -327,9 +339,9 @@ would know before the game.
 **Backtest all matches** scores every match in the queue and prints the record:
 
 ```
-Accuracy 53.9% · 201R 172W
+Accuracy 55.1% · 206R 168W
 Always picking blue side would have scored 57.0% — the model is behind that.
-373 of 374 graded — 1 too close · Brier 0.266 (coin flip = 0.250)
+374 of 374 graded · Brier 0.255 (coin flip = 0.250)
 ```
 
 The predictor never reads the result of the game it is predicting, and the

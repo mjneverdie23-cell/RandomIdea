@@ -4,7 +4,8 @@
  * There are no fitted weights and no black box. Each side's score is a plain
  * sum of labelled line items, and the higher total is the predicted winner:
  *
- *   win-rate base   the 5 champions' historical win rates for that team + role
+ *   win-rate base   the 5 starters' win rates on those champions, split and
+ *                   career averaged; an off-meta pick with no record scores 1.0
  *   meta bonus      +1 per meta champion (meta = pick frequency, computed live)
  *   pocket picks    1-2 off-meta picks -> +1.5 each ; more than 2 -> -2
  *                   (halved in game one, where the read is least informative)
@@ -105,19 +106,39 @@ export const MOTIVATION_POINTS: Record<Motivation, number> = {
 };
 
 /**
- * Win rate credited when a team has never played the champion in that role.
+ * Win rate credited for a prepared surprise pick.
  *
- * A pro pulling out a champion with no recorded history is not a coin flip —
- * it is a prepared pick. Nobody first-times something on stage; it has been
- * scrimmed, it is aimed at this opponent, and the other side has no film on
- * it. Knight's Swain at MSI is the case this exists for. Credited full value
- * rather than the 0.5 an absent record used to produce.
+ * A pro pulling out an **off-meta** champion they have no record on is not a
+ * coin flip — it is a prepared pick. Nobody first-times something on stage; it
+ * has been scrimmed, it is aimed at this opponent, and the other side has no
+ * film on it. Knight's Swain at MSI is the case this exists for.
+ *
+ * Both halves of the test matter. Requiring the champion to be off-meta is what
+ * separates a genuine surprise from the ordinary case of a player who simply
+ * has not been handed a common meta pick yet — the latter says nothing about
+ * preparation, and crediting it a full 1.00 made an unfamiliar meta pick score
+ * better than a real 9-of-10 record.
+ *
+ * Note the test is *off-meta*, not "nobody has ever played it": Swain had seven
+ * recorded games in the 2026 season before that MSI pick, so a literal
+ * never-played rule would not have fired for the very case it exists for. What
+ * was true is that Swain was nowhere near the pick-rate bar, and Knight himself
+ * had no record on it.
  *
  * The one place to watch: with history cut at kickoff, an early-season backtest
  * has little recorded play, so many lanes qualify and the base inflates for
  * both sides at once.
  */
 export const UNPLAYED_WIN_RATE = 1.0;
+
+/**
+ * Win rate credited when there is simply nothing to go on.
+ *
+ * A meta champion the starter has no record on, on a team with no record on it
+ * either, is not a surprise pick and not a known quantity — it is an unknown,
+ * and an unknown is a coin flip.
+ */
+export const NEUTRAL_WIN_RATE = 0.5;
 
 /**
  * Side credited with first pick in the draft notice.
@@ -192,7 +213,7 @@ export function splitLabel(key: string | null | undefined): string | null {
 export const MIN_SPLIT_SAMPLE = 2;
 
 /** Where a win rate came from, narrowest first. */
-export type WinRateScope = 'split' | 'career' | 'team' | 'none';
+export type WinRateScope = 'blend' | 'split' | 'career' | 'team' | 'none' | 'unknown';
 
 export interface WinRateRead {
   winRate: number;
@@ -222,12 +243,16 @@ function describe(record: WinLoss): string {
  * starter is whoever last played that role for the team, so with history cut at
  * kickoff it is the starter as of that game.
  *
- * Preference order, narrowest first: what they have done on it **this split**,
- * then their whole career on it, then the team's record as a last resort when
- * the roster is unknown, then the first-time-pick credit. Both the split and
- * career records are returned whether or not they were the one used, so the
- * report can show a player who was 50% on Yone last split and has not touched
- * it this one.
+ * When the player has both a current-split record and a career one, the two are
+ * **averaged**. Career already contains the split games, so the mean is a 50/50
+ * blend that leans on recent form without letting it erase everything that came
+ * before: a player who is 1-3 on a champion this split but 20-5 on it across his
+ * career is neither a 25% pick nor an 80% one.
+ *
+ * Failing that: career alone, then the prepared-surprise credit for an off-meta
+ * champion they have no record on, then the team's record, then a neutral coin
+ * flip. Both records are returned whichever was used, so the report can show a
+ * player who was 50% on Yone last split and has not touched it this one.
  */
 export function championWinRate(
   model: PredictorModel,
@@ -248,11 +273,28 @@ export function championWinRate(
   );
 
   const base = { splitRecord, careerRecord, player, splitLabel: label };
+  const rate = (record: WinLoss): number => record.wins / record.games;
 
-  if (splitRecord && splitRecord.games >= MIN_SPLIT_SAMPLE) {
+  // A one-game split is 0% or 100% and nothing between; averaging it in would
+  // still swing the number by half that, so it stays out of the mean.
+  const usableSplit = splitRecord !== null && splitRecord.games >= MIN_SPLIT_SAMPLE;
+
+  if (usableSplit && careerRecord && careerRecord.games > 0) {
+    const splitRate = rate(splitRecord);
+    const careerRate = rate(careerRecord);
     return {
       ...base,
-      winRate: splitRecord.wins / splitRecord.games,
+      winRate: (splitRate + careerRate) / 2,
+      note:
+        `${describe(splitRecord)} in ${label ?? 'the current split'} and ` +
+        `${describe(careerRecord)} career, averaged`,
+      scope: 'blend',
+    };
+  }
+  if (usableSplit) {
+    return {
+      ...base,
+      winRate: rate(splitRecord),
       note: `${describe(splitRecord)} in ${label ?? 'the current split'}`,
       scope: 'split',
     };
@@ -261,36 +303,46 @@ export function championWinRate(
     const thin = splitRecord ? ` · only ${splitRecord.games} this split` : ' · first time this split';
     return {
       ...base,
-      winRate: careerRecord.wins / careerRecord.games,
+      winRate: rate(careerRecord),
       note: `${describe(careerRecord)} career${thin}`,
       scope: 'career',
     };
   }
 
-  // No player identified — fall back to the team so an unknown roster doesn't
-  // turn every lane into a first-time pick.
-  if (!player) {
-    const teamKey = anywhereKey(team, role, champion.id);
-    const teamSplit = model.teamSplitRecord.get(teamKey) ?? null;
-    const teamRecord =
-      teamSplit && teamSplit.games >= MIN_SPLIT_SAMPLE
-        ? teamSplit
-        : (model.teamCareerRecord.get(teamKey) ?? null);
-    if (teamRecord && teamRecord.games > 0) {
-      return {
-        ...base,
-        winRate: teamRecord.wins / teamRecord.games,
-        note: `${describe(teamRecord)} · team record, roster unknown`,
-        scope: 'team',
-      };
-    }
+  // The prepared surprise: an off-meta champion the starter has no history on.
+  // A *meta* champion they happen not to have played is not the same thing and
+  // falls through to the team record below.
+  if (player && !isMeta(model, champion, role)) {
+    return {
+      ...base,
+      winRate: UNPLAYED_WIN_RATE,
+      note: 'off-meta with no record — prepared surprise pick',
+      scope: 'none',
+    };
+  }
+
+  // Nothing on the player: the team's own record is the next best thing, and
+  // the only thing at all when the roster is unknown.
+  const teamKey = anywhereKey(team, role, champion.id);
+  const teamSplit = model.teamSplitRecord.get(teamKey) ?? null;
+  const teamRecord =
+    teamSplit && teamSplit.games >= MIN_SPLIT_SAMPLE
+      ? teamSplit
+      : (model.teamCareerRecord.get(teamKey) ?? null);
+  if (teamRecord && teamRecord.games > 0) {
+    return {
+      ...base,
+      winRate: rate(teamRecord),
+      note: `${describe(teamRecord)} · team record${player ? '' : ', roster unknown'}`,
+      scope: 'team',
+    };
   }
 
   return {
     ...base,
-    winRate: UNPLAYED_WIN_RATE,
-    note: 'no recorded games — first-time pick',
-    scope: 'none',
+    winRate: NEUTRAL_WIN_RATE,
+    note: 'no record for this player or team — treated as even',
+    scope: 'unknown',
   };
 }
 
