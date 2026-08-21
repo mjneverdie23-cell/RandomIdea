@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { usePredictor, type MatchLoadReport } from '../../state/PredictorContext.tsx';
 import { describeMatch, unknownChampions } from '../../predictor/matchImport.ts';
+import { headline } from '../../predictor/backtest.ts';
 import { ROLES } from '../../domain/types.ts';
 import { formatCount } from '../../lib/format.ts';
 
@@ -215,6 +216,8 @@ export function MatchPaste() {
             </p>
           )}
 
+          <BacktestPanel />
+
           {queue.warnings.length > 0 && (
             <details className="queue-warnings">
               <summary>
@@ -231,5 +234,159 @@ export function MatchPaste() {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Score the whole queue at once and print the record.
+ *
+ * Stepping through a hundred matches by hand to see whether the model is any
+ * good is the kind of work nobody does twice, so this does it in one pass and
+ * reports the tally. History is always cut at each match's kickoff here,
+ * whatever the switch above says — a batch graded against a model that has
+ * already seen the results would be a lookup table, not a backtest.
+ */
+function BacktestPanel() {
+  const { backtest, backtestProgress, runBacktest, cancelBacktest, goToMatch } = usePredictor();
+  const [showAll, setShowAll] = useState(false);
+  const running = backtestProgress !== null;
+
+  return (
+    <div className="backtest">
+      <div className="backtest-actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={running}
+          onClick={runBacktest}
+        >
+          {running ? 'Running…' : backtest ? 'Run again' : 'Backtest all matches'}
+        </button>
+        {running && (
+          <>
+            <progress value={backtestProgress.done} max={backtestProgress.total} />
+            <span className="dim">
+              {backtestProgress.done} / {backtestProgress.total}
+            </span>
+            <button type="button" className="btn btn-sm" onClick={cancelBacktest}>
+              Cancel
+            </button>
+          </>
+        )}
+        {!running && !backtest && (
+          <span className="dim paste-hint">
+            Scores every match against the result in your loaded seasons. History is cut
+            at each kickoff, so no match can see its own outcome.
+          </span>
+        )}
+      </div>
+
+      {backtest && !running && (
+        <div className="backtest-result">
+          <p className="backtest-headline">{headline(backtest)}</p>
+
+          {backtest.blueSideAccuracy !== null && backtest.accuracy !== null && (
+            // Without something to compare against, an accuracy is unreadable.
+            <p
+              className={`backtest-baseline${
+                backtest.accuracy < backtest.blueSideAccuracy ? ' is-behind' : ''
+              }`}
+            >
+              Always picking blue side would have scored{' '}
+              {(backtest.blueSideAccuracy * 100).toFixed(1)}%
+              {backtest.accuracy < backtest.blueSideAccuracy
+                ? ' — the model is behind that.'
+                : '.'}
+            </p>
+          )}
+
+          <p className="dim backtest-sub">
+            {backtest.graded} of {backtest.total} graded
+            {backtest.skipped > 0 && (
+              <>
+                {' — '}
+                {backtest.skippedBy
+                  .map((entry) => `${entry.count} ${entry.reason}`)
+                  .join(', ')}
+              </>
+            )}
+            {backtest.brier !== null && (
+              <>
+                {' · Brier '}
+                {backtest.brier.toFixed(3)}{' '}
+                <span title="0.25 is what calling every game a coin flip scores; lower is better.">
+                  (coin flip = 0.250)
+                </span>
+              </>
+            )}
+          </p>
+
+          {backtest.bands.length > 0 && (
+            <table className="backtest-bands">
+              <thead>
+                <tr>
+                  <th>Model said</th>
+                  <th>Games</th>
+                  <th>Right</th>
+                  <th>Actually</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backtest.bands.map((band) => (
+                  <tr key={band.label}>
+                    <td>{band.label}</td>
+                    <td>{band.graded}</td>
+                    <td>
+                      {band.right}/{band.graded}
+                    </td>
+                    <td>{((band.right / band.graded) * 100).toFixed(0)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <details
+            className="backtest-detail"
+            onToggle={(event) => setShowAll(event.currentTarget.open)}
+          >
+            <summary>Every call</summary>
+            {showAll && (
+              <ol className="backtest-list">
+                {backtest.outcomes.map((outcome) => (
+                  <li
+                    key={outcome.index}
+                    className={
+                      outcome.correct === null
+                        ? 'is-skipped'
+                        : outcome.correct
+                          ? 'is-right'
+                          : 'is-wrong'
+                    }
+                  >
+                    <button type="button" onClick={() => goToMatch(outcome.index)}>
+                      <span className="backtest-mark">
+                        {outcome.correct === null ? '–' : outcome.correct ? '✓' : '✗'}
+                      </span>
+                      <span className="backtest-label">{outcome.label}</span>
+                      {outcome.correct === null ? (
+                        <span className="dim">{outcome.reason}</span>
+                      ) : (
+                        <span className="dim">
+                          said {outcome.predicted}
+                          {outcome.confidence !== null &&
+                            ` ${(outcome.confidence * 100).toFixed(0)}%`}
+                          {!outcome.correct && ` · won ${outcome.actual}`}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </details>
+        </div>
+      )}
+    </div>
   );
 }

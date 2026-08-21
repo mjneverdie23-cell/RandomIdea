@@ -1160,6 +1160,142 @@
   accent-color: var(--blue);
 }
 
+/* ---------------------------------------------------------------- */
+/* Batch backtest                                                    */
+/* ---------------------------------------------------------------- */
+
+.backtest {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.backtest-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.backtest-actions progress {
+  flex: 1;
+  min-width: 120px;
+  max-width: 280px;
+  height: 6px;
+}
+
+.backtest-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  border-left: 3px solid var(--violet);
+}
+
+.backtest-headline {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.backtest-baseline {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.backtest-baseline.is-behind {
+  color: var(--amber);
+}
+
+.backtest-sub {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.backtest-bands {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  align-self: flex-start;
+}
+
+.backtest-bands th,
+.backtest-bands td {
+  padding: 3px 14px 3px 0;
+  text-align: left;
+}
+
+.backtest-bands th {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line);
+}
+
+.backtest-detail {
+  font-size: 0.82rem;
+}
+
+.backtest-detail summary {
+  cursor: pointer;
+  color: var(--text-faint);
+}
+
+.backtest-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.backtest-list button {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.backtest-list button:hover {
+  background: var(--panel);
+}
+
+.backtest-mark {
+  font-family: var(--font-mono);
+  width: 1em;
+  flex: none;
+}
+
+.backtest-list .is-right .backtest-mark {
+  color: var(--green);
+}
+
+.backtest-list .is-wrong .backtest-mark {
+  color: var(--red);
+}
+
+.backtest-list .is-skipped {
+  color: var(--text-faint);
+}
+
+.backtest-label {
+  flex: none;
+}
+
 .queue-warnings {
   font-size: 0.82rem;
   color: var(--text-dim);

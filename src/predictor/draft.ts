@@ -13,7 +13,13 @@
  */
 
 import { ROLES, type Champion, type CompetitionId, type StageKind } from '../domain/types.ts';
-import { SERIES_TARGET, type Motivation, type SeriesLength, type WinRequirement } from './types.ts';
+import {
+  SERIES_TARGET,
+  type Motivation,
+  type PredictionInput,
+  type SeriesLength,
+  type WinRequirement,
+} from './types.ts';
 
 export interface DraftSide {
   competition: CompetitionId | null;
@@ -67,6 +73,38 @@ export const BLANK_DRAFT: PredictorDraft = {
 export function gameNumberOf(draft: PredictorDraft): number {
   if (draft.scoreBlue + draft.scoreRed > 0) return draft.scoreBlue + draft.scoreRed + 1;
   return draft.gameNumber ?? 1;
+}
+
+/**
+ * The engine's view of a draft, or `null` while it is still missing a team.
+ *
+ * Shared by the page and the batch backtest on purpose: a backtest that scored
+ * something subtly different from what the report shows for the same match
+ * would be worse than no backtest at all.
+ */
+export function draftToPredictionInput(draft: PredictorDraft): PredictionInput | null {
+  if (draft.blue.team === null || draft.red.team === null) return null;
+  return {
+    blue: {
+      competition: draft.blue.competition,
+      team: draft.blue.team,
+      champions: draft.blue.champions,
+      motivation: draft.blue.motivation,
+    },
+    red: {
+      competition: draft.red.competition,
+      team: draft.red.team,
+      champions: draft.red.champions,
+      motivation: draft.red.motivation,
+    },
+    stage: draft.stage,
+    seriesLength: draft.seriesLength,
+    gameNumber: gameNumberOf(draft),
+    scoreBlue: draft.scoreBlue,
+    scoreRed: draft.scoreRed,
+    previousWinner: null,
+    winRequirement: draft.winRequirement,
+  };
 }
 
 /** Swap the two sides, carrying each team's score with it. */

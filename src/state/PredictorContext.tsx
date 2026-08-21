@@ -51,6 +51,13 @@ import {
   parseMatchText,
   type ImportedMatch,
 } from '../predictor/matchImport.ts';
+import {
+  buildResultIndex,
+  gradeMatch,
+  summarize,
+  type BacktestOutcome,
+  type BacktestSummary,
+} from '../predictor/backtest.ts';
 import type { PredictorModel } from '../predictor/types.ts';
 import type { Game } from '../domain/types.ts';
 
@@ -99,6 +106,13 @@ export interface PredictorContextValue {
   /** Jump to a match in the queue and fill the composer with it. */
   goToMatch: (index: number) => void;
   clearQueue: () => void;
+  /** Result of the last batch backtest, or `null` when none has been run. */
+  backtest: BacktestSummary | null;
+  /** How far a running backtest has got, or `null` when idle. */
+  backtestProgress: { done: number; total: number } | null;
+  runBacktest: () => void;
+  cancelBacktest: () => void;
+  clearBacktest: () => void;
   /** The ratings in force — an imported file, or the table shipped with the app. */
   ratings: StoredRatings;
   ratingsStatus: 'loading' | 'ready';
@@ -226,6 +240,92 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
     return built;
   }, [scopedGames, asOf, ratings]);
 
+  /* ---------------------------------------------------------------- */
+  /* Batch backtest                                                    */
+  /* ---------------------------------------------------------------- */
+
+  const [backtest, setBacktest] = useState<BacktestSummary | null>(null);
+  const [backtestProgress, setBacktestProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
+  const cancelRef = useRef(false);
+
+  const clearBacktest = useCallback(() => setBacktest(null), []);
+  const cancelBacktest = useCallback(() => {
+    cancelRef.current = true;
+  }, []);
+
+  /**
+   * Score every match in the queue and count the calls.
+   *
+   * History is cut at each match's own kickoff regardless of the switch above:
+   * the switch exists so a single prediction can be inspected with everything
+   * loaded, but a hundred matches graded against a model that has already seen
+   * their results is not a backtest, it is a lookup table. A match with no
+   * usable date is left ungraded rather than scored with full history.
+   *
+   * Rebuilding the model costs tens of milliseconds per match, so the loop
+   * hands control back to the browser every few matches — the page stays
+   * responsive and the Cancel button actually works.
+   */
+  const runBacktest = useCallback(() => {
+    if (!games || !queue || queue.matches.length === 0) return;
+    cancelRef.current = false;
+
+    const matches = queue.matches;
+    const results = buildResultIndex(games);
+    const ratingMap = ratingsFromStored(ratings);
+    const outcomes: BacktestOutcome[] = [];
+
+    // Consecutive matches sometimes scope to the same slice of history; the
+    // slice is fully determined by its length, so one entry is enough.
+    let lastLength = -1;
+    let lastModel: PredictorModel | null = null;
+
+    const run = async () => {
+      setBacktestProgress({ done: 0, total: matches.length });
+      for (let i = 0; i < matches.length; i += 1) {
+        if (cancelRef.current) break;
+        const match = matches[i]!;
+        const cutoff = asOfInstant(match);
+
+        if (cutoff === null) {
+          outcomes.push({
+            index: i,
+            label: `${match.blue.team ?? '?'} vs ${match.red.team ?? '?'}`,
+            predicted: null,
+            actual: null,
+            correct: null,
+            reason: 'no date',
+            confidence: null,
+            blueWon: null,
+          });
+        } else {
+          const scoped = gamesBefore(games, cutoff);
+          if (scoped.length !== lastLength || lastModel === null) {
+            lastModel = buildPredictorModel(scoped, ratingMap);
+            lastLength = scoped.length;
+          }
+          outcomes.push(gradeMatch(lastModel, match, i, results));
+        }
+
+        if (i % 5 === 4 || i === matches.length - 1) {
+          setBacktestProgress({ done: i + 1, total: matches.length });
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+      setBacktest(summarize(outcomes));
+      setBacktestProgress(null);
+    };
+
+    void run();
+  }, [games, queue, ratings]);
+
+  // A new paste, a dataset change or new ratings all invalidate the numbers.
+  useEffect(() => {
+    setBacktest(null);
+  }, [queueText, games, ratings]);
+
   useEffect(() => {
     let cancelled = false;
     void loadStoredRatings().then((stored) => {
@@ -294,6 +394,11 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
       loadMatches,
       goToMatch,
       clearQueue,
+      backtest,
+      backtestProgress,
+      runBacktest,
+      cancelBacktest,
+      clearBacktest,
       ratings,
       ratingsStatus,
       importRatings,
@@ -311,6 +416,11 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
       loadMatches,
       goToMatch,
       clearQueue,
+      backtest,
+      backtestProgress,
+      runBacktest,
+      cancelBacktest,
+      clearBacktest,
       ratings,
       ratingsStatus,
       importRatings,

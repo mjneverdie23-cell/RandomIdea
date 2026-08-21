@@ -322,6 +322,38 @@ it can't resolve is reported rather than silently dropped.
 **No winner field is read, ever** — the point is to fill in what a predictor
 would know before the game.
 
+#### Grading the whole queue at once
+
+**Backtest all matches** scores every match in the queue and prints the record:
+
+```
+Accuracy 53.9% · 201R 172W
+Always picking blue side would have scored 57.0% — the model is behind that.
+373 of 374 graded — 1 too close · Brier 0.266 (coin flip = 0.250)
+```
+
+The predictor never reads the result of the game it is predicting, and the
+export carries no winner, so the answer key comes from somewhere else: each
+pasted match is joined back to its source game by Oracle's Elixir game id (or
+by date + teams + game number for a paste from elsewhere), and only then is the
+winner read. History is cut at each match's own kickoff regardless of the
+as-of switch — a hundred matches graded against a model that has already seen
+their results is a lookup table, not a backtest.
+
+Three numbers rather than one, because accuracy alone hides too much:
+
+- **The record** is the headline: right, wrong, and the share.
+- **The blue-side baseline** makes it readable. 54% sounds fine until you learn
+  that picking blue every time — no model, no history, no data beyond which end
+  of the map a team started on — scored better.
+- **The Brier score** catches overconfidence: a model right 70% of the time
+  while claiming 95% scores far worse than one honest about its 70%. 0.250 is
+  what calling every game a coin flip gets.
+
+The confidence table underneath breaks the record down by what the model
+claimed, so a band that says 80% and delivers 56% is visible rather than
+averaged away. **Every call** lists each match, and clicking one loads it into
+the composer.
 ### Backtesting without lookahead
 
 A model built from the whole season already knows how the season went. Predict
