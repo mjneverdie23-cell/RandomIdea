@@ -22,7 +22,8 @@ const EXAMPLE = `{
       "red": {
         "team": "Gen.G",
         "top": "Gnar", "jungle": "Sejuani", "mid": "Orianna",
-        "bot": "Ezreal", "support": "Nautilus"
+        "bot": "Ezreal", "support": "Nautilus",
+        "motivation": "must win"
       }
     }
   ]
@@ -345,6 +346,14 @@ function BacktestPanel() {
               </tbody>
             </table>
           )}
+
+          <p className="dim backtest-caveat">
+            Every term is cut at each match's kickoff except the rank edge, which
+            reads a static ratings table formed with the whole season in view — so
+            these numbers flatter it slightly. Motivation is a stated input and is
+            never set by a paste unless you add a <code>motivation</code> key to a
+            side, so it scores zero here by default.
+          </p>
 
           <details
             className="backtest-detail"

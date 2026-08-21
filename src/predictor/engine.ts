@@ -11,6 +11,8 @@
  *                   (halved in game one, where the read is least informative)
  *   form edge       up to +1 for the better current-season series record
  *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
+ *   series edge     +0.3 per game of lead in the series so far, capped
+ *   rank edge       +0.25 to the better GlobalRank when the gap is >= 2
  *   fraud penalty   minus the team's inconsistency rating
  *
  * The point margin becomes a per-game probability through a logistic curve,
@@ -139,6 +141,45 @@ export const UNPLAYED_WIN_RATE = 1.0;
  * and an unknown is a coin flip.
  */
 export const NEUTRAL_WIN_RATE = 0.5;
+
+/**
+ * Points for each game of series lead, and how far the award can run.
+ *
+ * The tally used to ignore the series score completely: it fed the best-of
+ * arithmetic and the notices, but the per-game margin was the same at 0-0 as at
+ * 0-2 down. That is the one piece of "must win / doesn't need to win" a results
+ * export genuinely knows, and it is worth something — over the 374 games of
+ * July and August 2026, the side facing elimination won just 42.0% (60/143).
+ *
+ * The sign is the opposite of the intuition. A team facing elimination is not
+ * lifted by the pressure; it is behind because it has been losing, and that
+ * keeps being true for the next game. So the lead is credited, not the deficit.
+ *
+ * Sized at roughly half the raw signal: a 58/42 split is about 0.65 points
+ * through the logistic, but the stronger team's strength is already priced into
+ * the win-rate base and the form edge, so crediting the whole gap would count
+ * it twice.
+ */
+export const SERIES_LEAD_POINT = 0.3;
+export const SERIES_LEAD_CAP = 0.6;
+
+/** Points awarded to the better-ranked side, and the gap needed to earn them. */
+export const RANK_DIFF_THRESHOLD = 2;
+/**
+ * Half the original 0.5.
+ *
+ * The edge is real — over the same 374 games the better-ranked side won 59.0%
+ * (203/344), which beats the whole model — but GlobalRank is an outside opinion
+ * rather than something derived from the games in front of it, so it is priced
+ * as a tie-breaker rather than as a term that can carry a draft on its own.
+ *
+ * Read that 59.0% with care. The ratings table is a static snapshot: unlike
+ * every other term, it is *not* cut at kickoff, so a July game is scored with
+ * ranks formed knowing how the season went. It is not the same as reading the
+ * result, but it does borrow from the future, and it makes any backtest number
+ * that leans on this term optimistic. Half weight is partly a hedge against it.
+ */
+export const RANK_BONUS = 0.25;
 
 /**
  * Side credited with first pick in the draft notice.
@@ -438,6 +479,8 @@ function scoreSide(
     pocketBonus,
     formEdge: 0,
     motivationBonus: MOTIVATION_POINTS[input.motivation] ?? 0,
+    seriesEdge: 0,
+    rankBonus: 0,
     fraudPenalty,
     total: 0,
   };
@@ -449,7 +492,9 @@ function finalizeTotal(score: SideScore): number {
     score.metaBonus +
     score.pocketBonus +
     score.formEdge +
-    score.motivationBonus -
+    score.motivationBonus +
+    score.seriesEdge +
+    score.rankBonus -
     score.fraudPenalty
   );
 }
@@ -701,9 +746,43 @@ function buildNotices(
     }
   }
 
+  const blueRank = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;
+  const redRank = lookupRating(model.ratings, input.red.team)?.globalRank ?? null;
+  if (blueRank !== null && redRank !== null) {
+    const diff = Math.abs(blueRank - redRank);
+    if (diff >= RANK_DIFF_THRESHOLD) {
+      const stronger = blueRank < redRank ? input.blue.team : input.red.team;
+      notices.push({
+        kind: 'rank',
+        side: blueRank < redRank ? 'blue' : 'red',
+        text: `Rank gap ${diff} (GlobalRank ${blueRank} vs ${redRank}) → ${signed(RANK_BONUS)} to ${stronger}.`,
+      });
+    } else {
+      notices.push({
+        kind: 'rank',
+        side: null,
+        text: `Ranks are close (gap ${diff}) — no rank edge awarded.`,
+      });
+    }
+  }
+
   const target = SERIES_TARGET[input.seriesLength];
   if (target > 1) {
     const { scoreBlue, scoreRed } = input;
+    const lead = scoreBlue - scoreRed;
+    if (lead !== 0) {
+      const ahead = lead > 0 ? input.blue.team : input.red.team;
+      const behind = lead > 0 ? input.red.team : input.blue.team;
+      const award = Math.min(Math.abs(lead) * SERIES_LEAD_POINT, SERIES_LEAD_CAP);
+      notices.push({
+        kind: 'series',
+        side: lead > 0 ? 'blue' : 'red',
+        text:
+          `${ahead} lead the series ${Math.max(scoreBlue, scoreRed)}-${Math.min(scoreBlue, scoreRed)} ` +
+          `(${signed(award)}). Sides that were behind won 42% of the next game across ` +
+          `July–August 2026, so ${behind} are not credited for the pressure.`,
+      });
+    }
     if (scoreBlue === target - 1 && scoreRed === target - 1) {
       notices.push({
         kind: 'series',
@@ -806,6 +885,28 @@ export function predict(model: PredictorModel, input: PredictionInput): Predicti
       `+${Math.max(blue.formEdge, red.formEdge).toFixed(2)} to the better record`;
   }
 
+  // Both need the two sides side by side, so they land after the per-side tally.
+  const lead = input.scoreBlue - input.scoreRed;
+  if (lead !== 0) {
+    const award = Math.min(Math.abs(lead) * SERIES_LEAD_POINT, SERIES_LEAD_CAP);
+    if (lead > 0) blue.seriesEdge = award;
+    else red.seriesEdge = award;
+  }
+
+  const blueRank = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;
+  const redRank = lookupRating(model.ratings, input.red.team)?.globalRank ?? null;
+  let rankNote = 'GlobalRank unavailable for one or both teams — no rank edge';
+  if (blueRank !== null && redRank !== null) {
+    const diff = Math.abs(blueRank - redRank);
+    if (diff >= RANK_DIFF_THRESHOLD) {
+      if (blueRank < redRank) blue.rankBonus = RANK_BONUS;
+      else red.rankBonus = RANK_BONUS;
+      rankNote = `rank gap ${diff} ≥ ${RANK_DIFF_THRESHOLD} → +${RANK_BONUS} to the stronger side`;
+    } else {
+      rankNote = `rank gap ${diff} < ${RANK_DIFF_THRESHOLD} → no bonus`;
+    }
+  }
+
   blue.total = finalizeTotal(blue);
   red.total = finalizeTotal(red);
 
@@ -842,6 +943,7 @@ export function predict(model: PredictorModel, input: PredictionInput): Predicti
     needRed,
     seriesTarget,
     formNote,
+    rankNote,
     tendencyBlue: behaviorTendencies(model.behavior.get(input.blue.team.toLowerCase())),
     tendencyRed: behaviorTendencies(model.behavior.get(input.red.team.toLowerCase())),
     notices: buildNotices(model, input, blue, red),

@@ -224,12 +224,17 @@ export interface SideScore {
   formEdge: number;
   /** What the stated motivation is worth; zero for a normal game. */
   motivationBonus: number;
+  /** Credit for leading the series going into this game. */
+  seriesEdge: number;
+  /** Credit for the better GlobalRank, when the gap is wide enough. */
+  rankBonus: number;
   fraudPenalty: number;
   total: number;
 }
 
 export type NoticeKind =
   | 'first-pick'
+  | 'rank'
   | 'gold'
   | 'standings'
   | 'draft'
@@ -264,6 +269,8 @@ export interface Prediction {
   needRed: number;
   seriesTarget: number;
   formNote: string;
+  /** How the rank edge was decided, or why none was awarded. */
+  rankNote: string;
   tendencyBlue: string[];
   tendencyRed: string[];
   notices: Notice[];

@@ -213,8 +213,34 @@ higher total is the predicted winner.
 | Meta champions | +1 per champion clearing the pick-rate bar on the newest patches (5% of games in that role, and at least 4 actual picks) |
 | Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
 | Form edge | Up to +1 for the better current-season series record |
-| Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive |
+| Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive. **Stated by you** — see below |
+| Series edge | +0.3 per game of lead in the series so far, capped at +0.6 |
+| Rank edge | +0.25 to the better GlobalRank when the gap is 2 or more |
 | Fraud penalty | Minus the team's inconsistency rating |
+
+#### Motivation is an input, not a derivation
+
+Nothing in a results export knows a team is already eliminated, has its seed
+locked, or would rather draw a softer bracket. Working it out needs the
+schedule, the playoff cutline and the tiebreakers — none of which Oracle's
+Elixir carries, and the 2026 file alone spans splits labelled *Summer*,
+*Split 3*, *Rounds 1-2*, *Cup* and *Versus*, so there is not even one format to
+assume. So motivation stays a stated input, and a pasted match scores zero for
+it unless you add a `"motivation"` key to a side.
+
+What the data *does* know is the series score, and that is now scored in its own
+right. The direction is the opposite of the intuition: across July and August
+2026 the side facing elimination won only **42.0%** (60/143) of the next game.
+A team is behind because it has been losing, and that keeps being true — so the
+lead is credited rather than the pressure.
+
+#### A caveat on the rank edge
+
+Every term is scoped to games played before kickoff except this one: the ratings
+table is a static snapshot, so a July game is scored with ranks formed knowing
+how the season went. It is not the same as reading the result, but it borrows
+from the future, and it makes any backtest number leaning on it optimistic. Half
+weight is partly a hedge against that.
 
 The point margin becomes a per-game probability through a logistic curve, and
 the series and sweep odds follow by counting the ways a best-of can still be
@@ -339,9 +365,9 @@ would know before the game.
 **Backtest all matches** scores every match in the queue and prints the record:
 
 ```
-Accuracy 55.1% · 206R 168W
+Accuracy 55.3% · 207R 167W
 Always picking blue side would have scored 57.0% — the model is behind that.
-374 of 374 graded · Brier 0.255 (coin flip = 0.250)
+374 of 374 graded · Brier 0.252 (coin flip = 0.250)
 ```
 
 The predictor never reads the result of the game it is predicting, and the

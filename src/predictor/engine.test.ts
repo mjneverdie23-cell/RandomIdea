@@ -11,6 +11,9 @@ import {
   behaviorTendencies,
   championWinRate,
   predict,
+  RANK_BONUS,
+  SERIES_LEAD_CAP,
+  SERIES_LEAD_POINT,
   splitSubject,
   NEUTRAL_WIN_RATE,
   UNPLAYED_WIN_RATE,
@@ -558,6 +561,76 @@ describe('predict — point tally', () => {
   });
 });
 
+describe('predict — series edge', () => {
+  it('credits the side leading the series, not the one under pressure', () => {
+    // Being 2-0 down is not a rallying cry: those sides won 42% of the next
+    // game across July and August 2026.
+    const result = predict(
+      model(rostered()),
+      input({ seriesLength: 'BO5', scoreBlue: 2, scoreRed: 0 }),
+    );
+    expect(result.blue.seriesEdge).toBeCloseTo(2 * SERIES_LEAD_POINT, 10);
+    expect(result.red.seriesEdge).toBe(0);
+    expect(result.favourite).toBe('blue');
+  });
+
+  it('scales with the size of the lead and stops at the cap', () => {
+    const one = predict(model(rostered()), input({ seriesLength: 'BO5', scoreBlue: 1, scoreRed: 0 }));
+    const two = predict(model(rostered()), input({ seriesLength: 'BO5', scoreBlue: 2, scoreRed: 0 }));
+    expect(one.blue.seriesEdge).toBeCloseTo(SERIES_LEAD_POINT, 10);
+    expect(two.blue.seriesEdge).toBeGreaterThan(one.blue.seriesEdge);
+    expect(two.blue.seriesEdge).toBeLessThanOrEqual(SERIES_LEAD_CAP);
+  });
+
+  it('awards nothing while the series is level', () => {
+    for (const [scoreBlue, scoreRed] of [[0, 0], [1, 1], [2, 2]] as const) {
+      const result = predict(model(rostered()), input({ seriesLength: 'BO5', scoreBlue, scoreRed }));
+      expect(result.blue.seriesEdge).toBe(0);
+      expect(result.red.seriesEdge).toBe(0);
+    }
+  });
+});
+
+describe('predict — rank edge', () => {
+  const ranked = (blue: number, red: number): Partial<PredictorModel> => ({
+    ...rostered(),
+    ratings: new Map([
+      ['blue team', { team: 'Blue Team', globalRank: blue, fraud: 0 }],
+      ['red team', { team: 'Red Team', globalRank: red, fraud: 0 }],
+    ]),
+  });
+
+  it('gives the better-ranked side half a meta point once the gap is wide enough', () => {
+    const result = predict(model(ranked(3, 12)), input());
+    expect(result.blue.rankBonus).toBe(RANK_BONUS);
+    expect(RANK_BONUS).toBe(0.25);
+    expect(result.red.rankBonus).toBe(0);
+    expect(result.rankNote).toContain('rank gap 9');
+  });
+
+  it('awards nothing across a gap of one', () => {
+    const result = predict(model(ranked(4, 5)), input());
+    expect(result.blue.rankBonus).toBe(0);
+    expect(result.red.rankBonus).toBe(0);
+    expect(result.rankNote).toContain('no bonus');
+  });
+
+  it('says so when a team is missing from the ratings table', () => {
+    const result = predict(model(rostered()), input());
+    expect(result.rankNote).toContain('unavailable');
+    expect(result.blue.rankBonus).toBe(0);
+  });
+
+  it('never outweighs the draft itself', () => {
+    // Red drafts five champions they win on; blue is bottom-ranked but poor.
+    const result = predict(
+      model({ ...ranked(1, 40), ...withHistory(['Red Team', DRAFT_B, 10, 10], ['Blue Team', DRAFT_A, 1, 10]) }),
+      input(),
+    );
+    expect(result.favourite).toBe('red');
+  });
+});
+
 describe('predict — series probabilities', () => {
   it('treats a best-of-one series as the single game', () => {
     const result = predict(model(), input({ seriesLength: 'BO1' }));
@@ -622,8 +695,14 @@ describe('predict — notices', () => {
   });
 
   it('flags match point for the side that holds it', () => {
-    const notices = predict(model(), input({ seriesLength: 'BO5', scoreBlue: 2, scoreRed: 0 })).notices;
-    expect(notices.find((n) => n.kind === 'series')?.text).toContain('Blue Team on match point');
+    const notices = predict(
+      model(rostered()),
+      input({ seriesLength: 'BO5', scoreBlue: 2, scoreRed: 0 }),
+    ).notices;
+    const series = notices.filter((n) => n.kind === 'series').map((n) => n.text);
+    expect(series.some((text) => text.includes('Blue Team on match point'))).toBe(true);
+    // The lead itself is reported separately, since it is scored.
+    expect(series.some((text) => text.includes('lead the series 2-0'))).toBe(true);
   });
 
   it('surfaces a tank incentive as a warning, with its cost', () => {

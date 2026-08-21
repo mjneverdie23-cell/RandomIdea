@@ -100,6 +100,9 @@ export function PredictionReport({
             {formSeason ? ` (${formSeason} season)` : ''}.
           </p>
           <p>
+            <span className="dim">Rank edge:</span> {prediction.rankNote}.
+          </p>
+          <p>
             <span className="dim">Fraud source:</span> {ratingsLabel}
             {unratedTeams.length > 0 && (
               <>
@@ -201,6 +204,8 @@ const TALLY_ROWS = [
   { key: 'pocketBonus', label: 'Pocket picks', hint: '+1.5 each for 1–2 off-meta, more −2' },
   { key: 'formEdge', label: 'Form edge', hint: 'from the current-season record' },
   { key: 'motivationBonus', label: 'Motivation', hint: 'must-win +0.5, coasting −0.5, tanking −1' },
+  { key: 'seriesEdge', label: 'Series edge', hint: '+0.3 per game of lead, capped at +0.6' },
+  { key: 'rankBonus', label: 'Rank edge', hint: '+0.25 when GlobalRank differs by 2 or more' },
 ] as const;
 
 function TallyColumn({ score, side, winner }: { score: SideScore; side: Side; winner: boolean }) {
