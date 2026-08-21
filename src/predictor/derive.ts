@@ -44,6 +44,22 @@ import type {
 export const META_PATCH_COUNT = 2;
 /** Share of games a champion must be picked in to count as meta. */
 export const META_PICK_RATE = 0.05;
+/**
+ * Picks a champion needs before a rate is allowed to mean anything.
+ *
+ * A percentage is not evidence on its own. The window is the two newest
+ * patches, and on the day a patch ships that can be very few games: measured
+ * across the 2026 season, a cutoff landing just after a patch drop gave a
+ * 37-game window, where the 5% bar works out to under two picks and any
+ * champion picked twice in a role reads as meta — noise deciding a full point
+ * on each side.
+ *
+ * Widening the window instead would have traded the problem for a worse one,
+ * dragging a patch nobody plays any more into the read. This binds only where
+ * the window is genuinely thin: across the same season it changed the meta pool
+ * in 1 of 28 weekly windows — the degenerate one — and left the rest untouched.
+ */
+export const META_MIN_PICKS = 4;
 /** Below this many observations a rate is reported as unknown, not as a number. */
 export const MIN_SAMPLE = 4;
 /** Games in the recency-weighted form window. */
@@ -172,10 +188,16 @@ function buildChampionRecords(
  * This is pick-frequency meta, not win-rate meta: the question the score asks
  * is "did they draft what everyone is drafting", and a champion can be
  * contested constantly while sitting at a 48% win rate.
+ *
+ * The window is the two newest patches, which is what keeps the read current,
+ * and a champion needs both a high enough rate and `META_MIN_PICKS` actual
+ * picks — a percentage over a handful of games is not evidence.
  */
 export function deriveMeta(games: readonly Game[]): {
   metaByRole: Map<Role, Set<string>>;
+  pickRateByRole: Map<Role, Map<string, number>>;
   patches: string[];
+  windowGames: number;
 } {
   const patches = [...new Set(games.map((g) => g.patch).filter((p): p is string => p !== null))].sort(
     comparePatches,
@@ -198,17 +220,23 @@ export function deriveMeta(games: readonly Game[]): {
   }
 
   const metaByRole = new Map<Role, Set<string>>();
+  const pickRateByRole = new Map<Role, Map<string, number>>();
   for (const role of ROLES) {
     const keep = new Set<string>();
+    const rates = new Map<string, number>();
     // Presence per game, so a champion picked by both teams counts twice —
     // being contested on both sides is the strongest meta signal there is.
     for (const [championId, picks] of counts.get(role)!) {
-      if (recent.length > 0 && picks / recent.length >= META_PICK_RATE) keep.add(championId);
+      if (recent.length === 0) continue;
+      const rate = picks / recent.length;
+      rates.set(championId, rate);
+      if (rate >= META_PICK_RATE && picks >= META_MIN_PICKS) keep.add(championId);
     }
     metaByRole.set(role, keep);
+    pickRateByRole.set(role, rates);
   }
 
-  return { metaByRole, patches: recentPatches };
+  return { metaByRole, pickRateByRole, patches: recentPatches, windowGames: recent.length };
 }
 
 /* ------------------------------------------------------------------ */
@@ -722,7 +750,7 @@ export function buildPredictorModel(
 ): PredictorModel {
   const splits = currentSplits(games);
   const records = buildChampionRecords(games, splits);
-  const { metaByRole, patches } = deriveMeta(games);
+  const { metaByRole, pickRateByRole, patches, windowGames } = deriveMeta(games);
 
   const formSeason = latestSeason(games);
   const formGames = formSeason ? games.filter((game) => game.season === formSeason) : games;
@@ -738,7 +766,9 @@ export function buildPredictorModel(
     teamCareerRecord: records.teamCareer,
     currentSplitOf: splits,
     metaByRole,
+    pickRateByRole,
     metaPatches: patches,
+    metaWindowGames: windowGames,
     metaPickRateThreshold: META_PICK_RATE,
     behavior: deriveBehavior(formGames, runs),
     goldTempo: deriveGoldTempo(formGames),
@@ -757,9 +787,11 @@ export function buildPredictorModel(
 /** An empty model, so the page can render before any data is loaded. */
 export function emptyPredictorModel(): PredictorModel {
   const metaByRole = new Map<Role, Set<string>>();
+  const pickRateByRole = new Map<Role, Map<string, number>>();
   const championsByRole = new Map<Role, Champion[]>();
   for (const role of ROLES) {
     metaByRole.set(role, new Set());
+    pickRateByRole.set(role, new Map());
     championsByRole.set(role, []);
   }
   return {
@@ -769,7 +801,9 @@ export function emptyPredictorModel(): PredictorModel {
     teamCareerRecord: new Map(),
     currentSplitOf: new Map(),
     metaByRole,
+    pickRateByRole,
     metaPatches: [],
+    metaWindowGames: 0,
     metaPickRateThreshold: META_PICK_RATE,
     behavior: new Map(),
     goldTempo: new Map(),

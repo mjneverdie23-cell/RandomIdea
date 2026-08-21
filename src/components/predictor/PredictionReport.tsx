@@ -289,6 +289,12 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
               <strong>{pick.champion.name}</strong>
               <span className={`lane-meta${pick.meta ? ' is-meta' : ''}`}>
                 {pick.meta ? 'meta' : 'off-meta'}
+                {pick.pickRate !== null && (
+                  // The pick rate that produced the verdict, so a surprising
+                  // "off-meta" can be checked against the bar rather than
+                  // taken on trust.
+                  <span className="lane-rate">{(pick.pickRate * 100).toFixed(1)}%</span>
+                )}
               </span>
             </div>
             <div className="lane-stat">

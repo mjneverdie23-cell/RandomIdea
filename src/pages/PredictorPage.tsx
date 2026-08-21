@@ -126,7 +126,10 @@ export function PredictorPage() {
             Build a draft and read the point tally. Every number below comes from the{' '}
             {formatCount(model.gamesAnalyzed, 'game')} you have loaded
             {model.metaPatches.length > 0 &&
-              `, with meta taken from patch ${model.metaPatches.join(' and ')}`}
+              `, with meta taken from patch ${model.metaPatches.join(' and ')} — ` +
+                `${formatCount(model.metaWindowGames, 'game')}, where a champion counts as meta ` +
+                `once it is picked in ${(model.metaPickRateThreshold * 100).toFixed(0)}% of them ` +
+                `in that role`}
             .
           </p>
         </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DECISIVE_GOLD,
+  META_MIN_PICKS,
   MIN_TEMPO_SAMPLE,
   buildPredictorModel,
   deriveMeta,
@@ -162,10 +163,39 @@ describe('deriveMeta', () => {
         blueDraft: ['Rumble', 'Viego', 'Azir', 'Jinx', 'Thresh'],
       }),
     ];
-    const { metaByRole, patches } = deriveMeta(games);
+    const { metaByRole, patches, pickRateByRole, windowGames } = deriveMeta(games);
     expect(patches).toEqual(['16.02']);
+    expect(windowGames).toBe(10);
     expect(metaByRole.get('top')!.has(makeChampion('Aatrox')!.id)).toBe(true);
+    // Rumble clears the rate bar on one pick, which is not evidence of a meta.
+    expect(pickRateByRole.get('top')!.get(makeChampion('Rumble')!.id)).toBeCloseTo(0.1, 10);
+    expect(metaByRole.get('top')!.has(makeChampion('Rumble')!.id)).toBe(false);
+  });
+
+  it('needs real picks behind the rate, not just a small denominator', () => {
+    // Same 10% share, but now on enough picks to mean something.
+    const games = [
+      ...Array.from({ length: 36 }, (_, i) =>
+        makeGame({ id: `new-${i}`, blue: 'A', red: 'B', winner: 'blue', day: i, patch: '16.02' }),
+      ),
+      ...Array.from({ length: META_MIN_PICKS }, (_, i) =>
+        makeGame({
+          id: `pocket-${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'blue',
+          day: 40 + i,
+          patch: '16.02',
+          blueDraft: ['Rumble', 'Viego', 'Azir', 'Jinx', 'Thresh'],
+        }),
+      ),
+    ];
+    const { metaByRole } = deriveMeta(games);
     expect(metaByRole.get('top')!.has(makeChampion('Rumble')!.id)).toBe(true);
+
+    // One pick short and it drops out, however good the percentage looks.
+    const { metaByRole: thinner } = deriveMeta(games.slice(0, -1));
+    expect(thinner.get('top')!.has(makeChampion('Rumble')!.id)).toBe(false);
   });
 
   it('ignores picks from patches outside the window', () => {

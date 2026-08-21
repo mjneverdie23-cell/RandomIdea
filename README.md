@@ -210,7 +210,7 @@ higher total is the predicted winner.
 | Line item | What it adds |
 | --- | --- |
 | Win-rate base | The five champions' historical win rates for **the player starting that lane**, capped at 1.00 per lane. A champion with no recorded games counts as 1.00 |
-| Meta champions | +1 per champion clearing the pick-rate bar on the newest patches |
+| Meta champions | +1 per champion clearing the pick-rate bar on the newest patches (5% of games in that role, and at least 4 actual picks) |
 | Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
 | Form edge | Up to +1 for the better current-season series record |
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive |

@@ -137,7 +137,11 @@ export interface PredictorModel {
   currentSplitOf: Map<string, string>;
   /** Champion ids that cleared the pick-rate bar on the newest patches. */
   metaByRole: Map<Role, Set<string>>;
+  /** Per-role pick rate over the meta window, for every champion seen in it. */
+  pickRateByRole: Map<Role, Map<string, number>>;
   metaPatches: string[];
+  /** Games the meta window covers, so a thin read can be spotted. */
+  metaWindowGames: number;
   metaPickRateThreshold: number;
   behavior: Map<string, TeamBehavior>;
   /** Gold difference by minute mark, per team. */
@@ -200,6 +204,8 @@ export interface PickLine {
   careerRecord: WinLoss | null;
   /** Which split "this split" is for this player, e.g. `Summer`. */
   splitLabel: string | null;
+  /** Share of meta-window games this champion was picked in this role. */
+  pickRate: number | null;
   meta: boolean;
   counters: Champion[];
   counteredBy: Champion[];

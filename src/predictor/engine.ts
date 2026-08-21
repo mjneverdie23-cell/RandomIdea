@@ -362,6 +362,7 @@ function scoreSide(
       splitRecord: read.splitRecord,
       careerRecord: read.careerRecord,
       splitLabel: read.splitLabel,
+      pickRate: model.pickRateByRole.get(role)?.get(champion.id) ?? null,
       meta,
       ...edges,
     });
