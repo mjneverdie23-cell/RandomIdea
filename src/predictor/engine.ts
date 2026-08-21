@@ -12,8 +12,11 @@
  *   form edge       up to +1 for the better current-season series record
  *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
  *   series edge     +0.3 per game of lead in the series so far, capped
- *   rank edge       +0.25 to the better GlobalRank when the gap is >= 2
- *   fraud penalty   minus the team's inconsistency rating
+ *   rank edge       +0.1 per place of GlobalRank gap, capped at 1.5
+ *
+ * The fraud rating is reported as a notice and deliberately not scored: over
+ * 374 backtested games it cost accuracy, and alone it predicted the winner only
+ * 44.2% of the time.
  *
  * The point margin becomes a per-game probability through a logistic curve,
  * and the series/sweep probabilities follow from that by counting the ways a
@@ -163,23 +166,69 @@ export const NEUTRAL_WIN_RATE = 0.5;
 export const SERIES_LEAD_POINT = 0.3;
 export const SERIES_LEAD_CAP = 0.6;
 
-/** Points awarded to the better-ranked side, and the gap needed to earn them. */
-export const RANK_DIFF_THRESHOLD = 2;
 /**
- * Half the original 0.5.
+ * The rank edge: the only signal that compares teams across regions.
  *
- * The edge is real — over the same 374 games the better-ranked side won 59.0%
- * (203/344), which beats the whole model — but GlobalRank is an outside opinion
- * rather than something derived from the games in front of it, so it is priced
- * as a tie-breaker rather than as a term that can carry a draft on its own.
+ * Everything else in the tally is computed from the games themselves, and that
+ * is precisely why it cannot tell a good minor team from a good major one. A
+ * win rate is only as meaningful as the opposition behind it, and nothing in an
+ * Oracle's Elixir export says how hard a schedule was. EWC's LØS is the case
+ * this exists for: going into their match with JD Gaming they had a 71% win
+ * rate over 17 games and 83% recent form, against JDG's 52% over 110 and 31%.
+ * Every internal read said LØS were the better team, and the model gave them
+ * 80%. They lost, as they lost every game against a major-region side.
  *
- * Read that 59.0% with care. The ratings table is a static snapshot: unlike
- * every other term, it is *not* cut at kickoff, so a July game is scored with
- * ranks formed knowing how the season went. It is not the same as reading the
- * result, but it does borrow from the future, and it makes any backtest number
- * that leans on this term optimistic. Half weight is partly a hedge against it.
+ * So the term is priced to be able to overrule a draft read, not merely to
+ * break a tie: 0.1 a place, capped at 1.5 — about one and a half meta picks.
+ * Scaled rather than a flat award over a threshold, because a two-place gap and
+ * a thirty-place gap are not the same claim.
+ *
+ * Two caveats worth keeping in view. GlobalRank is hand-maintained, so this is
+ * an outside opinion rather than something the games prove; and the table is a
+ * static snapshot, so unlike every other term it is *not* cut at kickoff — a
+ * July game is scored with ranks formed knowing how the season went. That is
+ * why the cap exists, and why any backtest number leaning on this term should
+ * be read as optimistic.
  */
-export const RANK_BONUS = 0.25;
+export const RANK_POINT = 0.1;
+export const RANK_CAP = 1.5;
+
+/**
+ * Rank assumed for a team the ratings table does not list.
+ *
+ * Being absent from a hand-maintained table of the teams that matter is itself
+ * evidence, and treating it as "no information" is what let LØS through: with
+ * no entry they took no rank edge at all, so the term meant to catch exactly
+ * that team never fired. Derived from the table rather than hardcoded, so an
+ * imported file of any size behaves the same. The precise value barely matters
+ * — the cap saturates long before it — which is what makes the assumption safe.
+ */
+export function unratedRank(model: PredictorModel): number {
+  let worst = 0;
+  for (const rating of model.ratings.values()) {
+    if (rating.globalRank !== null && rating.globalRank > worst) worst = rating.globalRank;
+  }
+  return worst + 5;
+}
+
+/**
+ * Fraud rating bands, for the notice.
+ *
+ * The rating no longer moves the score. Backtested over 374 games it was the
+ * single most harmful term in the model: subtracting it cost about 1.4 points
+ * of accuracy, and on its own it predicted the winner just 44.2% of the time —
+ * the *more* fraudulent side won more often. It reads as a useful scouting note
+ * and behaves as noise, so it is reported and not scored.
+ */
+export const FRAUD_BANDS: { min: number; label: string }[] = [
+  { min: 0.75, label: 'high' },
+  { min: 0.5, label: 'medium' },
+  { min: 0.01, label: 'low' },
+];
+
+export function fraudBand(rating: number): string | null {
+  return FRAUD_BANDS.find((band) => rating >= band.min)?.label ?? null;
+}
 
 /**
  * Side credited with first pick in the draft notice.
@@ -494,8 +543,7 @@ function finalizeTotal(score: SideScore): number {
     score.formEdge +
     score.motivationBonus +
     score.seriesEdge +
-    score.rankBonus -
-    score.fraudPenalty
+    score.rankBonus
   );
 }
 
@@ -736,34 +784,38 @@ function buildNotices(
     ['blue', blue],
     ['red', red],
   ] as const) {
-    if (score.fraudPenalty > 0) {
-      notices.push({
-        kind: 'reliability',
-        side,
-        warning: true,
-        text: `${score.team}: flagged for inconsistency (${signed(-score.fraudPenalty)}).`,
-      });
-    }
+    const band = fraudBand(score.fraudPenalty);
+    if (!band) continue;
+    notices.push({
+      kind: 'reliability',
+      side,
+      warning: band === 'high',
+      text:
+        `${score.team}: ${band} fraud rating (${score.fraudPenalty.toFixed(2)}) — ` +
+        `reported only, it does not move the score.`,
+    });
   }
 
-  const blueRank = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;
-  const redRank = lookupRating(model.ratings, input.red.team)?.globalRank ?? null;
-  if (blueRank !== null && redRank !== null) {
-    const diff = Math.abs(blueRank - redRank);
-    if (diff >= RANK_DIFF_THRESHOLD) {
-      const stronger = blueRank < redRank ? input.blue.team : input.red.team;
-      notices.push({
-        kind: 'rank',
-        side: blueRank < redRank ? 'blue' : 'red',
-        text: `Rank gap ${diff} (GlobalRank ${blueRank} vs ${redRank}) → ${signed(RANK_BONUS)} to ${stronger}.`,
-      });
-    } else {
-      notices.push({
-        kind: 'rank',
-        side: null,
-        text: `Ranks are close (gap ${diff}) — no rank edge awarded.`,
-      });
-    }
+  const rankLead = blue.rankBonus > 0 ? 'blue' : red.rankBonus > 0 ? 'red' : null;
+  const rankAward = Math.max(blue.rankBonus, red.rankBonus);
+  if (rankLead === null) {
+    notices.push({ kind: 'rank', side: null, text: 'Ranks are level — no rank edge awarded.' });
+  } else {
+    const unlisted = (['blue', 'red'] as const).filter(
+      (side) => lookupRating(model.ratings, input[side].team)?.globalRank == null,
+    );
+    notices.push({
+      kind: 'rank',
+      side: rankLead,
+      warning: unlisted.length > 0,
+      text:
+        `${input[rankLead].team} rank ahead → ${signed(rankAward)}.` +
+        (unlisted.length > 0
+          ? ` ${unlisted.map((side) => input[side].team).join(' and ')} not in the ratings table, ` +
+            `so treated as a minor team — this is the term that stops a strong record ` +
+            `against weak opposition reading as a strong team.`
+          : ''),
+    });
   }
 
   const target = SERIES_TARGET[input.seriesLength];
@@ -893,19 +945,24 @@ export function predict(model: PredictorModel, input: PredictionInput): Predicti
     else red.seriesEdge = award;
   }
 
-  const blueRank = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;
-  const redRank = lookupRating(model.ratings, input.red.team)?.globalRank ?? null;
-  let rankNote = 'GlobalRank unavailable for one or both teams — no rank edge';
-  if (blueRank !== null && redRank !== null) {
-    const diff = Math.abs(blueRank - redRank);
-    if (diff >= RANK_DIFF_THRESHOLD) {
-      if (blueRank < redRank) blue.rankBonus = RANK_BONUS;
-      else red.rankBonus = RANK_BONUS;
-      rankNote = `rank gap ${diff} ≥ ${RANK_DIFF_THRESHOLD} → +${RANK_BONUS} to the stronger side`;
-    } else {
-      rankNote = `rank gap ${diff} < ${RANK_DIFF_THRESHOLD} → no bonus`;
-    }
-  }
+  const fallback = unratedRank(model);
+  const blueListed = lookupRating(model.ratings, input.blue.team)?.globalRank ?? null;
+  const redListed = lookupRating(model.ratings, input.red.team)?.globalRank ?? null;
+  const blueRank = blueListed ?? fallback;
+  const redRank = redListed ?? fallback;
+
+  const gap = redRank - blueRank;
+  const award = Math.min(Math.abs(gap) * RANK_POINT, RANK_CAP);
+  if (gap > 0) blue.rankBonus = award;
+  else if (gap < 0) red.rankBonus = award;
+
+  const describeRank = (team: string, listed: number | null): string =>
+    listed === null ? `${team} unrated (treated as ${fallback})` : `${team} #${listed}`;
+  let rankNote = `${describeRank(input.blue.team, blueListed)} vs ${describeRank(input.red.team, redListed)}`;
+  rankNote +=
+    gap === 0
+      ? ' — level, no rank edge'
+      : ` → ${signed(award)} to ${gap > 0 ? input.blue.team : input.red.team}`;
 
   blue.total = finalizeTotal(blue);
   red.total = finalizeTotal(red);

@@ -215,8 +215,13 @@ higher total is the predicted winner.
 | Form edge | Up to +1 for the better current-season series record |
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive. **Stated by you** — see below |
 | Series edge | +0.3 per game of lead in the series so far, capped at +0.6 |
-| Rank edge | +0.25 to the better GlobalRank when the gap is 2 or more |
-| Fraud penalty | Minus the team's inconsistency rating |
+| Rank edge | +0.1 per place of GlobalRank gap, capped at +1.5 |
+
+The **fraud rating is reported, not scored**. Backtested over 374 games it was
+the most harmful term in the model: subtracting it cost about 1.4 points of
+accuracy, and on its own it predicted the winner just 44.2% of the time — the
+*more* fraudulent side won more often. It now appears in the notices as a
+high / medium / low band and moves nothing.
 
 #### Motivation is an input, not a derivation
 
@@ -234,13 +239,43 @@ right. The direction is the opposite of the intuition: across July and August
 A team is behind because it has been losing, and that keeps being true — so the
 lead is credited rather than the pressure.
 
-#### A caveat on the rank edge
+#### The rank edge, and why it carries real weight
 
-Every term is scoped to games played before kickoff except this one: the ratings
-table is a static snapshot, so a July game is scored with ranks formed knowing
-how the season went. It is not the same as reading the result, but it borrows
-from the future, and it makes any backtest number leaning on it optimistic. Half
-weight is partly a hedge against that.
+It is the only term that can compare teams across regions. Everything else is
+computed from the games themselves, and that is exactly why none of it can tell
+a good minor team from a good major one: a win rate is only as meaningful as the
+opposition behind it, and nothing in an Oracle's Elixir export says how hard a
+schedule was.
+
+EWC's LØS is the case it exists for. Going into their match with JD Gaming they
+had a **71% win rate over 17 games and 83% recent form**, against JDG's **52%
+over 110 games and 31%**. Every internal read said LØS were the better team and
+the model gave them **80%**. They lost — as they lost every game against a
+major-region side.
+
+Two changes followed. The award **scales with the gap** (0.1 a place, capped at
+1.5) rather than paying a flat fee over a threshold, because a two-place gap and
+a thirty-place gap are not the same claim. And a team **absent from the ratings
+table is ranked behind every team in it**: being missing from a hand-maintained
+list of the teams that matter is itself evidence, and treating it as "no
+information" is what let LØS through — with no entry they took no rank edge at
+all, so the term meant to catch exactly that team never fired. The fallback is
+derived from the table rather than hardcoded, and the cap saturates long before
+the precise value matters.
+
+On the five LØS games in the backtest the model went from 2/5 to 3/5, and the
+two worst calls collapsed: Hanwha Life Esports 64% → 36%, JD Gaming 80% → 54%.
+
+**The caveat that comes with it.** Every term is scoped to games played before
+kickoff except this one — the ratings table is a static snapshot, so a July game
+is scored with ranks formed knowing how the season went. It is a hand-maintained
+judgement rather than a statistic, so it is not the same as reading the result,
+but it does borrow from the future and it makes any backtest number leaning on
+it optimistic. The cap is there to bound how far that can go.
+
+One limitation worth knowing: because the cap saturates, the model cannot tell
+"unrated against rank 3" from "unrated against rank 27". LØS beat LYON (rank 27)
+twice and the model called both against them.
 
 The point margin becomes a per-game probability through a logistic curve, and
 the series and sweep odds follow by counting the ways a best-of can still be
@@ -365,9 +400,9 @@ would know before the game.
 **Backtest all matches** scores every match in the queue and prints the record:
 
 ```
-Accuracy 55.3% · 207R 167W
-Always picking blue side would have scored 57.0% — the model is behind that.
-374 of 374 graded · Brier 0.252 (coin flip = 0.250)
+Accuracy 62.3% · 233R 141W
+Always picking blue side would have scored 57.0%.
+374 of 374 graded · Brier 0.247 (coin flip = 0.250)
 ```
 
 The predictor never reads the result of the game it is predicting, and the

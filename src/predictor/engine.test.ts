@@ -11,7 +11,9 @@ import {
   behaviorTendencies,
   championWinRate,
   predict,
-  RANK_BONUS,
+  RANK_CAP,
+  RANK_POINT,
+  fraudBand,
   SERIES_LEAD_CAP,
   SERIES_LEAD_POINT,
   splitSubject,
@@ -454,14 +456,14 @@ describe('predict — point tally', () => {
     expect(draftValue(2)).toBeLessThan(draftValue(5));
   });
 
-  it('subtracts the fraud rating from the team that carries it', () => {
+  it('carries the fraud rating without letting it into the total', () => {
     const ratings = new Map([['red team', { team: 'Red Team', globalRank: null, fraud: 1.5 }]]);
-    const result = predict(model({ ratings }), input());
+    const result = predict(model({ ...rostered(), ratings }), input());
+    // Still read, so the notice can report it.
     expect(result.red.fraudPenalty).toBe(1.5);
-    // Both sides sit at the neutral base and, with no meta table loaded, both
-    // take the chaotic-draft penalty; only the fraud rating separates them.
-    expect(result.red.total).toBeCloseTo(result.blue.total - 1.5, 10);
-    expect(result.favourite).toBe('blue');
+    // Both sides are otherwise identical, and the rating does not separate them.
+    expect(result.red.total).toBeCloseTo(result.blue.total, 10);
+    expect(result.favourite).toBeNull();
   });
 
   it('caps the form edge and ignores records below the trust threshold', () => {
@@ -592,42 +594,102 @@ describe('predict — series edge', () => {
 });
 
 describe('predict — rank edge', () => {
-  const ranked = (blue: number, red: number): Partial<PredictorModel> => ({
-    ...rostered(),
-    ratings: new Map([
-      ['blue team', { team: 'Blue Team', globalRank: blue, fraud: 0 }],
-      ['red team', { team: 'Red Team', globalRank: red, fraud: 0 }],
-    ]),
+  const ranked = (blue: number | null, red: number | null): Partial<PredictorModel> => {
+    const ratings = new Map<string, { team: string; globalRank: number | null; fraud: number }>();
+    if (blue !== null) ratings.set('blue team', { team: 'Blue Team', globalRank: blue, fraud: 0 });
+    if (red !== null) ratings.set('red team', { team: 'Red Team', globalRank: red, fraud: 0 });
+    return { ...rostered(), ratings };
+  };
+
+  it('scales with the size of the gap rather than paying a flat fee', () => {
+    const near = predict(model(ranked(3, 6)), input());
+    const far = predict(model(ranked(3, 30)), input());
+    expect(near.blue.rankBonus).toBeCloseTo(3 * RANK_POINT, 10);
+    expect(far.blue.rankBonus).toBeGreaterThan(near.blue.rankBonus);
+    expect(near.red.rankBonus).toBe(0);
   });
 
-  it('gives the better-ranked side half a meta point once the gap is wide enough', () => {
-    const result = predict(model(ranked(3, 12)), input());
-    expect(result.blue.rankBonus).toBe(RANK_BONUS);
-    expect(RANK_BONUS).toBe(0.25);
-    expect(result.red.rankBonus).toBe(0);
-    expect(result.rankNote).toContain('rank gap 9');
+  it('stops at the cap, so rank can never run away with a prediction', () => {
+    const result = predict(model(ranked(1, 55)), input());
+    expect(result.blue.rankBonus).toBe(RANK_CAP);
   });
 
-  it('awards nothing across a gap of one', () => {
-    const result = predict(model(ranked(4, 5)), input());
+  it('awards nothing when the two are level', () => {
+    const result = predict(model(ranked(7, 7)), input());
     expect(result.blue.rankBonus).toBe(0);
     expect(result.red.rankBonus).toBe(0);
-    expect(result.rankNote).toContain('no bonus');
+    expect(result.rankNote).toContain('level');
   });
 
-  it('says so when a team is missing from the ratings table', () => {
-    const result = predict(model(rostered()), input());
-    expect(result.rankNote).toContain('unavailable');
+  it('ranks an unlisted team behind every listed one', () => {
+    // LØS: absent from the table, a strong record against weak opposition, and
+    // previously collecting no rank edge at all.
+    const result = predict(model(ranked(null, 9)), input());
+    expect(result.red.rankBonus).toBeGreaterThan(0);
     expect(result.blue.rankBonus).toBe(0);
+    expect(result.rankNote).toContain('unrated');
+
+    const notice = result.notices.find((n) => n.kind === 'rank');
+    expect(notice?.text).toContain('not in the ratings table');
+    expect(notice?.warning).toBe(true);
   });
 
-  it('never outweighs the draft itself', () => {
-    // Red drafts five champions they win on; blue is bottom-ranked but poor.
+  it('leaves two unlisted teams level with each other', () => {
+    const result = predict(model(ranked(null, null)), input());
+    expect(result.blue.rankBonus).toBe(0);
+    expect(result.red.rankBonus).toBe(0);
+  });
+
+  it('is able to overrule a draft read, which is the point of it', () => {
+    // Blue's champion history looks better, but they are unlisted and red is
+    // a top-ten team — exactly the LØS-versus-JD-Gaming shape.
     const result = predict(
-      model({ ...ranked(1, 40), ...withHistory(['Red Team', DRAFT_B, 10, 10], ['Blue Team', DRAFT_A, 1, 10]) }),
+      model({ ...ranked(null, 9), ...withHistory(['Blue Team', DRAFT_A, 8, 10]) }),
       input(),
     );
     expect(result.favourite).toBe('red');
+  });
+});
+
+describe('predict — fraud rating', () => {
+  const withFraud = (blue: number, red: number): Partial<PredictorModel> => ({
+    ...rostered(),
+    ratings: new Map([
+      ['blue team', { team: 'Blue Team', globalRank: 5, fraud: blue }],
+      ['red team', { team: 'Red Team', globalRank: 5, fraud: red }],
+    ]),
+  });
+
+  it('does not move the score at all', () => {
+    // Backtested it cost accuracy, and alone it called the winner 44.2% of the
+    // time — so it is reported and not scored.
+    const clean = predict(model(withFraud(0, 0)), input());
+    const lopsided = predict(model(withFraud(0, 1)), input());
+    expect(lopsided.margin).toBeCloseTo(clean.margin, 10);
+    expect(lopsided.blue.total).toBeCloseTo(clean.blue.total, 10);
+    expect(lopsided.red.total).toBeCloseTo(clean.red.total, 10);
+  });
+
+  it('still reports the rating, banded', () => {
+    const notices = predict(model(withFraud(0, 1)), input()).notices;
+    const fraud = notices.filter((n) => n.kind === 'reliability');
+    expect(fraud).toHaveLength(1);
+    expect(fraud[0]!.side).toBe('red');
+    expect(fraud[0]!.text).toContain('high fraud rating');
+    expect(fraud[0]!.text).toContain('does not move the score');
+  });
+
+  it('says nothing about a team with a clean rating', () => {
+    const notices = predict(model(withFraud(0, 0)), input()).notices;
+    expect(notices.filter((n) => n.kind === 'reliability')).toHaveLength(0);
+  });
+
+  it('bands the rating the way the table uses it', () => {
+    expect(fraudBand(0)).toBeNull();
+    expect(fraudBand(0.25)).toBe('low');
+    expect(fraudBand(0.5)).toBe('medium');
+    expect(fraudBand(0.75)).toBe('high');
+    expect(fraudBand(1)).toBe('high');
   });
 });
 
@@ -730,11 +792,12 @@ describe('predict — notices', () => {
     expect(halved?.text).toContain('+0.75');
     expect(halved?.text).toContain('halved in game one');
 
+    // The fraud rating is a band now, not a signed point value.
     const ratings = new Map([['red team', { team: 'Red Team', globalRank: null, fraud: 0.25 }]]);
-    const fraud = predict(model({ ratings }), input()).notices.find(
+    const fraud = predict(model({ ...rostered(), ratings }), input()).notices.find(
       (n) => n.kind === 'reliability',
     );
-    expect(fraud?.text).toContain('−0.25');
+    expect(fraud?.text).toContain('low fraud rating (0.25)');
   });
 
   it('says nothing about motivation for a normal game', () => {

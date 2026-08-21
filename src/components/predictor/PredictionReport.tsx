@@ -103,17 +103,17 @@ export function PredictionReport({
             <span className="dim">Rank edge:</span> {prediction.rankNote}.
           </p>
           <p>
-            <span className="dim">Fraud source:</span> {ratingsLabel}
+            <span className="dim">Ratings source:</span> {ratingsLabel}
             {unratedTeams.length > 0 && (
               <>
                 {' — '}
                 {unratedTeams.join(' and ')}{' '}
                 {unratedTeams.length === 1 ? 'is' : 'are'} not listed in it, so{' '}
-                {unratedTeams.length === 1 ? 'that team takes' : 'those teams take'} no fraud
-                penalty
+                {unratedTeams.length === 1 ? 'that team is' : 'those teams are'} ranked
+                behind every team that is
               </>
             )}
-            .
+            . The fraud rating is reported in the notices and does not move the score.
           </p>
         </footer>
       </section>
@@ -205,7 +205,7 @@ const TALLY_ROWS = [
   { key: 'formEdge', label: 'Form edge', hint: 'from the current-season record' },
   { key: 'motivationBonus', label: 'Motivation', hint: 'must-win +0.5, coasting −0.5, tanking −1' },
   { key: 'seriesEdge', label: 'Series edge', hint: '+0.3 per game of lead, capped at +0.6' },
-  { key: 'rankBonus', label: 'Rank edge', hint: '+0.25 when GlobalRank differs by 2 or more' },
+  { key: 'rankBonus', label: 'Rank edge', hint: '+0.1 per place of rank gap, capped at +1.5' },
 ] as const;
 
 function TallyColumn({ score, side, winner }: { score: SideScore; side: Side; winner: boolean }) {
@@ -225,15 +225,6 @@ function TallyColumn({ score, side, winner }: { score: SideScore; side: Side; wi
             <dd className={score[row.key] === 0 ? 'is-zero' : undefined}>{signed(score[row.key])}</dd>
           </div>
         ))}
-        <div className="tally-row">
-          <dt>
-            Fraud penalty
-            <span className="tally-hint">inconsistency rating</span>
-          </dt>
-          <dd className={score.fraudPenalty === 0 ? 'is-zero' : undefined}>
-            {signed(-score.fraudPenalty)}
-          </dd>
-        </div>
       </dl>
       <div className="tally-total">
         <span>Total</span>
