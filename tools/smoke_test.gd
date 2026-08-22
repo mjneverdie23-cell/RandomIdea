@@ -244,8 +244,12 @@ func _check_abilities() -> void:
 	var ultimate := int(InputCommands.AbilitySlot.R)
 	_expect(not champion.spend_skill_point(ultimate),
 		"the ultimate accepted a point below its unlock level")
-	_expect(champion.spend_skill_point(0), "could not spend the first point on Q")
-	_expect(abilities.rank(0) == 1, "spending a point did not raise the rank")
+
+	# Spend it the way a player has to: the HUD's own "+" button, and the
+	# Ctrl+key that raises the same command. A point that can only be spent by
+	# calling a method is a point nobody can spend.
+	_check_upgrade_affordance(ultimate)
+	_expect(abilities.rank(0) == 1, "pressing + on the HUD did not raise the rank")
 	_expect(abilities.try_cast(0, aim), "an unlocked ability failed to cast")
 	abilities.reset_cooldowns()
 	print("[SmokeTest] Q unlocked by spending a skill point, ultimate still locked")
@@ -272,6 +276,27 @@ func _check_abilities() -> void:
 	abilities.reset_cooldowns()
 	champion.stats.remove_modifier("f_bulwark")
 	champion.resource_pool.refill()
+
+
+## The level-1 skill point must be reachable from the HUD and from the
+## keyboard. This exists because the first version offered only a tiny
+## unlabelled square and was, in practice, unfindable.
+func _check_upgrade_affordance(ultimate: int) -> void:
+	var champion := _root.champion
+	var bar := _root.hud.ability_bar
+	_expect(champion.level.skill_points > 0, "level 1 left no point to spend")
+	_expect(bar.can_upgrade(0), "the HUD offers no upgrade for Q at level 1")
+	_expect(not bar.can_upgrade(ultimate), "the HUD offers an ultimate upgrade at level 1")
+	_expect(bar.upgrade_rect(0).size.x >= bar.slot_rect(0).size.x,
+		"the upgrade button is narrower than the ability it upgrades")
+	for action in ["upgrade_q", "upgrade_e", "upgrade_r", "upgrade_f"]:
+		_expect(InputMap.has_action(action), "no %s binding" % action)
+
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = bar.upgrade_rect(0).get_center()
+	bar._gui_input(click)
 
 
 func _check_death_and_respawn() -> void:

@@ -10,6 +10,7 @@ extends Node
 ## Mouse         aim / camera interaction
 ## Left click    select an enemy and basic attack
 ## Q E R F       placeholder abilities
+## Ctrl + Q/E/R/F  spend a skill point on that ability
 ## B             recall
 ## C             show/hide my own attack range
 ## Space         toggle camera lock
@@ -25,6 +26,16 @@ const ABILITY_ACTIONS := {
 	InputCommands.AbilitySlot.E: "ability_e",
 	InputCommands.AbilitySlot.R: "ability_r",
 	InputCommands.AbilitySlot.F: "ability_f",
+}
+
+## Ctrl + the same key spends a skill point on that slot — the binding every
+## MOBA player already has in their hands. Matched exactly, and checked before
+## the cast, so Ctrl+Q upgrades without also casting and plain Q never upgrades.
+const UPGRADE_ACTIONS := {
+	InputCommands.AbilitySlot.Q: "upgrade_q",
+	InputCommands.AbilitySlot.E: "upgrade_e",
+	InputCommands.AbilitySlot.R: "upgrade_r",
+	InputCommands.AbilitySlot.F: "upgrade_f",
 }
 
 ## Movement is expressed relative to this camera's yaw so "W" always means
@@ -70,6 +81,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("restart_match"):
 		_commands.request_restart()
 	else:
+		for slot in UPGRADE_ACTIONS:
+			if event.is_action_pressed(UPGRADE_ACTIONS[slot], false, true):
+				_commands.request_ability_upgrade(slot)
+				return
 		for slot in ABILITY_ACTIONS:
 			if event.is_action_pressed(ABILITY_ACTIONS[slot]):
 				_commands.request_ability(slot)

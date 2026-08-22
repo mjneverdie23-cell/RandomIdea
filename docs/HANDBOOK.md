@@ -627,6 +627,13 @@ Points are never spent automatically for a human — that choice is the reason
 the level-up exists. `ChampionController.auto_spend_skill_points()` exists only
 for AI champions.
 
+There are four ways to spend one, and the redundancy is deliberate: the
+pulsing `+` bar above the slot, the highlighted outline around it, the line
+above the ability bar naming the key, and `Ctrl` + the ability's key. All four
+raise the same `InputCommands.ability_upgrade_requested`, so a touch build gets
+them for free. An earlier version had only a 22-pixel unlabelled square and
+players could not find it at all.
+
 ### Shops and items
 
 An item is a `.tres`: a price, a placeholder colour and glyph, a description
@@ -763,3 +770,11 @@ once.
 - **The developer combat overlay reveals every range**, so any test about
   range visibility has to turn it off first or it will pass for the wrong
   reason.
+- **A bottom-anchored `Control` needs both vertical offsets.** Setting only
+  `offset_bottom` leaves the rect zero-height and the node renders below the
+  screen — which is where the HUD toast quietly went for two milestones.
+  `MobaHud._bottom_label()` exists so that cannot happen again.
+- **A feature nobody can find is a feature that does not work.** The skill
+  point was correct from the first commit and completely unreachable in
+  practice. `_check_upgrade_affordance()` now asserts the *player-facing* path
+  — the HUD button and the key binding — not just the method behind it.

@@ -145,6 +145,7 @@ main scene). You spawn as Team A in the bottom-left fountain.
 | `R` | Nova — larger area damage at the aim point |
 | `F` | Bulwark — self-buff (damage reduction, speed, heal) |
 | `B` | Recall (channel, interrupted by moving) |
+| `Ctrl+Q` `Ctrl+E` `Ctrl+R` `Ctrl+F` | Spend a skill point on that ability |
 | `C` | Show/hide **your own** attack range |
 | `Space` | Toggle camera lock / free pan |
 | Mouse wheel | Zoom |
@@ -158,7 +159,7 @@ it raises `range_toggle_requested`, which is why the HUD can offer it as a
 button without a keyboard anywhere in the picture.
 
 The HUD itself is the rest of the input surface: the ability buttons cast, the
-small **+** above one spends a skill point, **Ward** places a ward at the aim
+**+** bar above one spends a skill point, **Ward** places a ward at the aim
 point and **Shop** opens the shop. All four go out on the command bus, so on a
 host they are applied directly and on a client they are validated first.
 
@@ -519,8 +520,12 @@ buffs; it re-registers levels and items, because those were earned and bought.
 Champions start at level 1 with one skill point and nothing unlocked. Ability
 slots unlock at the levels `AbilityProgressionData` names — first at 1, second
 at 2, third at 3, ultimate at 5 — and points are **never** spent for the
-player: a locked slot shows the level it needs, an upgradeable one grows a `+`.
-An AI champion spends its own, because nobody is going to click for it.
+player. A locked slot shows the level it needs; an upgradeable one gets a
+pulsing full-width **+** bar above it, a highlighted outline, a line above the
+ability bar naming the key, and `Ctrl` + that ability's key. (The first version
+offered only a small unlabelled square and no shortcut, and was in practice
+unfindable — hence all four.) An AI champion spends its own, because nobody is
+going to click for it.
 
 ### Shops and items
 

@@ -20,6 +20,8 @@ const COLOR_OK := "#7fe08a"
 const COLOR_IDLE := "#8d97a5"
 const COLOR_WARN := "#ffd36b"
 const COLOR_BAD := "#ff8a7a"
+## Height of the single-line labels stacked above the ability bar.
+const LINE_HEIGHT := 24
 
 @export var config: HudConfig
 
@@ -44,6 +46,8 @@ var _toast_label: Label
 var _result_label: RichTextLabel
 var _network_label: Label
 var _hint_label: Label
+## Sits above the ability bar whenever a skill point is unspent.
+var _skill_label: Label
 var _toast_timer: float = 0.0
 var _network_status: String = ""
 ## Latches so entering the fountain opens the shop once rather than every frame.
@@ -134,24 +138,13 @@ func _build_ui() -> void:
 	_build_minimap()
 	_build_shop()
 
-	_hint_label = Label.new()
-	_hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_hint_label.offset_bottom = -int(config.ability_button_size) - 96
-	_hint_label.offset_left = -300
-	_hint_label.offset_right = 300
-	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hint_label.modulate = config.gold
+	# Three single-line messages stack above the ability bar, one line apart.
+	var bar_height := int(ability_bar.preferred_size().y)
+	_hint_label = _bottom_label(bar_height + LINE_HEIGHT * 3 + 8, 300, config.gold)
 	_hint_label.visible = false
 	add_child(_hint_label)
 
-	_toast_label = Label.new()
-	_toast_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_toast_label.offset_bottom = -int(config.ability_button_size) - 64
-	_toast_label.offset_left = -320
-	_toast_label.offset_right = 320
-	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast_label = _bottom_label(bar_height + LINE_HEIGHT * 2 + 4, 320, Color(1, 1, 1, 1))
 	_toast_label.modulate = Color(1, 1, 1, 0)
 	add_child(_toast_label)
 
@@ -212,6 +205,12 @@ func _build_champion_area() -> void:
 	actions.shop_pressed.connect(func() -> void: toggle_shop())
 	add_child(actions)
 
+	# An unspent point is easy to forget about and expensive to forget about,
+	# so it gets its own line right above the buttons that spend it.
+	_skill_label = _bottom_label(int(bar_size.y) + LINE_HEIGHT, 360, config.upgradeable)
+	_skill_label.visible = false
+	add_child(_skill_label)
+
 
 func _build_minimap() -> void:
 	minimap = Minimap.new()
@@ -240,6 +239,25 @@ func _build_shop() -> void:
 	shop.purchase_pressed.connect(func(item_id: String) -> void:
 		_commands.request_purchase(item_id))
 	add_child(shop)
+
+
+## A centred line sitting [param above] pixels off the bottom edge.
+##
+## Bottom-anchored controls need *both* vertical offsets: setting only
+## `offset_bottom` leaves the rect zero-height and the label renders below the
+## screen, which is exactly where the toast used to go.
+func _bottom_label(above: int, half_width: int, color: Color) -> Label:
+	var label := Label.new()
+	label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	label.offset_left = -half_width
+	label.offset_right = half_width
+	label.offset_bottom = -above
+	label.offset_top = -above - LINE_HEIGHT
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.modulate = color
+	return label
 
 
 func _make_label(preset: int) -> RichTextLabel:
@@ -323,10 +341,31 @@ func _process(delta: float) -> void:
 	if _champion == null or not is_instance_valid(_champion):
 		return
 	_status_label.text = _status_text()
+	_update_skill_hint()
 	_update_shop_presence()
 	if _toast_timer > 0.0:
 		_toast_timer -= delta
 		_toast_label.modulate.a = clampf(_toast_timer / 0.6, 0.0, 1.0)
+
+
+## Names both ways to spend a point, because the "+" alone was not findable.
+func _update_skill_hint() -> void:
+	var points: int = _champion.level.skill_points if _champion.level != null else 0
+	# Shown even with the shop open: it sits under the panel, and the first
+	# thing a new champion does is stand in its fountain.
+	_skill_label.visible = points > 0
+	if not _skill_label.visible:
+		return
+	var slots := _champion.upgradeable_slots()
+	var keys := PackedStringArray()
+	for slot in slots:
+		keys.append("Ctrl+%s" % InputCommands.ability_name(slot))
+	if keys.is_empty():
+		_skill_label.text = "%d skill point - nothing to spend it on until you level up" % points
+		return
+	_skill_label.text = "%d skill point%s - press %s, or the + above the ability" % [
+		points, "" if points == 1 else "s", " / ".join(keys)
+	]
 
 
 ## Walking into your own fountain opens the shop, and walking out closes it —
@@ -357,6 +396,7 @@ func _controls_text() -> String:
 		"[color=#b9c2ce]WASD[/color]  move          [color=#b9c2ce]Mouse[/color] aim",
 		"[color=#b9c2ce]LMB[/color]   select + attack",
 		"[color=#b9c2ce]Q E R F[/color] abilities   [color=#b9c2ce]B[/color] recall",
+		"[color=#ffd36b]Ctrl+Q E R F[/color] spend a skill point on that ability",
 		"[color=#b9c2ce]C[/color] show my attack range   [color=#b9c2ce]Space[/color] camera lock",
 		"[color=#b9c2ce]Ward / Shop[/color] buttons beside the ability bar",
 		"",

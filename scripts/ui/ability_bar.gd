@@ -5,9 +5,13 @@ extends Control
 ##
 ## Every button is in exactly one of five states — empty, locked, on cooldown,
 ## unaffordable or ready — and each is drawn differently, so a glance answers
-## "why can't I cast this?". A slot the champion could rank up right now grows
-## a "+" button above it; pressing it raises
-## [signal InputCommands.ability_upgrade_requested], which the authority
+## "why can't I cast this?".
+##
+## A slot the champion could rank up right now grows a full-width [b]+[/b] bar
+## above it and a pulsing outline around it. Both are deliberately loud: the
+## first version of this used a 22-pixel unlabelled square and players could
+## not find it, which is the whole reason a level-up is a decision. Pressing it
+## raises [signal InputCommands.ability_upgrade_requested], which the authority
 ## validates. Points are never spent for the player.
 ##
 ## The bar is a presentation layer over live components: it holds no cooldown
@@ -49,10 +53,12 @@ func slot_rect(slot: int) -> Rect2:
 	)
 
 
+## The "+" spans the whole slot width: a big, obvious target rather than
+## something to hunt for.
 func upgrade_rect(slot: int) -> Rect2:
 	var base := slot_rect(slot)
-	var side := config.upgrade_button_size
-	return Rect2(Vector2(base.position.x + (base.size.x - side) * 0.5, 0.0), Vector2(side, side))
+	return Rect2(Vector2(base.position.x, 0.0),
+		Vector2(base.size.x, config.upgrade_button_size))
 
 
 ## Which of the five states a slot is in. The HUD tests, and the drawing code,
@@ -110,6 +116,9 @@ func _draw_slot(slot: int) -> void:
 			fill = config.background.darkened(0.3)
 			border = config.locked
 	HudDraw.panel(self, rect, fill, border)
+	if can_upgrade(slot):
+		# A slot waiting for a point outranks whatever else it was saying.
+		draw_rect(rect.grow(1.0), config.upgradeable, false, 2.0)
 
 	var abilities: AbilityComponent = champion.abilities if champion != null else null
 	var ability: AbilityData = abilities.ability_for(slot) if abilities != null else null
@@ -170,10 +179,14 @@ func _draw_ranks(rect: Rect2, slot: int) -> void:
 		draw_rect(pip, config.ready if i < current else config.locked, true)
 
 
+## Pulsing, so it reads as something to press rather than as decoration.
 func _draw_upgrade_button(slot: int) -> void:
 	var rect := upgrade_rect(slot)
-	HudDraw.panel(self, rect, config.upgradeable, config.upgradeable.darkened(0.4))
-	HudDraw.text_in(self, rect, "+", config.background, HudDraw.font_size(1.1))
+	var pulse := 0.72 + 0.28 * sin(float(Time.get_ticks_msec()) * 0.005)
+	var color := config.upgradeable
+	color.a = pulse
+	HudDraw.panel(self, rect, color, config.upgradeable.darkened(0.4))
+	HudDraw.text_in(self, rect, "+", config.background, HudDraw.font_size(1.05))
 
 
 func _gui_input(event: InputEvent) -> void:
