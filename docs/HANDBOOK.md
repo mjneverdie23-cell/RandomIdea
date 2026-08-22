@@ -34,7 +34,9 @@ the [Invariants](#invariants) section before going further.
 | Add a new map shape | one `MapLayout` subclass + a `MapConfig` subclass | medium |
 | Add a game mode | a `GameModeConfig` `.tres` (+ the above if it is a new map) | small |
 | Replace the prototype art | `scripts/map/prototype_meshes.gd` + `_build_visual()` | medium |
-| Rebind keys | `project.godot` `[input]`, then `PCInputController` | small |
+| Add a new key binding | `project.godot` `[input]` + `PCInputController` + `InputSettings.GROUPS` | small |
+| Let players rebind something | add its action to `InputSettings.GROUPS` and `LABELS` | no |
+| Retune the bush fade | `resources/game/*match_config.tres` → `bush_concealment_fade` | no |
 | Add a mobile control scheme | a new node that drives `InputCommands` | small |
 | Change AI behaviour | `scripts/units/champion_ai.gd` | small |
 | Replicate a new field | `scripts/net/network_state_sync.gd` + `Unit` | small |
@@ -533,7 +535,7 @@ reports it. The report goes to the HUD toast for free.
 
 | Suite | Covers |
 |---|---|
-| `SmokeTest.tscn` | three-lane map, navigation, movement, collision, selection, attacks, ability locks and ranks, death/respawn, waves, minion and turret combat, bushes and wards, kill rewards, levelling, the shop and item stats, the range rules, both debug views, and a rebuild from a second `MapConfig` |
+| `SmokeTest.tscn` | three-lane map, navigation, movement, collision, selection, attacks, ability locks and ranks, death/respawn, waves, minion and turret combat, bushes and wards, kill rewards, levelling, the shop and item stats, the range rules, a name-label-free normal view, the bush fade, K/D/A, key rebinding and persistence, both debug views, and a rebuild from a second `MapConfig` |
 | `SoloLaneTest.tscn` | solo topology and ids, lane traversal both ways, spawns, waves, the offline bot, minions damaging the nexus, victory, and that the shared systems layer arrives with nothing mode-specific |
 | `NetMatchTest.tscn` | host + client: seating, ownership, rejection of unseated peers, input reaching the host, replication of movement/damage/death/respawn/minions/turrets/nexus/gold/level/items/result, every client forgery attempt refused, disconnect |
 | `NetDedicatedTest.tscn` | dedicated server + two clients, one team each, opposite outcomes, both clients' forgery attempts refused |
@@ -561,7 +563,7 @@ Two more, learned from writing section 12's checks:
 
 ---
 
-## 12. Vision, economy, progression, items and the HUD
+## 12. Vision, economy, progression, items, the HUD and controls
 
 All of this is one shared layer. There is no Full MOBA version and no Solo Lane
 version of any of it — the maps differ, the systems do not.
@@ -650,12 +652,40 @@ champion spawn points, which is why both maps have one in both bases without
 either map knowing. Selling from anywhere is `purchases.require_shop_zone =
 false`, one flag.
 
+The panel opens anywhere — `P`, the Shop button, or walking into your fountain
+— but out of the zone it is a read-only price list: the banner says so, the
+rows dim and no request is raised. That is a courtesy. The *rule* is
+`PurchaseSystem.rejection_reason()` on the authority, which refuses a champion
+that is not standing in its own team's zone no matter what a client's UI
+allows, and the networked test asserts exactly that from the server side.
+
 ### The ability resource
 
 Optional and off by default: `UnitStats.max_resource` at zero means the unit
 has none and the HUD draws no bar. The prototype champion has 100 plus 20 per
 level, and each ability spends `AbilityData.resource_cost`. Setting every cost
 to 0 turns the mechanic off without removing it.
+
+### K/D/A
+
+`ScoreComponent` holds three integers and decides nothing. `RewardSystem` has
+already worked out who landed the killing blow and who was close enough to
+share the experience, so it hands the same verdict to the scoreboard — one
+definition of "assist", not two that can drift. Only `Unit.Kind.CHAMPION`
+deaths score. It replicates with the ranks and items rather than in the 20 Hz
+snapshot, because it changes about once a minute.
+
+### Bush concealment
+
+`ConcealmentVisual` fades a champion's meshes while `Vision.is_in_bush()` is
+true, by `MatchConfig.bush_concealment_fade`. It is presentation and *only*
+presentation — deleting the component would not change one rule. It swaps in a
+duplicated translucent material and restores the shared cached original on the
+way out, so nothing is left translucent in the lane and no cached material is
+ever mutated.
+
+Do not be tempted to implement stealth this way. Visibility is
+`VisionManager`'s answer; a fade is a hint that the answer changed.
 
 ### The HUD
 
@@ -671,9 +701,32 @@ The minimap is driven by the loaded `MapLayout` and `MapRegistry`, never by
 coordinates: if your new map registers lanes, bushes, turrets, nexuses and
 shops, the minimap draws them.
 
+### Rebindable controls
+
+`InputSettings` is the whole model: which actions are player-facing
+(`GROUPS`), what to call them (`LABELS`), how to read and write one binding,
+how to spot a clash, and how to persist the difference from the defaults to
+`user://input_bindings.cfg`. `SettingsPanel` is a thin screen over it.
+
+Exposing a new action to players is two lines — its id in `GROUPS`, its name in
+`LABELS`. Anything left out stays unbindable, which is why the developer cheats
+are absent.
+
+Three things worth knowing before you touch it:
+
+* Only the *keyboard* event of an action is replaced. Mouse bindings survive,
+  so rebinding "zoom in" does not cost you the wheel.
+* Only bindings that differ from the shipped defaults are saved, so changing a
+  default later still reaches players who never touched that key.
+* Defaults are captured from the project's own input map on first use, not
+  written out a second time by hand.
+
 ### Attack ranges
 
-`RangeVisualizer` owns every ring in the game. The rules are in
+`RangeVisualizer` owns every ring in the game. Nothing else draws an attack
+range: the small rings under a champion (`ChampionController`'s own-team
+marker) and under a selected target (`TargetIndicator`) are body-sized
+gameplay markers, and `MapDebugRenderer`'s turret circles are behind F9. The rules are in
 `_wants_ring()` and `_is_threatening_tower()`; the colours, the thickness and
 two of the rules (`show_threatening_enemy_towers`, `threat_hysteresis`) are in
 `resources/ui/range_display.tres`.
@@ -778,3 +831,15 @@ once.
   point was correct from the first commit and completely unreachable in
   practice. `_check_upgrade_affordance()` now asserts the *player-facing* path
   — the HUD button and the key binding — not just the method behind it.
+- **`combat_debug_on_start` was shipped as `true`**, so every unit wore a name
+  label and every champion and tower wore a range ring in normal play. Names
+  and ranges are the same switch; leave it off.
+- **A per-tick timer in `_process` goes stale in headless**, where frames are
+  uncapped and a hundred of them can pass in under the interval. The bush fade
+  used a 0.1 s tick and was still showing the previous bush. If a check is
+  cheap, just do it every frame.
+- **A test point "just outside" one bush can be inside another.** `bush.radius
+  + 6` on the three-lane map lands in `RIVER_BUSH_1`. Assert
+  `Vision.zone_at(p) == null` rather than assuming.
+- **A `PanelContainer` lays out its children**, so a full-screen dimmer parented
+  to one covers the panel instead of the map. Make it a sibling.

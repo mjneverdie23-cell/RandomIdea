@@ -10,6 +10,12 @@ extends Control
 ## for a validated client request. The row's greyed-out state is a courtesy
 ## preview of that decision, taken from the same
 ## [method PurchaseSystem.rejection_reason] the server will run.
+##
+## Out in the lane the panel still opens, as a read-only price list: every row
+## is dimmed, a banner says where buying happens, and no request is raised at
+## all. That is a convenience, not the rule — the rule is enforced by the
+## authority, which refuses a purchase from a champion that is not standing in
+## its own team's buy zone no matter what any client's UI allows.
 
 signal purchase_pressed(item_id: String)
 
@@ -40,12 +46,19 @@ func item_count() -> int:
 	return catalog.size() if catalog != null else 0
 
 
+## Can this champion buy right now? The same question [PurchaseSystem] asks.
+func can_buy() -> bool:
+	if purchases == null or champion == null or not is_instance_valid(champion):
+		return false
+	return purchases.can_shop(champion)
+
+
 func preferred_size() -> Vector2:
-	return Vector2(config.shop_width, 52.0 + float(item_count()) * config.shop_row_height + 12.0)
+	return Vector2(config.shop_width, 78.0 + float(item_count()) * config.shop_row_height + 12.0)
 
 
 func row_rect(index: int) -> Rect2:
-	return Rect2(Vector2(8.0, 48.0 + float(index) * config.shop_row_height),
+	return Rect2(Vector2(8.0, 74.0 + float(index) * config.shop_row_height),
 		Vector2(config.shop_width - 16.0, config.shop_row_height - 4.0))
 
 
@@ -93,8 +106,21 @@ func _draw() -> void:
 	HudDraw.text_in(self, Rect2(Vector2(12.0, 8.0), Vector2(size.x - 24.0, 26.0)),
 		"%s gold" % HudDraw.compact(gold), config.gold, HudDraw.font_size(1.0),
 		HORIZONTAL_ALIGNMENT_RIGHT)
+	_draw_availability()
 	for index in item_count():
 		_draw_row(index, catalog.items[index])
+
+
+## One banner, either way, so "why can't I buy?" is never a guess.
+func _draw_availability() -> void:
+	var banner := Rect2(Vector2(8.0, 40.0), Vector2(size.x - 16.0, 28.0))
+	var open := can_buy()
+	HudDraw.panel(self, banner,
+		config.background.lightened(0.06), config.ready if open else config.locked)
+	HudDraw.text_in(self, banner,
+		"Buying open - you are in your base" if open
+		else "Browsing only - return to your base to buy",
+		config.text if open else config.text_dim, HudDraw.font_size(0.8))
 
 
 func _draw_row(index: int, item: ItemData) -> void:
@@ -103,6 +129,10 @@ func _draw_row(index: int, item: ItemData) -> void:
 	var rect := row_rect(index)
 	var reason := rejection_for(item)
 	var affordable := reason.is_empty()
+	if not can_buy():
+		# Out of the zone the price list is just a price list; saying "not in
+		# the shop" on all seven rows is noise when the banner already said it.
+		reason = ""
 	var fill := config.background.lightened(0.12 if index == _hovered else 0.04)
 	HudDraw.panel(self, rect, fill, config.ready if affordable else config.locked)
 
@@ -138,9 +168,13 @@ func _gui_input(event: InputEvent) -> void:
 	if mouse.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var index := _row_at(mouse.position)
-	if index >= 0:
+	if index < 0:
+		return
+	accept_event()
+	# No request leaves the panel outside the buy zone. The authority would
+	# refuse it anyway; not sending it keeps the rejection feed quiet.
+	if can_buy():
 		purchase_pressed.emit(catalog.items[index].id)
-		accept_event()
 
 
 func _row_at(point: Vector2) -> int:

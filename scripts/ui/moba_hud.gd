@@ -16,10 +16,15 @@ extends CanvasLayer
 ## action leaves through [InputCommands] — so the HUD works unchanged on a
 ## client, where all of those values arrive from the server.
 
+## Raised by the HUD's settings button. [GameRoot] owns the panel itself.
+signal settings_requested()
+
 const COLOR_OK := "#7fe08a"
 const COLOR_IDLE := "#8d97a5"
 const COLOR_WARN := "#ffd36b"
 const COLOR_BAD := "#ff8a7a"
+
+
 ## Height of the single-line labels stacked above the ability bar.
 const LINE_HEIGHT := 24
 
@@ -52,6 +57,9 @@ var _toast_timer: float = 0.0
 var _network_status: String = ""
 ## Latches so entering the fountain opens the shop once rather than every frame.
 var _was_in_shop: bool = false
+## True when the fountain opened the shop rather than the player. Only an
+## automatic open is closed automatically again.
+var _shop_opened_by_zone: bool = false
 
 
 func bind(root: GameRoot) -> void:
@@ -96,10 +104,12 @@ func set_network_status(text: String) -> void:
 # --- shop --------------------------------------------------------------------
 
 func toggle_shop() -> bool:
+	_shop_opened_by_zone = false
 	return shop.toggle()
 
 
 func open_shop() -> void:
+	_shop_opened_by_zone = false
 	shop.open()
 
 
@@ -129,13 +139,14 @@ func _build_ui() -> void:
 	_network_label = Label.new()
 	_network_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_network_label.offset_left = 16
-	_network_label.offset_top = 300
+	_network_label.offset_top = 440
 	_network_label.modulate = Color(1.0, 0.83, 0.42)
 	_network_label.text = _network_status
 	add_child(_network_label)
 
 	_build_champion_area()
 	_build_minimap()
+	_build_settings_button()
 	_build_shop()
 
 	# Three single-line messages stack above the ability bar, one line apart.
@@ -166,9 +177,14 @@ func _build_champion_area() -> void:
 	champion_panel = ChampionPanel.new()
 	champion_panel.name = "ChampionPanel"
 	champion_panel.setup(config)
+	# Every offset, not just two: a bottom-anchored Control with an unset
+	# offset_bottom stretches to the screen edge and clips its own content.
+	var panel_size := champion_panel.preferred_size()
 	champion_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	champion_panel.offset_left = 18
-	champion_panel.offset_top = -int(champion_panel.preferred_size().y) - 24
+	champion_panel.offset_right = 18 + int(panel_size.x)
+	champion_panel.offset_top = -int(panel_size.y) - 24
+	champion_panel.offset_bottom = -24
 	add_child(champion_panel)
 
 	ability_bar = AbilityBar.new()
@@ -187,18 +203,24 @@ func _build_champion_area() -> void:
 	item_bar = ItemBar.new()
 	item_bar.name = "ItemBar"
 	item_bar.setup(config)
+	var item_size := item_bar.preferred_size(6)
 	item_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	item_bar.offset_left = int(bar_size.x * 0.5) + 18
-	item_bar.offset_top = -int(config.item_slot_size) - 18
+	item_bar.offset_right = int(bar_size.x * 0.5) + 18 + int(item_size.x)
+	item_bar.offset_top = -int(item_size.y) - 18
+	item_bar.offset_bottom = -18
 	item_bar.slot_pressed.connect(func(_slot: int) -> void: toggle_shop())
 	add_child(item_bar)
 
 	actions = ActionButtons.new()
 	actions.name = "ActionButtons"
 	actions.setup(config, _director)
+	var action_size := actions.preferred_size()
 	actions.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	actions.offset_left = -int(bar_size.x * 0.5) - int(config.action_button_size) - 18
-	actions.offset_top = -int(actions.preferred_size().y) - 18
+	actions.offset_left = -int(bar_size.x * 0.5) - int(action_size.x) - 18
+	actions.offset_right = -int(bar_size.x * 0.5) - 18
+	actions.offset_top = -int(action_size.y) - 18
+	actions.offset_bottom = -18
 	# The ward goes where the player is pointing; the authority clamps it to the
 	# champion's placement range and to the play field.
 	actions.ward_pressed.connect(func() -> void: _commands.request_ward())
@@ -222,6 +244,20 @@ func _build_minimap() -> void:
 	minimap.offset_right = -int(config.minimap_margin)
 	minimap.offset_bottom = -int(config.minimap_margin)
 	add_child(minimap)
+
+
+## Settings sit above the minimap, out of the way of anything used in a fight.
+func _build_settings_button() -> void:
+	var button := Button.new()
+	button.name = "SettingsButton"
+	button.text = "Controls"
+	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	button.offset_right = -int(config.minimap_margin)
+	button.offset_left = -int(config.minimap_margin) - 110
+	button.offset_bottom = -int(config.minimap_size + config.minimap_margin) - 8
+	button.offset_top = button.offset_bottom - 30
+	button.pressed.connect(func() -> void: settings_requested.emit())
+	add_child(button)
 
 
 func _build_shop() -> void:
@@ -371,18 +407,23 @@ func _update_skill_hint() -> void:
 ## Walking into your own fountain opens the shop, and walking out closes it —
 ## the same affordance a mobile MOBA uses, and the reason a recall feels like
 ## a shopping trip rather than a menu.
+##
+## A shop the *player* opened is left alone: out in the lane it becomes a
+## read-only price list rather than vanishing mid-thought.
 func _update_shop_presence() -> void:
 	if _director.purchases == null:
 		return
 	var inside := _director.purchases.zone_for(_champion) != null
 	if inside and not _was_in_shop:
 		shop.open()
-	elif not inside and _was_in_shop:
+		_shop_opened_by_zone = true
+	elif not inside and _was_in_shop and _shop_opened_by_zone:
 		shop.close()
+		_shop_opened_by_zone = false
 	_was_in_shop = inside
 	_hint_label.visible = inside and not shop.is_open()
 	if _hint_label.visible:
-		_hint_label.text = "In the shop - press the Shop button to open"
+		_hint_label.text = "In your base - press P or the Shop button to buy"
 	# The control reference is reading material; it has no business competing
 	# with an open panel.
 	_controls_label.visible = not shop.is_open()
@@ -397,8 +438,8 @@ func _controls_text() -> String:
 		"[color=#b9c2ce]LMB[/color]   select + attack",
 		"[color=#b9c2ce]Q E R F[/color] abilities   [color=#b9c2ce]B[/color] recall",
 		"[color=#ffd36b]Ctrl+Q E R F[/color] spend a skill point on that ability",
-		"[color=#b9c2ce]C[/color] show my attack range   [color=#b9c2ce]Space[/color] camera lock",
-		"[color=#b9c2ce]Ward / Shop[/color] buttons beside the ability bar",
+		"[color=#b9c2ce]C[/color] show my attack range   [color=#b9c2ce]P[/color] shop",
+		"[color=#b9c2ce]Space[/color] camera lock          [color=#b9c2ce]O[/color] settings",
 		"",
 		"[b]Developer[/b]",
 		"[color=#b9c2ce]F1[/color] enemy champion  [color=#b9c2ce]F2[/color] minion wave",

@@ -40,6 +40,7 @@ var wallet: WalletComponent
 var experience: ExperienceComponent
 var level: LevelComponent
 var inventory: InventoryComponent
+var score: ScoreComponent
 ## Sight this unit grants its team.
 var vision: VisionSource
 

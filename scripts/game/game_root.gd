@@ -47,6 +47,7 @@ static var _pending_mode_id: String = ""
 @onready var relay: CommandRelay = $CommandRelay
 @onready var net_debug: NetworkDebugOverlay = $NetworkDebug
 @onready var menu: MultiplayerMenu = $Menu
+@onready var settings: SettingsPanel = $Settings
 
 var mode: GameModeConfig
 var champion: ChampionController
@@ -56,6 +57,9 @@ var started: bool = false
 
 func _ready() -> void:
 	add_to_group("game_root")
+	# Saved key bindings are applied before anything reads the input map, so a
+	# rebound key is already correct on the first frame of the first match.
+	InputSettings.load_and_apply()
 	if transport == null:
 		transport = NetworkTransport.new()
 	menu.setup(modes, transport.port)
@@ -158,6 +162,7 @@ func start_session(request: Dictionary) -> void:
 	combat_debug.overlay_toggled.connect(range_view.set_debug_all)
 	combat_debug.set_overlay_visible(director.config.combat_debug_on_start)
 	commands.range_toggle_requested.connect(_on_range_toggle)
+	commands.settings_toggle_requested.connect(_on_settings_toggle)
 	commands.shop_toggle_requested.connect(func() -> void: hud.toggle_shop())
 	dev_input.setup(director, combat_debug)
 	dev_input.network_debug_requested.connect(func() -> void: net_debug.toggle())
@@ -166,7 +171,10 @@ func start_session(request: Dictionary) -> void:
 	net_debug.setup(session, state_sync, relay, director)
 	if hud_config != null:
 		hud.config = hud_config
+		settings.config = hud_config
 	hud.bind(self)
+	hud.settings_requested.connect(_on_settings_toggle)
+	settings.closed.connect(func() -> void: pc_input.set_process(true))
 
 	session.phase_changed.connect(_on_phase_changed)
 	session.match_finished.connect(_on_match_finished)
@@ -292,6 +300,14 @@ func _set_local_champion(unit: ChampionController) -> void:
 	range_view.set_local_champion(unit)
 	hud.attach_champion(unit)
 	local_champion_changed.emit(unit)
+
+
+## Opening the controls screen parks the champion, so a key pressed while
+## rebinding cannot also walk you into a turret.
+func _on_settings_toggle() -> void:
+	if settings.toggle():
+		commands.set_move_direction(Vector2.ZERO)
+	pc_input.set_process(not settings.is_open())
 
 
 ## The range toggle is a command, not a key: a touch button raises the same

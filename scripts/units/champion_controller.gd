@@ -25,6 +25,7 @@ var owner_peer_id: int = 0
 ## When true the champion picks its own targets and walks itself.
 @export var ai_enabled: bool = false
 
+var concealment: ConcealmentVisual
 ## Set for AI champions; player champions leave it null and read the bus.
 var ai: ChampionAi
 var commands: InputCommands
@@ -58,6 +59,17 @@ func _ready() -> void:
 
 	targeting.auto_acquire = ai_enabled
 	_build_selection_ring()
+	_build_concealment()
+
+
+## A local, presentation-only fade while standing in a bush. It reads the same
+## [VisionManager] the rest of the game reads and decides nothing.
+func _build_concealment() -> void:
+	concealment = ConcealmentVisual.new()
+	concealment.name = "Concealment"
+	add_child(concealment)
+	concealment.setup(self,
+		match_config.bush_concealment_fade if match_config != null else 0.25)
 
 
 ## Gold, XP, levels and items. All four are components so nothing about
@@ -88,6 +100,10 @@ func _build_progression() -> void:
 	inventory.name = "Inventory"
 	add_child(inventory)
 	inventory.setup(self, loadout.inventory_slots if loadout != null else 6)
+
+	score = ScoreComponent.new()
+	score.name = "Score"
+	add_child(score)
 
 	abilities.setup_progression(ability_progression)
 	# Level 1 arrives with a point to spend, so the first ability is a choice.

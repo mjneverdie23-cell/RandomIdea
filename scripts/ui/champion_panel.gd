@@ -1,7 +1,8 @@
 class_name ChampionPanel
 extends Control
 
-## Level, health, ability resource, experience and gold for the local champion.
+## Level, health, ability resource, experience, gold and K/D/A for the local
+## champion.
 ##
 ## Everything on it is read live from the champion's components: the level
 ## badge from [LevelComponent], the bars from [HealthComponent],
@@ -27,7 +28,7 @@ func attach(unit: ChampionController) -> void:
 
 func preferred_size() -> Vector2:
 	var height := config.health_bar_height * 2.0 + config.experience_bar_height + 40.0
-	return Vector2(config.status_bar_width + 52.0, height)
+	return Vector2(config.status_bar_width + 52.0 + config.score_column_width, height)
 
 
 func _process(_delta: float) -> void:
@@ -39,6 +40,7 @@ func _draw() -> void:
 	if config == null or champion == null or not is_instance_valid(champion):
 		return
 	_draw_level_badge()
+	_draw_score()
 	var left := 48.0
 	var width := config.status_bar_width
 	var y := 0.0
@@ -86,6 +88,22 @@ func _footer_text() -> String:
 	if champion.wallet != null:
 		parts.append("%s gold" % HudDraw.compact(champion.wallet.gold))
 	return "   ".join(parts)
+
+
+## K/D/A, in its own column to the right of the bars so it never overlaps the
+## abilities, the minimap, the gold or the inventory.
+func _draw_score() -> void:
+	if champion.score == null or config.score_column_width <= 0.0:
+		return
+	var column := Rect2(
+		Vector2(48.0 + config.status_bar_width + 8.0, 0.0),
+		Vector2(config.score_column_width - 8.0, size.y - 4.0)
+	)
+	HudDraw.panel(self, column, config.background, config.panel_border)
+	HudDraw.text_in(self, Rect2(column.position + Vector2(0.0, 6.0), Vector2(column.size.x, 14.0)),
+		"K / D / A", config.text_dim, HudDraw.font_size(0.68))
+	HudDraw.text_in(self, Rect2(column.position + Vector2(0.0, 20.0), Vector2(column.size.x, 24.0)),
+		champion.score.summary(), config.text, HudDraw.font_size(1.05))
 
 
 func _draw_level_badge() -> void:

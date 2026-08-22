@@ -147,6 +147,8 @@ main scene). You spawn as Team A in the bottom-left fountain.
 | `B` | Recall (channel, interrupted by moving) |
 | `Ctrl+Q` `Ctrl+E` `Ctrl+R` `Ctrl+F` | Spend a skill point on that ability |
 | `C` | Show/hide **your own** attack range |
+| `P` | Open the shop (buying still needs your base) |
+| `O` | Controls / key bindings |
 | `Space` | Toggle camera lock / free pan |
 | Mouse wheel | Zoom |
 | `Enter` | Restart the match |
@@ -160,7 +162,8 @@ button without a keyboard anywhere in the picture.
 
 The HUD itself is the rest of the input surface: the ability buttons cast, the
 **+** bar above one spends a skill point, **Ward** places a ward at the aim
-point and **Shop** opens the shop. All four go out on the command bus, so on a
+point, **Shop** opens the shop and **Controls** (above the minimap) opens the
+key bindings. Every binding on that screen is remappable and persists. All four go out on the command bus, so on a
 host they are applied directly and on a client they are validated first.
 
 ### Developer keys
@@ -240,6 +243,13 @@ The smoke test boots the real game scene and asserts that:
   champion never gets one, an enemy tower gets one only while it is inside
   range *and* visible, fog of war takes it away, minions never get one, and
   `F10` reveals everything;
+* normal gameplay renders zero world-space name labels, and the developer
+  overlay still renders them;
+* a bush fades the champion by exactly the configured amount, never below
+  legibility, and clears completely on the way out without changing vision;
+* K/D/A counts a champion kill, a death and neither for a minion;
+* rebinding writes the input map, a duplicate is refused, reset restores the
+  defaults and a saved binding reloads;
 * a second map configuration builds and passes the same reachability check.
 
 `SoloLaneTest.tscn` boots the same scene in Solo Lane and checks the mode's own
@@ -550,7 +560,7 @@ One `MobaHud`, both maps, assembled from small widgets that each draw
 themselves and hold no gameplay numbers:
 
 ```
-ChampionPanel   level badge, health, ability resource, XP bar, gold
+ChampionPanel   level badge, health, ability resource, XP bar, gold, K/D/A
 AbilityBar      four slots: empty / locked / cooldown / unaffordable / ready,
                 rank pips, and a "+" when a point can go here
 ItemBar         inventory slots, from the champion's own slot count
@@ -565,10 +575,35 @@ the nexuses and the shops from map data; it draws moving units from
 as it is absent from target acquisition. **No attack ranges are ever drawn on
 the minimap.**
 
+**K/D/A** sits in its own column beside the bars. It is scored by
+`ScoreComponent` from the verdict `RewardSystem` already reached — the killer
+is whoever landed the blow, an assist is whoever was near enough to share the
+experience — so the scoreboard and the payouts can never disagree. Only
+champion deaths move it; minions and turrets are worth gold, not a notch. It is
+server-authoritative and replicated with the ranks and items.
+
+**Standing in a bush** fades the champion by `bush_concealment_fade` (25% by
+default), which is presentation and nothing else: `ConcealmentVisual` swaps in
+a translucent copy of the material and swaps the shared original back on the
+way out. Turning the effect off would not change a single rule — who can see
+whom is `VisionManager`'s answer, as it is everywhere else.
+
 Champions carry an optional ability resource (`UnitStats.max_resource`, spent
 per `AbilityData.resource_cost`). A unit whose stats leave it at zero — every
 minion and turret — simply has no bar, rather than an empty one pretending to
 mean something.
+
+### Controls are the player's
+
+`InputSettings` + `SettingsPanel` let a player rebind any player-facing action,
+warn on a duplicate before taking it, reset to the shipped defaults, and keep
+the result in `user://input_bindings.cfg` across restarts. It edits Godot's
+`InputMap` and nothing else: no gameplay script reads a key — they read
+`InputCommands` — so rebinding reaches the game the same way a touch button
+does, and the developer cheats stay off the panel entirely.
+
+Only the keyboard event of an action is replaced, so rebinding "zoom in" to a
+key does not cost you the mouse wheel.
 
 ### Attack ranges: three cases, and no others
 
@@ -583,6 +618,10 @@ to explain. `RangeVisualizer` replaced them with one rule set:
 | An enemy tower | only while you are inside its real attack range **and** can see it |
 | Minions | never, outside the developer view |
 | `F10` combat debug | everything at once |
+
+The developer overlay is **off** by default. It used to ship on, which is what
+put a ring under every champion and tower and a name label over every unit in
+normal play: names and ranges are the same switch, and that switch is F10.
 
 The radius drawn is the unit's live `attack_range()`, so an item or a level
 that extends it extends the ring. Rings are local presentation and are never

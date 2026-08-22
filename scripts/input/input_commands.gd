@@ -27,6 +27,7 @@ signal purchase_requested(item_id: String)
 signal ward_requested(aim_point: Vector3)
 signal shop_toggle_requested()
 signal range_toggle_requested()
+signal settings_toggle_requested()
 
 ## Desired movement on the XZ plane in world space, length 0..1.
 var move_direction: Vector2 = Vector2.ZERO
@@ -95,6 +96,10 @@ func request_shop_toggle() -> void:
 
 func request_range_toggle() -> void:
 	range_toggle_requested.emit()
+
+
+func request_settings_toggle() -> void:
+	settings_toggle_requested.emit()
 
 
 static func ability_name(slot: int) -> String:

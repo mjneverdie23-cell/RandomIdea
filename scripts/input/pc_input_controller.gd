@@ -13,6 +13,8 @@ extends Node
 ## Ctrl + Q/E/R/F  spend a skill point on that ability
 ## B             recall
 ## C             show/hide my own attack range
+## P             open/close the shop (buying still needs the base zone)
+## O             settings
 ## Space         toggle camera lock
 ## Mouse wheel   zoom
 ## Enter         restart the match
@@ -78,6 +80,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_commands.request_camera_zoom(1.0)
 	elif event.is_action_pressed("toggle_range"):
 		_commands.request_range_toggle()
+	elif event.is_action_pressed("toggle_shop"):
+		_commands.request_shop_toggle()
+	elif event.is_action_pressed("open_settings"):
+		_commands.request_settings_toggle()
 	elif event.is_action_pressed("restart_match"):
 		_commands.request_restart()
 	else:

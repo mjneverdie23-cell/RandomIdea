@@ -39,6 +39,7 @@ var _observations := {
 	"client_level": 0,
 	"client_items": [],
 	"client_rank_q": 0,
+	"client_score": [],
 	# Every one of these must come back true: a client that can grant itself
 	# gold, items, ranks or wards is not a client.
 	"upgrade_call_blocked": false,
@@ -219,6 +220,8 @@ func _track_progression() -> void:
 		_observations["client_rank_q"] = champion.abilities.rank(0)
 	if champion.inventory != null and champion.inventory.count() > 0:
 		_observations["client_items"] = Array(champion.inventory.item_ids())
+	if champion.score != null:
+		_observations["client_score"] = Array(champion.score.as_array())
 
 
 ## The host has its own ring on. Nothing about that may reach this process.

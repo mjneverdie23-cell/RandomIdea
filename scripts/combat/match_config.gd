@@ -40,6 +40,12 @@ extends Resource
 ## Lane fraction an AI champion walks to when it has nothing to fight.
 @export_range(0.0, 1.0, 0.05) var ai_push_target: float = 0.5
 
+@export_group("Presentation")
+## How see-through a champion standing in a bush looks. Presentation only —
+## who can actually see it is [VisionManager]'s answer, not this one.
+@export_range(0.0, 0.9, 0.05) var bush_concealment_fade: float = 0.25
+
 @export_group("Debug")
-## Health bars and combat state are on by default; F10 toggles them.
-@export var combat_debug_on_start: bool = true
+## The developer overlay: unit name labels, health bars, target lines and every
+## attack range at once. Off in normal play — F10 turns it on.
+@export var combat_debug_on_start: bool = false

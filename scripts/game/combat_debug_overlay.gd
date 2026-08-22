@@ -3,6 +3,10 @@ extends Node3D
 
 ## Optional world-space combat debugging, toggled with F10.
 ##
+## Everything it draws is developer output, including the only place unit names
+## are ever rendered in the world. It starts hidden, so normal gameplay shows no
+## identifiers and no range rings at all.
+##
 ## It attaches a gizmo to every unit the [BattleRegistry] knows about — health
 ## bar, current target line and a state line covering the movement command,
 ## navigation target and respawn timer. Nothing here feeds back into gameplay,
@@ -29,10 +33,13 @@ var player: ChampionController
 
 var _gizmos: Dictionary = {}
 var _refresh_timer: float = 0.0
-var _overlay_visible: bool = true
+## Hidden until something explicitly asks for it. Gizmos are built hidden too,
+## so a unit that spawns before the first toggle cannot flash its debug label.
+var _overlay_visible: bool = false
 
 
 func _ready() -> void:
+	set_process(false)
 	Battle.unit_registered.connect(_on_unit_registered)
 	Battle.unit_unregistered.connect(_on_unit_unregistered)
 	for unit in Battle.all():

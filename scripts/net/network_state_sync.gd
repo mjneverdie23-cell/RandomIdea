@@ -113,9 +113,9 @@ func _champion_block(champion: Unit) -> PackedFloat32Array:
 	])
 
 
-## Ability ranks and item slots only move when a player spends something, so
-## they are sent reliably and only on a change rather than twenty times a
-## second.
+## Ability ranks, item slots and the scoreboard only move when a player spends
+## something or somebody dies, so they are sent reliably and only on a change
+## rather than twenty times a second.
 func _broadcast_changed_loadouts() -> void:
 	_loadout_timer -= 1.0 / maxf(tick_rate, 1.0)
 	if _loadout_timer <= 0.0:
@@ -127,11 +127,13 @@ func _broadcast_changed_loadouts() -> void:
 		var ranks: PackedInt32Array = unit.abilities.ranks.duplicate()
 		var items: PackedStringArray = unit.inventory.item_ids() \
 			if unit.inventory != null else PackedStringArray()
-		var signature := "%s|%s" % [ranks, items]
+		var score: PackedInt32Array = unit.score.as_array() \
+			if unit.score != null else PackedInt32Array()
+		var signature := "%s|%s|%s" % [ranks, items, score]
 		if _loadout_signatures.get(unit.net_id, "") == signature:
 			continue
 		_loadout_signatures[unit.net_id] = signature
-		_receive_champion_loadout.rpc(unit.net_id, ranks, items)
+		_receive_champion_loadout.rpc(unit.net_id, ranks, items, score)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
@@ -177,7 +179,7 @@ func _apply_champion_block(champion: Unit, block: PackedFloat32Array) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _receive_champion_loadout(net_id: int, ranks: PackedInt32Array,
-		items: PackedStringArray) -> void:
+		items: PackedStringArray, score: PackedInt32Array) -> void:
 	var champion: Unit = _index_units().get(net_id, null)
 	if champion == null:
 		return
@@ -185,6 +187,8 @@ func _receive_champion_loadout(net_id: int, ranks: PackedInt32Array,
 		champion.abilities.apply_replicated_ranks(ranks)
 	if champion.inventory != null:
 		champion.inventory.apply_replicated(items, catalog)
+	if champion.score != null:
+		champion.score.apply_replicated(score)
 
 
 func _index_units() -> Dictionary:

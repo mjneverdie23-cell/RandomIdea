@@ -181,6 +181,21 @@ func _check_economy_authority() -> void:
 
 	champion.experience.add(champion.experience.needed(), "test")
 	_expect(champion.level.level == 2, "the host could not level the client's champion")
+
+	# Out in the lane the same request is refused, and refused *here* rather
+	# than by whatever the client's own panel happens to allow.
+	var lane := _root.map.layout.lane_point(_root.map.layout.lanes[0]["lane"], 0.5)
+	champion.teleport_to(Vector3(lane.x, 0.0, lane.y))
+	await _wait(0.2)
+	_expect(_root.director.purchases.zone_for(champion) == null,
+		"mid-lane counts as a shop zone")
+	_expect(not _root.director.purchases.purchase(champion, item.id),
+		"the server sold an item to a champion standing in the lane")
+	# And the enemy's fountain is not a shop either.
+	var enemy_shop := _root.director.shop_for(MapEnums.Team.A)
+	_expect(enemy_shop != null and not enemy_shop.accepts(champion),
+		"a champion can shop in the enemy base")
+	_expect(champion.inventory.count() == 1, "a refused purchase still filled a slot")
 	print("[NetHost] client champion: %.0f gold, level %d, %d item(s)" % [
 		champion.wallet.gold, champion.level.level, champion.inventory.count()
 	])
@@ -285,6 +300,8 @@ func _check_client_report() -> void:
 	_expect(float(_client_report["client_gold"]) > 1000.0,
 		"gold granted by the host did not reach the client")
 	_expect(int(_client_report["client_level"]) >= 2, "the level did not reach the client")
+	_expect(Array(_client_report["client_score"]).size() == 3,
+		"the scoreboard did not reach the client")
 	_expect(Array(_client_report["client_items"]).has("longblade"),
 		"the purchased item did not reach the client")
 

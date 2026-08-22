@@ -55,6 +55,10 @@ func _run() -> void:
 	await _check_progression()
 	await _check_shop_and_items()
 	await _check_range_visibility()
+	await _check_clean_presentation()
+	await _check_concealment()
+	await _check_scoreboard()
+	_check_settings_bindings()
 	await _capture_screenshots()
 	await _check_alternate_map()
 
@@ -150,6 +154,8 @@ func _check_debug_views() -> void:
 	var before := map.is_debug_visible()
 	_root.commands.request_debug_toggle()
 	_expect(map.is_debug_visible() != before, "map debug view did not toggle")
+	# Put it back: every later check runs against normal presentation.
+	map.set_debug_visible(before)
 
 	var overlay := _root.combat_debug
 	var combat_before := overlay.is_overlay_visible()
@@ -608,6 +614,171 @@ func _check_shop_and_items() -> void:
 	_expect(is_equal_approx(champion.stats.value("attack_damage"), damage_before),
 		"removing an item left its stat bonus behind")
 	champion.wallet.add(1000.0, "test")
+
+
+# --- presentation, concealment, scoreboard and bindings ----------------------
+
+## Normal gameplay renders no identifiers and no range rings. Both used to be
+## on because the combat overlay defaulted to visible, which is the one switch
+## that turns names and rings on together.
+func _check_clean_presentation() -> void:
+	await _isolate_arena()
+	_root.combat_debug.set_overlay_visible(false)
+	_root.range_view.set_own_range_visible(false)
+	_root.range_view.refresh()
+	await _settle(4)
+
+	_expect(not _root.director.config.combat_debug_on_start,
+		"the combat debug overlay is on by default")
+	_expect(not _root.map.is_debug_visible(), "the map debug view is on by default")
+	_expect(_root.range_view.visible_ring_count() == 0,
+		"a range ring is showing with every rule saying it should not")
+
+	# The only two places a name is ever drawn in the world are the two debug
+	# overlays, and both are off.
+	var labels := _count_visible_labels(_root)
+	print("[SmokeTest] visible world labels in normal play: %d" % labels)
+	_expect(labels == 0, "%d object name labels are visible in normal gameplay" % labels)
+
+	_root.combat_debug.set_overlay_visible(true)
+	await _settle(4)
+	_expect(_count_visible_labels(_root) > 0, "the developer overlay shows no labels either")
+	_root.combat_debug.set_overlay_visible(false)
+	await _settle(4)
+
+
+## Every Label3D whose whole ancestor chain is visible.
+func _count_visible_labels(node: Node) -> int:
+	var total := 0
+	for child in node.get_children():
+		if child is Label3D and child.is_visible_in_tree():
+			total += 1
+		total += _count_visible_labels(child)
+	return total
+
+
+## Standing in a bush fades the champion a little. It must stay a *little*, and
+## it must change nothing about who can see it.
+func _check_concealment() -> void:
+	var champion := _root.champion
+	var bush := Vision.zone_by_id("TOP_BUSH_1")
+	if bush == null or champion.concealment == null:
+		_fail("no bush or no concealment component to check")
+		return
+	var fade: float = _root.director.config.bush_concealment_fade
+	_expect(fade > 0.0 and fade <= 0.4, "the bush fade is not a mild one (%.2f)" % fade)
+
+	# The fountain, not "a few metres past the bush edge" — on the three-lane
+	# map that lands inside RIVER_BUSH_1, which is a fine place to be concealed.
+	champion.teleport_to(champion.spawn_point)
+	await _settle(12)
+	_expect(Vision.zone_at(champion.global_position) == null, "the fountain is inside a bush")
+	_expect(not champion.concealment.is_concealed(), "the champion is faded outside a bush")
+
+	champion.teleport_to(bush.global_position)
+	await _settle(12)
+	_expect(champion.concealment.is_concealed(), "the champion did not fade inside a bush")
+	var alpha := _visual_alpha(champion)
+	print("[SmokeTest] champion alpha in a bush: %.2f (fade %.2f)" % [alpha, fade])
+	_expect(is_equal_approx(alpha, 1.0 - fade), "the bush fade is not the configured amount")
+	_expect(alpha >= 0.6, "the champion is close to invisible in a bush")
+
+	# Vision is unaffected: the champion still lights the bush for its own team,
+	# and concealment is not a stealth mechanic.
+	Vision.recompute()
+	_expect(Vision.is_visible_to(champion, champion.team),
+		"fading a champion hid it from its own team")
+
+	champion.teleport_to(champion.spawn_point)
+	await _settle(12)
+	_expect(not champion.concealment.is_concealed(), "the fade did not clear on leaving the bush")
+	_expect(is_equal_approx(_visual_alpha(champion), 1.0),
+		"the champion stayed translucent outside the bush")
+
+
+func _visual_alpha(champion: ChampionController) -> float:
+	for child in champion.visual.get_children():
+		if child is MeshInstance3D and child.material_override is StandardMaterial3D:
+			return child.material_override.albedo_color.a
+	return -1.0
+
+
+## K/D/A counts champions only, and counts them the way the reward system
+## already decided who did what.
+func _check_scoreboard() -> void:
+	await _isolate_arena()
+	var champion := _root.champion
+	var score := champion.score
+	_expect(score != null, "the champion has no scoreboard")
+	if score == null:
+		return
+	var kills := score.kills
+	var deaths := score.deaths
+
+	# A minion is gold, not a kill.
+	var minion := _spawn_dummy(champion.global_position + Vector3(3.0, 0.0, 0.0),
+		MapEnums.Team.B, 100.0, 910030)
+	await _settle_physics(2)
+	minion.health.kill(champion)
+	await _settle_physics(2)
+	_expect(score.kills == kills, "killing a minion counted as a champion kill")
+
+	# An enemy champion is.
+	var enemy: ChampionController = _root.director.enemy_champions[0]
+	enemy.teleport_to(champion.global_position + Vector3(4.0, 0.0, 0.0))
+	await _settle_physics(2)
+	enemy.health.kill(champion)
+	await _settle_physics(2)
+	_expect(score.kills == kills + 1, "killing an enemy champion did not count")
+	_expect(enemy.score.deaths >= 1, "the victim recorded no death")
+	print("[SmokeTest] scoreboard after a champion kill: %s (victim %s)" % [
+		score.summary(), enemy.score.summary()
+	])
+
+	# Dying counts against you.
+	champion.health.kill(enemy)
+	await _settle_physics(2)
+	_expect(score.deaths == deaths + 1, "dying did not count as a death")
+	_expect(score.summary() == "%d / %d / %d" % [score.kills, score.deaths, score.assists],
+		"the compact K/D/A string is malformed")
+	champion.respawn()
+	await _settle_physics(4)
+
+
+## The settings screen edits the real input map and nothing else.
+func _check_settings_bindings() -> void:
+	InputSettings.capture_defaults()
+	for action in InputSettings.actions():
+		_expect(InputMap.has_action(action), "settings lists an unknown action %s" % action)
+	_expect(InputSettings.binding_text("ability_q") == "Q", "ability 1 is not bound to Q")
+	_expect(InputSettings.binding_text("basic_attack") == "Left click",
+		"the mouse binding is not described")
+
+	# A rebind writes the input map, a clash is refused, and a reset undoes it.
+	var rebound := InputEventKey.new()
+	rebound.physical_keycode = KEY_J
+	InputSettings.rebind("ability_q", rebound)
+	_expect(InputSettings.binding_text("ability_q") == "J", "rebinding did not take")
+	_expect(InputMap.event_is_action(rebound, "ability_q"), "the input map did not follow")
+
+	var clash := InputEventKey.new()
+	clash.physical_keycode = KEY_J
+	_expect(InputSettings.conflict(clash, "ability_e") == "ability_q",
+		"a duplicate binding was not detected")
+	_expect(InputSettings.conflict(clash, "ability_q").is_empty(),
+		"an action conflicted with itself")
+
+	# Persistence: what was saved reloads into a fresh input map.
+	InputSettings.reset_all()
+	_expect(InputSettings.binding_text("ability_q") == "Q", "reset did not restore the default")
+	InputSettings.rebind("ability_q", rebound)
+	InputSettings.reset_all()
+	InputSettings.rebind("ability_q", rebound)
+	_expect(InputSettings.load_and_apply() >= 1, "the saved binding did not reload")
+	_expect(InputSettings.binding_text("ability_q") == "J", "the reloaded binding is wrong")
+	InputSettings.reset_all()
+	InputSettings.clear_saved()
+	print("[SmokeTest] rebinding, conflict detection, reset and persistence all hold")
 
 
 # --- attack-range visibility -------------------------------------------------

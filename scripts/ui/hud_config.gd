@@ -40,6 +40,8 @@ extends Resource
 @export_range(80.0, 800.0, 5.0) var status_bar_width: float = 300.0
 @export_range(4.0, 60.0, 1.0) var health_bar_height: float = 18.0
 @export_range(2.0, 40.0, 1.0) var experience_bar_height: float = 8.0
+## Width of the K/D/A column sitting to the right of the bars.
+@export_range(0.0, 240.0, 2.0) var score_column_width: float = 92.0
 
 @export_group("Minimap")
 @export_range(80.0, 600.0, 5.0) var minimap_size: float = 210.0

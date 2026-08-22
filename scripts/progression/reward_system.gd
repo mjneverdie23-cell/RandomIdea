@@ -10,6 +10,7 @@ extends Node
 ## Authority only: a client is told the resulting numbers, never the events.
 
 signal reward_granted(champion: ChampionController, gold: float, experience: float, reason: String)
+signal champion_killed(victim: ChampionController, killer: ChampionController, assists: int)
 
 @export var config: RewardConfig
 
@@ -43,7 +44,8 @@ func _on_unit_died(unit: Node3D, source: Node) -> void:
 		return
 	if killer != null:
 		_grant(killer, float(bounty["gold"]), float(bounty["xp"]), String(bounty["reason"]))
-	_share_experience(unit, killer, float(bounty["xp"]))
+	var helpers := _share_experience(unit, killer, float(bounty["xp"]))
+	_score(unit, killer, helpers)
 
 
 ## Only a champion of the opposing team is paid, and only when it is the one
@@ -75,10 +77,13 @@ func _bounty_for(unit: Node3D) -> Dictionary:
 	return {}
 
 
-## Allied champions standing close enough share the XP, not the gold.
-func _share_experience(victim: Node3D, killer: ChampionController, experience: float) -> void:
-	if experience <= 0.0 or config.shared_xp_ratio <= 0.0:
-		return
+## Allied champions standing close enough share the XP, not the gold. Returns
+## them, because "was near enough to share the experience" is exactly the
+## definition of an assist — one rule, not two that can disagree.
+func _share_experience(victim: Node3D, killer: ChampionController, experience: float) -> Array:
+	var helpers: Array = []
+	if config.shared_xp_ratio <= 0.0:
+		return helpers
 	var share := experience * config.shared_xp_ratio
 	for unit in Battle.all():
 		if unit.kind != Unit.Kind.CHAMPION or unit == killer or not unit.is_alive():
@@ -87,7 +92,25 @@ func _share_experience(victim: Node3D, killer: ChampionController, experience: f
 			continue
 		if unit.global_position.distance_to(victim.global_position) > config.xp_share_radius:
 			continue
-		_grant(unit, 0.0, share, "assist")
+		helpers.append(unit)
+		if share > 0.0:
+			_grant(unit, 0.0, share, "assist")
+	return helpers
+
+
+## Only a champion death moves the scoreboard; minions and turrets are worth
+## gold, not a notch on anyone's record.
+func _score(victim: Node3D, killer: ChampionController, helpers: Array) -> void:
+	if victim.kind != Unit.Kind.CHAMPION:
+		return
+	if victim.score != null:
+		victim.score.add_death()
+	if killer != null and killer.score != null:
+		killer.score.add_kill()
+	for helper in helpers:
+		if helper.score != null:
+			helper.score.add_assist()
+	champion_killed.emit(victim, killer, helpers.size())
 
 
 func _grant(champion: ChampionController, gold: float, experience: float, reason: String) -> void:

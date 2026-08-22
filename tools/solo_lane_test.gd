@@ -211,6 +211,18 @@ func _check_shared_systems() -> void:
 		"the solo champion cannot shop at its own fountain")
 	_expect(_root.hud.minimap != null and _root.hud.ability_bar != null,
 		"the shared HUD did not build on the solo map")
+	_expect(champion.score != null and champion.score.summary() == "0 / 0 / 0",
+		"the solo champion did not start at 0 / 0 / 0")
+	_expect(not director.config.combat_debug_on_start,
+		"Solo Lane starts with the developer overlay on")
+	_expect(_root.range_view.visible_ring_count() == 0,
+		"Solo Lane draws a range ring nobody asked for")
+	_expect(champion.concealment != null, "the solo champion has no concealment visual")
+
+	# Buying is a base activity here too, and the enemy base is not your base.
+	var enemy_shop := director.shop_for(MapEnums.Team.B)
+	_expect(enemy_shop != null and not enemy_shop.accepts(champion),
+		"the enemy shop zone accepts the player")
 
 	# One bush, one hider, the same rule as the three-lane map.
 	var bush := Vision.zone_by_id("SOLO_BUSH_1")
