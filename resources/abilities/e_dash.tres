@@ -8,6 +8,7 @@ id = "e_dash"
 display_name = "Dash"
 slot = 1
 cooldown = 7.0
+resource_cost = 20.0
 cast_range = 11.0
 damage = 0.0
 radius = 2.0

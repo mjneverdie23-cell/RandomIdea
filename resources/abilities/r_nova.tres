@@ -8,6 +8,7 @@ id = "r_nova"
 display_name = "Nova"
 slot = 2
 cooldown = 18.0
+resource_cost = 35.0
 cast_range = 12.0
 damage = 260.0
 radius = 7.0

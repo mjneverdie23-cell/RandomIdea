@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="MatchConfig" load_steps=9 format=3]
+[gd_resource type="Resource" script_class="MatchConfig" load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/combat/match_config.gd" id="1_script"]
 [ext_resource type="Resource" path="res://resources/units/champion_loadout.tres" id="2_player"]
@@ -8,11 +8,23 @@
 [ext_resource type="Resource" path="res://resources/units/turret_nexus.tres" id="6_nexus_turret"]
 [ext_resource type="Resource" path="res://resources/units/nexus.tres" id="7_nexus"]
 
+[ext_resource type="Resource" path="res://resources/progression/champion_progression.tres" id="8_progression"]
+[ext_resource type="Resource" path="res://resources/progression/ability_progression.tres" id="9_abilityprog"]
+[ext_resource type="Resource" path="res://resources/progression/match_rewards.tres" id="10_rewards"]
+[ext_resource type="Resource" path="res://resources/shops/prototype_shop.tres" id="11_shop"]
+[ext_resource type="Resource" path="res://resources/vision/prototype_ward.tres" id="12_ward"]
+
 [resource]
 script = ExtResource("1_script")
 player_loadout = ExtResource("2_player")
 enemy_loadout = ExtResource("3_enemy")
 wave = ExtResource("4_wave")
+progression = ExtResource("8_progression")
+ability_progression = ExtResource("9_abilityprog")
+rewards = ExtResource("10_rewards")
+shop_catalog = ExtResource("11_shop")
+ward_config = ExtResource("12_ward")
+shop_zone_radius = 9.0
 nexus_stats = ExtResource("7_nexus")
 spawn_nexus_controllers = true
 nexus_destruction_ends_match = true

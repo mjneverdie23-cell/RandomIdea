@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ProgressionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/progression_data.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+max_level = 12
+base_xp = 180.0
+xp_growth = 1.18
+health_per_level = 90.0
+attack_damage_per_level = 6.0
+attack_speed_per_level = 0.035
+ability_power_per_level = 8.0
+health_regen_per_level = 0.4
+resource_per_level = 20.0

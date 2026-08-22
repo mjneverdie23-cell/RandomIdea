@@ -11,6 +11,6 @@ extends AbilityData
 func execute(caster: Node3D, aim_point: Vector3) -> bool:
 	var center := clamp_aim(caster, aim_point)
 	for unit in Battle.enemies_in_radius(center, caster.team, radius):
-		unit.apply_damage(damage, caster)
+		unit.apply_damage(effective_damage(caster), caster)
 	AbilityPulse.spawn(caster.projectile_parent(), center, maxf(radius, 1.0), color, effect_duration)
 	return true

@@ -65,6 +65,9 @@ func is_target_valid(max_range: float = INF) -> bool:
 		return false
 	if current_target.team == unit.team:
 		return false
+	# Losing vision drops the lock, which is what makes a bush a real escape.
+	if not Vision.is_visible_to(current_target, unit.team):
+		return false
 	return distance_to_target() <= max_range
 
 

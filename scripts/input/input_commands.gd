@@ -21,6 +21,12 @@ signal debug_toggle_requested()
 signal camera_lock_toggle_requested()
 signal camera_zoom_requested(delta: float)
 signal restart_requested()
+## Progression and economy intents. The authority decides all three.
+signal ability_upgrade_requested(slot: int)
+signal purchase_requested(item_id: String)
+signal ward_requested(aim_point: Vector3)
+signal shop_toggle_requested()
+signal range_toggle_requested()
 
 ## Desired movement on the XZ plane in world space, length 0..1.
 var move_direction: Vector2 = Vector2.ZERO
@@ -67,6 +73,28 @@ func request_camera_zoom(delta: float) -> void:
 ## Restart the current match. Raised by the result screen or the Enter key.
 func request_restart() -> void:
 	restart_requested.emit()
+
+
+## Spend a skill point on an ability slot.
+func request_ability_upgrade(slot: int) -> void:
+	ability_upgrade_requested.emit(slot)
+
+
+func request_purchase(item_id: String) -> void:
+	purchase_requested.emit(item_id)
+
+
+func request_ward() -> void:
+	ward_requested.emit(aim_point)
+
+
+## Local-only: opens the shop panel and toggles the range ring.
+func request_shop_toggle() -> void:
+	shop_toggle_requested.emit()
+
+
+func request_range_toggle() -> void:
+	range_toggle_requested.emit()
 
 
 static func ability_name(slot: int) -> String:

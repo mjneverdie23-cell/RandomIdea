@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = "plated_vest"
+display_name = "Plated Vest"
+cost = 400.0
+description = "Armour against physical damage."
+icon_color = Color(0.55, 0.6, 0.68, 1)
+icon_glyph = "AR"
+category = "defence"
+bonus_armor = 0.15

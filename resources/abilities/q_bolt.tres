@@ -8,6 +8,7 @@ id = "q_bolt"
 display_name = "Bolt"
 slot = 0
 cooldown = 3.5
+resource_cost = 18.0
 cast_range = 16.0
 damage = 110.0
 radius = 0.0

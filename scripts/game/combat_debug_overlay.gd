@@ -4,9 +4,13 @@ extends Node3D
 ## Optional world-space combat debugging, toggled with F10.
 ##
 ## It attaches a gizmo to every unit the [BattleRegistry] knows about — health
-## bar, attack-range ring, current target line and a state line covering the
-## movement command, navigation target and respawn timer. Nothing here feeds
-## back into gameplay, so turning it off changes nothing but the picture.
+## bar, current target line and a state line covering the movement command,
+## navigation target and respawn timer. Nothing here feeds back into gameplay,
+## so turning it off changes nothing but the picture.
+##
+## Attack-range rings deliberately do not live here any more: they are drawn by
+## [RangeVisualizer], which shows them only when they mean something. Turning
+## this overlay on asks that system for its show-everything mode.
 ##
 ## The bars billboard around their own origin, which reads correctly because
 ## the gameplay camera keeps a fixed yaw.
@@ -18,9 +22,6 @@ const BAR_HEIGHT := 0.26
 const REFRESH_INTERVAL := 0.1
 
 @export var show_health_bars: bool = true
-## Range rings are drawn for champions and turrets only; a ring on each of
-## thirty minions buries the map it is meant to explain.
-@export var show_range_rings: bool = true
 @export var show_target_lines: bool = true
 @export var show_state_labels: bool = true
 
@@ -90,21 +91,13 @@ func _on_unit_registered(unit: Node3D) -> void:
 	label.modulate = PrototypeMeshes.team_color(unit.team).lightened(0.35)
 	root.add_child(label)
 
-	var ring := PrototypeMeshes.ring(maxf(unit.attack_range(), 0.5), 0.18,
-		PrototypeMeshes.team_color(unit.team).lightened(0.15))
-	ring.position.y = 0.18
-	ring.visible = _wants_range_ring(unit)
-	root.add_child(ring)
-
 	var line := MeshInstance3D.new()
 	line.mesh = ImmediateMesh.new()
 	line.material_override = PrototypeMeshes.material(Color(1.0, 0.4, 0.35), true)
 	line.top_level = true  # draw in world space, not the unit's local space
 	root.add_child(line)
 
-	_gizmos[unit] = {
-		"root": root, "fill": fill_pivot, "label": label, "ring": ring, "line": line,
-	}
+	_gizmos[unit] = {"root": root, "fill": fill_pivot, "label": label, "line": line}
 	_apply_layer_visibility(_gizmos[unit])
 
 
@@ -128,7 +121,6 @@ func _process(delta: float) -> void:
 		_update_target_line(unit, gizmo["line"])
 		if refresh_text:
 			gizmo["label"].text = _describe(unit)
-			gizmo["ring"].visible = _wants_range_ring(unit) and unit.is_alive()
 
 
 func _update_target_line(unit: Node3D, line: MeshInstance3D) -> void:
@@ -174,11 +166,6 @@ func _describe(unit: Node3D) -> String:
 	if target != null and is_instance_valid(target):
 		parts.append("-> %s" % target.display_label())
 	return "  ".join(parts)
-
-
-## Only champions and turrets get a range ring; minion rings drown the map.
-func _wants_range_ring(unit: Node3D) -> bool:
-	return show_range_rings and unit.kind != Unit.Kind.MINION
 
 
 func _movement_text(unit: Node3D) -> String:

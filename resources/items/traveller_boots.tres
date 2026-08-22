@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = "traveller_boots"
+display_name = "Traveller Boots"
+cost = 350.0
+description = "Move faster around the lane and the jungle."
+icon_color = Color(0.72, 0.68, 0.5, 1)
+icon_glyph = "MS"
+category = "utility"
+bonus_move_speed = 2.5
+bonus_vision_radius = 2.0

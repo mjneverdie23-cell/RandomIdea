@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = "arcane_ember"
+display_name = "Arcane Ember"
+cost = 520.0
+description = "Ability power for every ability slot."
+icon_color = Color(0.58, 0.44, 0.9, 1)
+icon_glyph = "AP"
+category = "offence"
+bonus_ability_power = 45.0

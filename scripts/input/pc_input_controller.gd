@@ -11,6 +11,7 @@ extends Node
 ## Left click    select an enemy and basic attack
 ## Q E R F       placeholder abilities
 ## B             recall
+## C             show/hide my own attack range
 ## Space         toggle camera lock
 ## Mouse wheel   zoom
 ## Enter         restart the match
@@ -64,6 +65,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_commands.request_camera_zoom(-1.0)
 	elif event.is_action_pressed("camera_zoom_out"):
 		_commands.request_camera_zoom(1.0)
+	elif event.is_action_pressed("toggle_range"):
+		_commands.request_range_toggle()
 	elif event.is_action_pressed("restart_match"):
 		_commands.request_restart()
 	else:

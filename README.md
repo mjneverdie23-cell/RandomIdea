@@ -145,6 +145,7 @@ main scene). You spawn as Team A in the bottom-left fountain.
 | `R` | Nova — larger area damage at the aim point |
 | `F` | Bulwark — self-buff (damage reduction, speed, heal) |
 | `B` | Recall (channel, interrupted by moving) |
+| `C` | Show/hide **your own** attack range |
 | `Space` | Toggle camera lock / free pan |
 | Mouse wheel | Zoom |
 | `Enter` | Restart the match |
@@ -152,7 +153,14 @@ main scene). You spawn as Team A in the bottom-left fountain.
 Abilities deliberately sit on **Q E R F** so no physical key ever means both
 "move" and "cast". The slots are indices on the command bus, not keys, so a
 mobile joystick plus a four-button bar raises exactly the same
-`InputCommands.ability_requested(slot, aim_point)`.
+`InputCommands.ability_requested(slot, aim_point)`. The same is true of `C`:
+it raises `range_toggle_requested`, which is why the HUD can offer it as a
+button without a keyboard anywhere in the picture.
+
+The HUD itself is the rest of the input surface: the ability buttons cast, the
+small **+** above one spends a skill point, **Ward** places a ward at the aim
+point and **Shop** opens the shop. All four go out on the command bus, so on a
+host they are applied directly and on a client they are validated first.
 
 ### Developer keys
 
@@ -173,10 +181,20 @@ deleting that node removes every cheat and leaves the sandbox intact.
 | `F10` | Toggle the combat debug overlay |
 | `F11` | Network debug overlay (role, peer id, latency, roster, snapshots) |
 | `F12` | Destroy the enemy nexus (instant win, host only) |
+| `Shift+1` | +500 gold |
+| `Shift+2` | +1000 experience |
+| `Shift+3` | Level up |
+| `Shift+4` | Unlock every ability rank |
+| `Shift+5` | Place a ward |
+| `Shift+6` | Reveal the map for your team (local view only) |
+| `Shift+7` | Open/close the shop |
+| `Shift+8` | Clear the inventory |
 | `Esc` | Back to the multiplayer menu |
 
-`F9` goes through the normal command bus (a shipped build may still expose a
-debug view); `F1`–`F8` and `F10` do not.
+`F9` and `C` go through the normal command bus (a shipped build still exposes
+both — neither is something a player should not be allowed to do); `F1`–`F8`,
+`F10` and the `Shift` row do not. The `Shift` bindings are matched *exactly*,
+so pressing a bare number key does nothing.
 
 ### Headless / offscreen check
 
@@ -200,12 +218,27 @@ The smoke test boots the real game scene and asserts that:
 * both debug views toggle;
 * a left click selects a nearby enemy and basic attacks repeat on it;
 * an out-of-range target is chased;
-* all four abilities cast, start cooldowns and refuse a second cast;
+* abilities start locked, the ultimate refuses a point below its level, and a
+  spent point unlocks the slot;
+* all four abilities cast, spend resource, start cooldowns and refuse a second
+  cast;
 * the champion dies, cannot move while dead, and respawns at its fountain with
   full health;
 * a wave spawns and its minions navigate away from the spawn;
 * two opposing minions damage each other unaided;
 * a minion damages an enemy turret and is shot back;
+* a bush hides an enemy from outside it, does not hide one standing in it, and
+  a ward reveals it — and a hidden enemy is off the minimap and untargetable;
+* a minion kill pays the configured gold and XP to the champion that landed
+  the blow, and nothing to anyone else;
+* experience produces a level, a level produces stat growth and a skill point,
+  and growth cannot stack;
+* buying is refused in the lane and granted at the fountain, deducts the price,
+  fills a slot, applies the stats, survives a respawn and is refused when broke;
+* the range rules: nothing on spawn, `C` toggles only your own ring, an enemy
+  champion never gets one, an enemy tower gets one only while it is inside
+  range *and* visible, fog of war takes it away, minions never get one, and
+  `F10` reveals everything;
 * a second map configuration builds and passes the same reachability check.
 
 `SoloLaneTest.tscn` boots the same scene in Solo Lane and checks the mode's own
@@ -215,7 +248,10 @@ objectives; every `SOLO_*` identifier is registered; the bases sit at opposite
 ends; the full lane is navigable in both directions and every tower and nexus
 is approachable; waves spawn from both minion spawns and march; the enemy
 champion's AI brain drives it down the lane; a minion damages the enemy nexus;
-and destroying that nexus produces `VICTORY`.
+and destroying that nexus produces `VICTORY`. It also checks that the shared
+systems layer arrives here with nothing mode-specific about it: four bushes
+registered as vision zones, a shop at each fountain, progression components on
+the champion, and one of those bushes hiding an enemy.
 
 `NetMatchTest.tscn` hosts a Solo Lane match, launches a client process and
 checks: the host waits for its opponent instead of starting alone; teams are
@@ -225,12 +261,18 @@ the client's movement command reaches the host and moves its champion there;
 damage, death and respawn replicate; minions, all four turrets and both
 nexuses replicate; the client simulates nothing; the result arrives as
 `VICTORY` on the host and `DEFEAT` on the client; and the disconnect unseats
-the player.
+the player. It then plays the client's side of the economy: the host grants
+gold, buys an item at that champion's own fountain and levels it, and the
+client is asserted to have received all three — while every attempt the client
+makes to grant itself a skill point, an item, a ward, gold or an ability rank
+is refused, overwritten or ignored, and the host's own range ring never
+reaches it.
 
 `NetDedicatedTest.tscn` runs the same build as a dedicated server with no local
 player and two client processes, checking that the server seats one team each,
 spawns and simulates both champions and the minions, refuses the local-player
-cheats it has no business running, and ends the match for both clients.
+cheats it has no business running, refuses both clients' forgery attempts, and
+ends the match for both clients.
 
 All exit non-zero on failure.
 
@@ -336,7 +378,11 @@ combat code and the map's topology, navigation and debug renderer are untouched.
 ```
 GameDirector          spawns champions, attaches turret controllers, dev commands
  ├── MinionWaveSpawner  waves per lane, routes sampled from MapLayout
- └── Battle (autoload)  registry of live units; the only way units find each other
+ ├── RewardSystem        deaths -> gold and XP, from Battle.unit_died
+ ├── PurchaseSystem      the only place an item changes hands
+ ├── ShopZone x2         one buy zone per team, at that team's fountain
+ ├── Battle (autoload)   registry of live units; the only way units find each other
+ └── Vision (autoload)   who can see what; every targeting and UI query goes here
 
 Unit (CharacterBody3D)         team + UnitStats + components
  ├── ChampionController        player (command bus) or AI (chase and shoot)
@@ -344,7 +390,10 @@ Unit (CharacterBody3D)         team + UnitStats + components
  └── TurretController          static, prefers minions over champions
 
 components: HealthComponent, StatsComponent, MovementComponent,
-            TargetingComponent, CombatComponent, AbilityComponent
+            TargetingComponent, CombatComponent, AbilityComponent,
+            ResourceComponent, VisionSource
+champions also: WalletComponent, ExperienceComponent, LevelComponent,
+            InventoryComponent
 ```
 
 **Health** clamps to `0..max`, emits `health_changed`, `damaged`, `healed`,
@@ -394,10 +443,163 @@ Everything a designer tunes lives in `resources/`:
 | `units/turret_lane.tres`, `turret_nexus.tres` | turret health, damage, projectile speed |
 | `abilities/q_bolt.tres`, `e_dash.tres`, `r_nova.tres`, `f_bulwark.tres` | one file per ability |
 | `game/wave_config.tres` | wave interval, composition, lanes, routes, safety cap |
-| `game/match_config.tres` | which loadouts, turret tuning, starting enemies |
+| `game/match_config.tres` | which loadouts, turret tuning, starting enemies, and the five resources below |
+| `progression/champion_progression.tres` | max level, XP curve, per-level stat growth |
+| `progression/ability_progression.tres` | unlock level and rank cap per slot, points per level |
+| `progression/match_rewards.tres` | starting gold, passive trickle, every bounty |
+| `shops/prototype_shop.tres` | what the shop sells, in order |
+| `items/*.tres` | one file per item: price, icon placeholder, stat bonuses |
+| `vision/prototype_ward.tres` | ward lifetime, radius, limit, cooldown, placement range |
+| `ui/prototype_hud.tres` | every HUD colour and size |
+| `ui/range_display.tres` | range-ring colours and the two range rules that are opinions |
 
 Turret attack range is the one value the *map* owns rather than the resource,
 so the debug range rings and the turrets that draw them can never disagree.
+
+---
+
+## Vision, economy, progression and the HUD
+
+One layer, shared by both maps. Nothing below has a Full MOBA version and a
+Solo Lane version: the difference is entirely in the map data each mode loads.
+
+### Fog of war is gameplay state, not a rendering trick
+
+`VisionManager` (autoload `Vision`) recomputes, eight times a second on the
+authority, one question per unit per team: *can team T see this?* The answer
+is a bit in a mask, and **everything** reads that one answer — target
+acquisition, click selection, the minimap, the HUD, the range rings. A
+champion in a bush is not merely invisible; it cannot be targeted, clicked,
+auto-attacked or seen on the minimap.
+
+The rule, in full: a unit is visible to an enemy team when some source of that
+team has it in range, **and** either the unit is not in a bush, or the source
+is in the same bush, or the source reveals bushes (a ward).
+
+| Piece | Job |
+|---|---|
+| `VisionSource` | a team, a radius, and whether it sees into bushes. Every unit has one; so does every ward |
+| `VisionZone` | one bush: a circle of ground that hides whoever stands in it |
+| `VisibilityState` | the masks — one bit per team, per unit |
+| `Ward` | a placed eye with a lifetime, spawned and expired by the authority |
+| `BushManager` | builds the bushes the loaded `MapLayout` asked for |
+
+Bushes come from map data with stable ids and are walkable pockets carved out
+of the terrain, not decals: `MapLayout.add_bush()` adds the disk to the
+walkable shapes, `MapProbe` proves each one is reachable.
+
+```
+Full MOBA   TOP_BUSH_1  TOP_BUSH_2  BOT_BUSH_1  BOT_BUSH_2
+            RIVER_BUSH_1  RIVER_BUSH_2  TOP_OBJECTIVE_BUSH  BOT_OBJECTIVE_BUSH
+Solo Lane   SOLO_BUSH_1  SOLO_BUSH_2  SOLO_BUSH_3  SOLO_BUSH_4
+```
+
+Deliberate exception: an area ability that lands on a bush still hits what is
+inside it. `Battle.enemies_in_radius()` is the one query that does not filter
+by vision, because throwing an ability into a bush on a guess is a real play.
+
+### Gold, experience and levels
+
+Kills pay through `RewardSystem`, which listens to `Battle.unit_died` — no
+bounty logic lives in `MinionController` or anywhere else that a unit's
+behaviour is written. Only a champion of the opposing team that actually
+landed the blow is paid; nearby allies share the experience, never the gold.
+
+```
+WalletComponent      gold, passive trickle, spend
+ExperienceComponent  XP into the level, XP to next, thresholds
+LevelComponent       level, stat growth, skill points
+InventoryComponent   item slots and their stat modifiers
+```
+
+Stat growth is **one** `StatsComponent` modifier recomputed from the current
+level, so it can never stack and a respawn cannot double it. Death clears
+buffs; it re-registers levels and items, because those were earned and bought.
+
+Champions start at level 1 with one skill point and nothing unlocked. Ability
+slots unlock at the levels `AbilityProgressionData` names — first at 1, second
+at 2, third at 3, ultimate at 5 — and points are **never** spent for the
+player: a locked slot shows the level it needs, an upgradeable one grows a `+`.
+An AI champion spends its own, because nobody is going to click for it.
+
+### Shops and items
+
+Each team's fountain carries a `ShopZone`, placed by `GameDirector` from the
+layout's champion spawn points — so both maps get one in both bases from the
+same three lines. Walking in opens the shop; walking out closes it.
+
+`PurchaseSystem` is the only place an item changes hands, and it is the same
+code offline, on a host and for a validated client request: match running,
+champion alive, standing in its own zone, enough gold, a free slot. A refused
+purchase says which of those failed. If the insert ever fails after the gold
+moved, the gold is refunded rather than silently eaten.
+
+Items are `ItemData` resources — a price and a bundle of stat modifiers,
+applied through `StatsComponent` like any buff, so no combat code knows items
+exist. The prototype shop sells seven: attack damage, attack speed, ability
+power, armour, magic resist, health and movement speed.
+
+### The HUD
+
+One `MobaHud`, both maps, assembled from small widgets that each draw
+themselves and hold no gameplay numbers:
+
+```
+ChampionPanel   level badge, health, ability resource, XP bar, gold
+AbilityBar      four slots: empty / locked / cooldown / unaffordable / ready,
+                rank pips, and a "+" when a point can go here
+ItemBar         inventory slots, from the champion's own slot count
+ActionButtons   Ward and Shop
+Minimap         lower right, driven by the loaded layout and registry
+ShopUi          items, prices, stat lines and why you cannot afford one
+```
+
+The minimap draws the boundary, the lanes, the river, the bushes, the towers,
+the nexuses and the shops from map data; it draws moving units from
+`Battle`, filtered through `Vision`. A hidden enemy is absent from it, exactly
+as it is absent from target acquisition. **No attack ranges are ever drawn on
+the minimap.**
+
+Champions carry an optional ability resource (`UnitStats.max_resource`, spent
+per `AbilityData.resource_cost`). A unit whose stats leave it at zero — every
+minion and turret — simply has no bar, rather than an empty one pretending to
+mean something.
+
+### Attack ranges: three cases, and no others
+
+Permanent rings under every champion and tower buried the map they were meant
+to explain. `RangeVisualizer` replaced them with one rule set:
+
+| Case | Ring |
+|---|---|
+| Your own champion | only while you have asked for it (`C`, or the HUD button) |
+| An enemy champion | **never** in normal gameplay |
+| An allied tower | never |
+| An enemy tower | only while you are inside its real attack range **and** can see it |
+| Minions | never, outside the developer view |
+| `F10` combat debug | everything at once |
+
+The radius drawn is the unit's live `attack_range()`, so an item or a level
+that extends it extends the ring. Rings are local presentation and are never
+replicated: your toggle is invisible to your opponent, and the server remains
+the only judge of whether an attack is actually in range.
+
+### Authority
+
+Everything in this layer is decided by the host or the dedicated server: gold,
+experience, levels, skill points, ability ranks, minion bounties, purchases,
+inventory contents, item stats, ward placement and expiry, and the visibility
+masks themselves. A client sends an item **id**, never a price; a slot, never
+a stat block. `PurchaseSystem.purchase()`, `GameDirector.place_ward()` and
+`ChampionController.spend_skill_point()` all refuse outright when the process
+is not the authority, and the networked tests assert each refusal from both
+sides.
+
+Gold, XP, level, skill points and the resource pool ride in the 20 Hz
+snapshot; the visibility mask rides in the flag byte that already carried
+"alive", so fog of war costs nothing extra on the wire. Ability ranks and item
+ids go out reliably on change and are resent once a second, so a client that
+missed a packet — or whose local copy was tampered with — is corrected.
 
 ## Architecture
 

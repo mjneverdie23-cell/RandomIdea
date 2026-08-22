@@ -38,6 +38,7 @@ func rebuild() -> void:
 	_build_solo_bases()
 	_build_solo_towers()
 	_build_side_terrain()
+	_build_bushes()
 
 
 func play_half_extents() -> Vector2:
@@ -195,6 +196,20 @@ func _build_boulders(solo: SoloLaneConfig) -> void:
 				"radius": 2.6 + float(i % 3) * 0.6,
 				"height": config.wall_height * (1.4 + float(i % 2) * 0.5),
 			})
+
+
+## Four bushes flanking the single lane: two either side of the midpoint, so
+## both players have cover on their approach and near the fight.
+func _build_bushes() -> void:
+	var offset: float = config.bush_lane_offset
+	var pairs := [
+		["SOLO_BUSH_1", 0.34, 1.0],
+		["SOLO_BUSH_2", 0.34, -1.0],
+		["SOLO_BUSH_3", 0.66, -1.0],
+		["SOLO_BUSH_4", 0.66, 1.0],
+	]
+	for spec in pairs:
+		add_bush(spec[0], lane_side_point(SOLO_LANE, spec[1], spec[2], offset))
 
 
 # --- probe contract ----------------------------------------------------------

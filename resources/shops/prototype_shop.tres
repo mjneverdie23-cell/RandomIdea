@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ShopCatalog" load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/shop_catalog.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="2_item"]
+[ext_resource type="Resource" path="res://resources/items/longblade.tres" id="3_ad"]
+[ext_resource type="Resource" path="res://resources/items/swift_gauntlet.tres" id="4_as"]
+[ext_resource type="Resource" path="res://resources/items/arcane_ember.tres" id="5_ap"]
+[ext_resource type="Resource" path="res://resources/items/plated_vest.tres" id="6_ar"]
+[ext_resource type="Resource" path="res://resources/items/warded_cloak.tres" id="7_mr"]
+[ext_resource type="Resource" path="res://resources/items/vital_stone.tres" id="8_hp"]
+[ext_resource type="Resource" path="res://resources/items/traveller_boots.tres" id="9_ms"]
+
+[resource]
+script = ExtResource("1_script")
+display_name = "Base Shop"
+items = Array[ExtResource("2_item")]([ExtResource("3_ad"), ExtResource("4_as"), ExtResource("5_ap"), ExtResource("6_ar"), ExtResource("7_mr"), ExtResource("8_hp"), ExtResource("9_ms")])

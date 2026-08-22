@@ -20,6 +20,14 @@ the [Invariants](#invariants) section before going further.
 | Change wave size or interval | `resources/game/*wave_config.tres` | no |
 | Resize a map, move towers, widen a lane | `resources/maps/*.tres` | no |
 | Change who spawns and the win rule | `resources/game/*match_config.tres` | no |
+| Retune gold, bounties, the XP curve, level growth | `resources/progression/*.tres` | no |
+| Change when abilities unlock or how far they rank | `resources/progression/ability_progression.tres` | no |
+| Add, price or retune a shop item | `resources/items/*.tres` + `resources/shops/prototype_shop.tres` | no |
+| Retune wards | `resources/vision/prototype_ward.tres` | no |
+| Restyle the HUD or the minimap | `resources/ui/prototype_hud.tres` | no |
+| Change which attack ranges are drawn | `resources/ui/range_display.tres` (colours, two rules) or `RangeVisualizer` (the rules) | maybe |
+| Move or resize the bushes | the map's `_build_bushes()` + `bush_radius` | small |
+| Move the shops | they follow each layout's champion spawn point | no |
 | Turn the offline bot on/off | menu checkbox, or `--no-ai` | no |
 | Change the network address/port | `resources/net/enet_transport.tres` | no |
 | Add a new ability kind | one script in `scripts/combat/abilities/` + a `.tres` | small |
@@ -30,6 +38,7 @@ the [Invariants](#invariants) section before going further.
 | Add a mobile control scheme | a new node that drives `InputCommands` | small |
 | Change AI behaviour | `scripts/units/champion_ai.gd` | small |
 | Replicate a new field | `scripts/net/network_state_sync.gd` + `Unit` | small |
+| Add a developer cheat | a `dev_*` method on `GameDirector` + a key in `DevInputController` | small |
 | Swap the network transport | a `NetworkTransport` subclass + a `.tres` | small |
 
 ---
@@ -132,12 +141,57 @@ Which loadouts and wave config to use; `nexus_stats`,
 A networked match always ignores it — those seats belong to humans. See
 `GameDirector.ai_opponent_count()`.
 
+The **Progression and economy** group names the five resources that drive
+everything in section 12: `progression`, `ability_progression`, `rewards`,
+`shop_catalog` and `ward_config`, plus `shop_zone_radius`. Both modes currently
+point at the same five files; pointing Solo Lane at its own copies is how you
+would give it a different economy without touching a line of code.
+
+### Progression and economy — `resources/progression/`
+
+`champion_progression.tres` — `max_level`, `base_xp`, `xp_growth`, and the
+per-level growth group (`health_per_level`, `attack_damage_per_level`,
+`attack_speed_per_level` (multiplicative), `ability_power_per_level`,
+`health_regen_per_level`, `resource_per_level`).
+
+`ability_progression.tres` — `unlock_levels` and `max_ranks`, one entry per
+slot in Q/E/R/F order; `points_per_level`; `damage_per_rank` and
+`cooldown_reduction_per_rank`.
+
+`match_rewards.tres` — `starting_gold`, `passive_gold_per_second`, the three
+minion bounties and `minion_xp`, the turret and champion bounties, and
+`xp_share_radius` / `shared_xp_ratio`.
+
+> Making the game slower or faster is almost always `base_xp`/`xp_growth` plus
+> the minion bounties, not code.
+
+### Items and shops — `resources/items/`, `resources/shops/`
+
+One `.tres` per item: `id` (what the network sends), `display_name`, `cost`,
+`description`, `icon_color` and `icon_glyph` (the placeholder art), `category`,
+then the bonus group. `prototype_shop.tres` lists them in the order the shop
+shows them.
+
+`match_config.shop_zone_radius` is how big the buy zone at each fountain is.
+
+### Wards — `resources/vision/prototype_ward.tres`
+
+`lifetime`, `vision_radius`, `max_active` per champion, `cooldown` and
+`place_range`.
+
+### HUD — `resources/ui/`
+
+`prototype_hud.tres` is every colour and size the HUD draws with: the palette,
+the ability and item button sizes, the bar dimensions, the minimap size and
+refresh rate, the shop width. `range_display.tres` is the range rings.
+
 ### Maps — `resources/maps/`
 
 `MapConfig` covers both maps: `map_half_size`, `map_border`, `lane_width`,
 `lane_length`, `river_width`, the `jungle_*` and `camp_*` group, `base_radius`,
 `nexus_offset`, `spawn_offset`, the `turret_*` group, `objective_*`,
-`terrain_cell_size`, `wall_height` and the `nav_*` group.
+`terrain_cell_size`, `wall_height`, `bush_radius`, `bush_lane_offset` and the
+`nav_*` group.
 
 `SoloLaneConfig` extends it with `map_half_length`, the `side_clearing_*` and
 `rock_*` group, `minion_spawn_offset`, `spawn_side_offset` and the two tower
@@ -449,19 +503,29 @@ is the topology `NetDedicatedTest.tscn` covers.
 | Key | Overlay | Source |
 |---|---|---|
 | `F9` | map: lane lines, camps, turret ranges, spawns, navmesh, bounds, ids | `map_debug_renderer.gd` |
-| `F10` | combat: health bars, ranges, target lines, minion state, cooldowns | `combat_debug_overlay.gd` |
+| `F10` | combat: health bars, target lines, minion state, cooldowns — **and** every attack range at once | `combat_debug_overlay.gd` + `range_visualizer.gd` |
 | `F11` | network: role, peer id, state, latency, roster, snapshots | `network_debug_overlay.gd` |
 
 All three are read-only. Turning them off changes nothing but the picture.
 
-The combat overlay draws range rings for champions and turrets only — a ring on
-each of thirty minions buries the map it is meant to explain. Change
-`_wants_range_ring()` if you disagree.
+The combat overlay no longer draws range rings itself: it asks
+`RangeVisualizer.set_debug_all(true)`, which is the one place any ring comes
+from. Outside that overlay, see section 12 for the three cases that show one.
 
-Developer keys `F1`–`F8` live in `dev_input_controller.gd`, deliberately apart
-from gameplay: deleting that node removes every cheat and leaves the sandbox
-intact. Cheats that pick a winner are gated on `Net.has_local_player()`, so a
-dedicated server refuses them.
+Developer keys `F1`–`F8`, `F10`–`F12` and `Shift+1`–`Shift+8` live in
+`dev_input_controller.gd`, deliberately apart from gameplay: deleting that node
+removes every cheat and leaves the sandbox intact. Cheats that pick a winner or
+hand out gold are gated on `Net.is_authority()` and `Net.has_local_player()`,
+so a client and a dedicated server both refuse them. The `Shift` row is matched
+*exactly* (`is_action_pressed(action, false, true)`), so a bare number key is
+never a cheat.
+
+`C` is **not** here. Toggling your own range ring is something a shipped build
+still lets a player do, so it goes out on the ordinary command bus like `F9`.
+
+Adding a cheat: a `dev_*` method on `GameDirector` that returns what happened,
+an action in `project.godot`, and a branch in `dev_input_controller.gd` that
+reports it. The report goes to the HUD toast for free.
 
 ---
 
@@ -469,10 +533,10 @@ dedicated server refuses them.
 
 | Suite | Covers |
 |---|---|
-| `SmokeTest.tscn` | three-lane map, navigation, movement, collision, selection, attacks, abilities, death/respawn, waves, minion and turret combat, both debug views, and a rebuild from a second `MapConfig` |
-| `SoloLaneTest.tscn` | solo topology and ids, lane traversal both ways, spawns, waves, the offline bot, minions damaging the nexus, victory |
-| `NetMatchTest.tscn` | host + client: seating, ownership, rejection of unseated peers, input reaching the host, replication of movement/damage/death/respawn/minions/turrets/nexus/result, disconnect |
-| `NetDedicatedTest.tscn` | dedicated server + two clients, one team each, opposite outcomes |
+| `SmokeTest.tscn` | three-lane map, navigation, movement, collision, selection, attacks, ability locks and ranks, death/respawn, waves, minion and turret combat, bushes and wards, kill rewards, levelling, the shop and item stats, the range rules, both debug views, and a rebuild from a second `MapConfig` |
+| `SoloLaneTest.tscn` | solo topology and ids, lane traversal both ways, spawns, waves, the offline bot, minions damaging the nexus, victory, and that the shared systems layer arrives with nothing mode-specific |
+| `NetMatchTest.tscn` | host + client: seating, ownership, rejection of unseated peers, input reaching the host, replication of movement/damage/death/respawn/minions/turrets/nexus/gold/level/items/result, every client forgery attempt refused, disconnect |
+| `NetDedicatedTest.tscn` | dedicated server + two clients, one team each, opposite outcomes, both clients' forgery attempts refused |
 
 Writing a new one: copy the shape of `solo_lane_test.gd` — instantiate
 `scenes/Main.tscn` with `GameRoot._pending_mode_id` set (this skips the menu),
@@ -486,6 +550,134 @@ a file, so one command covers both sides.
 Isolate before you assert. Lane traffic and a wandering bot will invalidate a
 timing-sensitive check; `_isolate_arena()` / `_clear_lane()` stop the waves,
 free the minions and park the AI first.
+
+Two more, learned from writing section 12's checks:
+
+* **Vision needs a net id.** `VisibilityState` tracks units by `net_id` and
+  fails *visible* for anything at zero, so a test dummy that should be hidden
+  has to be given one. `_spawn_dummy()` takes one for that reason.
+* **Passive gold blurs an exact comparison.** Set `wallet.passive_rate = 0.0`
+  around a check that asserts a precise bounty.
+
+---
+
+## 12. Vision, economy, progression, items and the HUD
+
+All of this is one shared layer. There is no Full MOBA version and no Solo Lane
+version of any of it — the maps differ, the systems do not.
+
+### Bushes and fog of war
+
+Vision is gameplay state. `VisionManager` (autoload `Vision`) computes, on the
+authority, one bit per unit per team; `Battle.find_target`,
+`Battle.pick_enemy_near`, `TargetingComponent.is_target_valid`, the minimap and
+`RangeVisualizer` all ask `Vision.is_visible_to()`. If you add anything that
+picks a target or draws an enemy, ask the same question — that is the whole
+reason there is only one.
+
+To move or add a bush, edit the layout's `_build_bushes()`:
+
+```gdscript
+func _build_bushes() -> void:
+    add_bush("MY_BUSH", lane_side_point(MapEnums.Lane.MID, 0.45, 1.0, 9.0))
+```
+
+`add_bush()` also appends a walkable disk, so the bush becomes a real pocket
+you can stand in rather than a decal on a wall, and the id joins
+`required_ids()` and `reachability_targets()` so `MapProbe` proves you can
+reach it. Radius and the sideways offset come from `MapConfig.bush_radius` and
+`bush_lane_offset`.
+
+The one deliberate exception to the vision filter is
+`Battle.enemies_in_radius()`, used by area abilities: throwing a nova into a
+bush on a guess is a real play, so it is not filtered.
+
+### Wards
+
+`resources/vision/prototype_ward.tres` holds lifetime, radius, the per-champion
+limit, the cooldown and how far one may be placed. A ward is a `VisionSource`
+with `reveals_bushes = true`; the authority spawns it through `NetworkSpawner`
+(kind `ward`), counts down its life and frees it, and the limit rolls — placing
+one over the limit retires your oldest rather than failing.
+
+A second ward kind (a control ward, a scan) is another `.tres` and a second
+`ward_config` field, not a second script.
+
+### Gold and experience
+
+`RewardSystem` listens to `Battle.unit_died`. To make a new unit kind payable,
+add a line to `RewardConfig` and a branch to `_bounty_for()` — do **not** put
+bounty logic in the unit's own controller. Only the champion of the opposing
+team that landed the blow is paid; nearby allies share XP at
+`shared_xp_ratio`, never gold.
+
+### Levels and skill points
+
+`ProgressionData` is the XP curve and what a level grants. Growth is applied as
+**one** `StatsComponent` modifier called `level_growth`, recomputed from the
+current level every time, which is why it cannot stack. To add a stat to the
+growth set, add the field to `ProgressionData` and a line to `growth_fields()`.
+
+`AbilityProgressionData` decides when a slot unlocks (`unlock_levels`), how far
+it ranks (`max_ranks`) and what a rank is worth (`damage_per_rank`,
+`cooldown_reduction_per_rank`). Rank 0 means locked, and
+`AbilityComponent.try_cast` refuses it with `"locked"`.
+
+Points are never spent automatically for a human — that choice is the reason
+the level-up exists. `ChampionController.auto_spend_skill_points()` exists only
+for AI champions.
+
+### Shops and items
+
+An item is a `.tres`: a price, a placeholder colour and glyph, a description
+and a bundle of stat bonuses. `ItemData.modifier_fields()` turns those into the
+same `StatsComponent` shape a buff uses, so nothing in the combat code knows
+items exist. Add one file, add it to `prototype_shop.tres`, done.
+
+Armour and magic resist both fold into one `damage_reduction` add, because the
+prototype has no damage types yet. When it does, split them there and nothing
+else changes.
+
+Shop zones are placed by `GameDirector._create_shop_zones()` from the layout's
+champion spawn points, which is why both maps have one in both bases without
+either map knowing. Selling from anywhere is `purchases.require_shop_zone =
+false`, one flag.
+
+### The ability resource
+
+Optional and off by default: `UnitStats.max_resource` at zero means the unit
+has none and the HUD draws no bar. The prototype champion has 100 plus 20 per
+level, and each ability spends `AbilityData.resource_cost`. Setting every cost
+to 0 turns the mechanic off without removing it.
+
+### The HUD
+
+`MobaHud` assembles `ChampionPanel`, `AbilityBar`, `ItemBar`, `ActionButtons`,
+`Minimap` and `ShopUi`. Each widget draws itself in `_draw()` from `HudConfig`
+plus the champion's live components; none of them holds a gameplay number, and
+none of them writes gameplay state — every action leaves on `InputCommands`.
+
+Restyling is `resources/ui/prototype_hud.tres`. Replacing a widget with a
+polished mobile one is replacing one node in `_build_ui()`.
+
+The minimap is driven by the loaded `MapLayout` and `MapRegistry`, never by
+coordinates: if your new map registers lanes, bushes, turrets, nexuses and
+shops, the minimap draws them.
+
+### Attack ranges
+
+`RangeVisualizer` owns every ring in the game. The rules are in
+`_wants_ring()` and `_is_threatening_tower()`; the colours, the thickness and
+two of the rules (`show_threatening_enemy_towers`, `threat_hysteresis`) are in
+`resources/ui/range_display.tres`.
+
+The toggle is a **command**, not a key: `InputCommands.request_range_toggle()`,
+raised by `C` on a keyboard and by a HUD button on a touch build. Rings are
+local presentation and are never replicated — the server still decides whether
+an attack is in range, and one player's toggle is invisible to the other.
+
+If you want a new case to show a ring, add it to `_wants_ring()`. Resist the
+urge to make it unconditional; that is exactly what this system replaced.
 
 ---
 
@@ -515,6 +707,15 @@ usually shows up somewhere far away.
    result must be computed on the authority and replicated.
 8. **Every unit is a `Unit`.** No parallel hierarchy for networked, AI or
    player-controlled units — those are flags and attached nodes, not classes.
+9. **One question about visibility.** Everything that picks a target, draws an
+   enemy or lists one asks `Vision.is_visible_to()`. Two answers to that
+   question is how a game ends up letting you shoot something you cannot see.
+10. **Rewards live outside the unit that dies.** `RewardSystem` listens for
+   deaths; `MinionController` has never heard of gold.
+11. **The UI holds no gameplay numbers.** A HUD widget reads live components
+   and a `HudConfig`, and writes only through `InputCommands`.
+12. **A range ring answers a question the player is asking.** Three cases show
+   one. Everything else does not.
 
 ---
 
@@ -546,3 +747,19 @@ once.
 - **RPCs route by node path**, so a scene instanced under differently-named
   parents on two peers will silently fail to talk. Both network tests name
   their root `NetTest` for exactly this reason.
+- **`stats.clear_modifiers()` on respawn used to eat the champion's levels and
+  items.** Both are permanent modifiers. `_reapply_permanent_modifiers()` puts
+  them back after the wipe; if you add another permanent modifier, add it
+  there too.
+- **Autoloads survive `reload_current_scene()`.** `Vision.reset()` is called at
+  the start of every match for exactly that reason — otherwise the new match
+  inherits the last one's bushes and reveals.
+- **"Send only on change" starves a client that missed the packet**, and never
+  corrects one that tampered with its local copy. `NetworkStateSync` resends
+  ranks and inventory once a second regardless.
+- **A layout may publish more than one kind of spawn point.** Solo Lane
+  publishes champion *and* minion spawns; `_create_shop_zones()` filters on
+  `role`, which is why it does not build four shops there.
+- **The developer combat overlay reveals every range**, so any test about
+  range visibility has to turn it off first or it will pass for the wrong
+  reason.

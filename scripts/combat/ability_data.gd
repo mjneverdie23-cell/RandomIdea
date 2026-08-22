@@ -14,6 +14,9 @@ extends Resource
 ## 0..3, matching [enum InputCommands.AbilitySlot] (Q, E, R, F).
 @export_range(0, 3, 1) var slot: int = 0
 @export_range(0.0, 120.0, 0.1) var cooldown: float = 5.0
+## Ability resource this cast spends. Zero makes the ability free, which is
+## what every unit without a resource pool sees.
+@export_range(0.0, 1000.0, 1.0) var resource_cost: float = 0.0
 ## 0 means self-cast; anything higher clamps the aim point to this distance.
 @export_range(0.0, 80.0, 0.5) var cast_range: float = 0.0
 @export_range(0.0, 2000.0, 1.0) var damage: float = 0.0
@@ -32,6 +35,19 @@ func can_cast(caster: Node3D, _aim_point: Vector3) -> bool:
 func execute(_caster: Node3D, _aim_point: Vector3) -> bool:
 	push_warning("AbilityData.execute() not implemented for '%s'." % id)
 	return false
+
+
+## Damage for one cast: the resource value, scaled by rank, plus the caster's
+## ability power. Every ability kind uses this instead of [member damage] so
+## items and skill points reach all of them.
+func effective_damage(caster: Node3D) -> float:
+	if damage <= 0.0 or caster == null:
+		return damage
+	var scale: float = 1.0
+	if caster.abilities != null:
+		scale = caster.abilities.damage_scale(slot)
+	var power: float = caster.stats.value("ability_power") if caster.stats != null else 0.0
+	return damage * scale + power
 
 
 ## Aim point pulled back onto the ability's maximum range.

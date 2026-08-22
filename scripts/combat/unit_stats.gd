@@ -23,6 +23,18 @@ extends Resource
 @export_range(0.05, 10.0, 0.05) var attack_speed: float = 0.8
 ## 0 makes the hit instant; anything higher spawns a travelling projectile.
 @export_range(0.0, 200.0, 1.0) var projectile_speed: float = 0.0
+## Flat bonus added to ability damage. Items and levels raise it.
+@export_range(0.0, 2000.0, 1.0) var ability_power: float = 0.0
+
+@export_group("Ability resource")
+## Spendable pool for ability costs. Zero means this unit has none, and the
+## HUD hides the bar — minions and turrets leave it at zero.
+@export_range(0.0, 5000.0, 5.0) var max_resource: float = 0.0
+@export_range(0.0, 200.0, 0.5) var resource_regen: float = 0.0
+
+@export_group("Vision")
+## How far this unit sees. Bushes still hide whoever stands in them.
+@export_range(0.0, 120.0, 0.5) var vision_radius: float = 18.0
 
 @export_group("Movement")
 @export_range(0.0, 40.0, 0.5) var move_speed: float = 11.0

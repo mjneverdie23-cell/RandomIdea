@@ -8,8 +8,11 @@ extends Node
 ## Boots the real game scene and proves the acceptance criteria that can be
 ## checked without a human: map identifiers and navigation reachability,
 ## command-driven movement, wall collision, selection, basic attacks, damage,
-## death and respawn, ability cooldowns, minion waves, minion-vs-minion and
-## minion-vs-turret combat, both debug views, and a second map configuration.
+## death and respawn, ability locks, ranks and cooldowns, minion waves,
+## minion-vs-minion and minion-vs-turret combat, bushes and wards, gold and
+## experience rewards, levelling, the shop and item stats, the minimap's vision
+## filter, the attack-range visibility rules, both debug views, and a second
+## map configuration.
 
 const MAIN_SCENE := "res://scenes/Main.tscn"
 const SETTLE_FRAMES := 20
@@ -47,6 +50,11 @@ func _run() -> void:
 	await _check_minion_waves()
 	await _check_minion_combat()
 	await _check_turret_combat()
+	await _check_vision_and_bushes()
+	await _check_rewards()
+	await _check_progression()
+	await _check_shop_and_items()
+	await _check_range_visibility()
 	await _capture_screenshots()
 	await _check_alternate_map()
 
@@ -167,6 +175,22 @@ func _check_sandbox_setup() -> void:
 		_expect(director.player.abilities.ability_for(slot) != null,
 			"ability slot %s is empty" % InputCommands.ability_name(slot))
 
+	var rewards: RewardConfig = director.config.rewards
+	# Passive income has already ticked a little by the time this runs, so the
+	# check is "started with the configured purse", not "has exactly it".
+	var gold: float = director.player.wallet.gold if director.player.wallet != null else -1.0
+	_expect(gold >= rewards.starting_gold and gold < rewards.starting_gold + 100.0,
+		"champion did not start with the configured gold (has %.0f)" % gold)
+	_expect(director.player.level != null and director.player.level.level == 1,
+		"champion did not start at level 1")
+	_expect(director.shops.size() == 2, "expected one shop zone per team")
+	for team in [MapEnums.Team.A, MapEnums.Team.B]:
+		_expect(director.shop_for(team) != null,
+			"team %s has no shop zone" % MapEnums.team_name(team))
+	_expect(_root.map.layout.bushes.size() > 0, "the map placed no bushes")
+	_expect(Vision.zones().size() == _root.map.layout.bushes.size(),
+		"not every bush registered a vision zone")
+
 
 ## Spawns a dummy next to the champion, selects it with a click and attacks.
 ## Runs at the map centre, well clear of every turret's range.
@@ -205,20 +229,49 @@ func _check_selection_and_attack() -> void:
 	await _settle_physics(4)
 
 
+## Abilities start locked. A point has to be spent before one casts, the
+## ultimate refuses a point until its level, and only then do the cooldown
+## rules apply.
 func _check_abilities() -> void:
 	var champion := _root.champion
-	champion.abilities.reset_cooldowns()
+	var abilities := champion.abilities
 	var aim := champion.global_position + champion.facing_direction() * 8.0
+
+	_expect(abilities.rank(0) == 0, "abilities did not start locked")
+	_expect(not abilities.try_cast(0, aim), "a locked ability cast anyway")
+	_expect(champion.level.skill_points >= 1, "level 1 granted no skill point")
+
+	var ultimate := int(InputCommands.AbilitySlot.R)
+	_expect(not champion.spend_skill_point(ultimate),
+		"the ultimate accepted a point below its unlock level")
+	_expect(champion.spend_skill_point(0), "could not spend the first point on Q")
+	_expect(abilities.rank(0) == 1, "spending a point did not raise the rank")
+	_expect(abilities.try_cast(0, aim), "an unlocked ability failed to cast")
+	abilities.reset_cooldowns()
+	print("[SmokeTest] Q unlocked by spending a skill point, ultimate still locked")
+
+	# Take the rest for the cooldown and resource checks.
+	while champion.level.level < abilities.unlock_level(ultimate):
+		champion.level.level_up()
+	_expect(champion.abilities.unlock_all(champion.level.level) > 0,
+		"unlocking every ability granted no ranks")
+	champion.level.clear_points()
+	abilities.reset_cooldowns()
+	champion.resource_pool.refill()
+
 	for slot in InputCommands.ABILITY_NAMES.size():
 		var name := InputCommands.ability_name(slot)
-		_expect(champion.abilities.try_cast(slot, aim), "ability %s failed to cast" % name)
-		_expect(champion.abilities.cooldown_remaining(slot) > 0.0, "ability %s started no cooldown" % name)
-		_expect(not champion.abilities.try_cast(slot, aim), "ability %s ignored its cooldown" % name)
+		_expect(abilities.try_cast(slot, aim), "ability %s failed to cast" % name)
+		_expect(abilities.cooldown_remaining(slot) > 0.0, "ability %s started no cooldown" % name)
+		_expect(not abilities.try_cast(slot, aim), "ability %s ignored its cooldown" % name)
 		await _settle_physics(2)
 	_expect(champion.stats.has_modifier("f_bulwark"), "the F self-buff applied no stat modifier")
-	print("[SmokeTest] all four abilities cast and went on cooldown")
-	champion.abilities.reset_cooldowns()
-	champion.stats.clear_modifiers()
+	_expect(champion.resource_pool.current < champion.resource_pool.maximum,
+		"casting four abilities spent no resource")
+	print("[SmokeTest] all four abilities cast, spent resource and went on cooldown")
+	abilities.reset_cooldowns()
+	champion.stats.remove_modifier("f_bulwark")
+	champion.resource_pool.refill()
 
 
 func _check_death_and_respawn() -> void:
@@ -326,14 +379,307 @@ func _check_turret_combat() -> void:
 	await _settle_physics(4)
 
 
+# --- vision, bushes and wards ------------------------------------------------
+
+## The bush rule, end to end: standing in one hides you from an enemy who is
+## looking straight at you, but not from an enemy standing in it with you, and
+## not from a ward. Hidden means hidden for gameplay too — the same query the
+## renderer uses is the one target acquisition and the minimap use.
+func _check_vision_and_bushes() -> void:
+	await _isolate_arena()
+	var champion := _root.champion
+	var bush := Vision.zone_by_id("TOP_BUSH_1")
+	_expect(bush != null, "TOP_BUSH_1 has no vision zone")
+	if bush == null:
+		return
+
+	var hider := _spawn_dummy(bush.global_position, MapEnums.Team.B, 4000.0, 910001)
+	champion.teleport_to(bush.global_position + Vector3(bush.radius + 5.0, 0.0, 0.0))
+	await _settle_physics(4)
+	Vision.recompute()
+	_expect(hider.is_concealed(), "a unit standing in a bush is not concealed")
+	_expect(not Vision.is_visible_to(hider, MapEnums.Team.A),
+		"an enemy in a bush was visible from outside it")
+	_expect(Battle.find_target(champion.global_position, MapEnums.Team.A, 40.0,
+		champion.target_priority) != hider, "target acquisition found a hidden enemy")
+	_expect(Battle.pick_enemy_near(hider.global_position, MapEnums.Team.A, 6.0) == null,
+		"a click could select a hidden enemy")
+	_expect(not _root.hud.minimap.visible_units().has(hider),
+		"the minimap listed a hidden enemy")
+	print("[SmokeTest] an enemy in a bush is invisible, untargetable and off the minimap")
+
+	# Same bush: you see whoever is in there with you.
+	champion.teleport_to(bush.global_position + Vector3(1.0, 0.0, 0.0))
+	await _settle_physics(4)
+	Vision.recompute()
+	_expect(Vision.is_visible_to(hider, MapEnums.Team.A),
+		"an enemy in the same bush was still hidden")
+	_expect(_root.hud.minimap.visible_units().has(hider),
+		"the minimap hid an enemy sharing the bush")
+
+	# Step out, then ward it.
+	champion.teleport_to(bush.global_position + Vector3(bush.radius + 5.0, 0.0, 0.0))
+	await _settle_physics(4)
+	Vision.recompute()
+	_expect(not Vision.is_visible_to(hider, MapEnums.Team.A), "leaving the bush kept vision of it")
+
+	var ward := _root.director.place_ward(champion, bush.global_position)
+	_expect(ward != null, "no ward was placed")
+	await _settle_physics(2)
+	Vision.recompute()
+	_expect(Vision.is_visible_to(hider, MapEnums.Team.A), "a ward did not reveal the bush")
+	print("[SmokeTest] a ward reveals the bush; removing it restores the fog")
+
+	ward.queue_free()
+	await _settle_physics(4)
+	Vision.recompute()
+	_expect(not Vision.is_visible_to(hider, MapEnums.Team.A),
+		"the bush stayed revealed after the ward expired")
+
+	# And the developer reveal overrides all of it, for this machine only.
+	_root.director.dev_toggle_reveal()
+	_expect(Vision.is_visible_to(hider, MapEnums.Team.A), "the developer reveal showed nothing")
+	_root.director.dev_toggle_reveal()
+
+	hider.queue_free()
+	await _settle_physics(4)
+
+
+# --- gold and experience -----------------------------------------------------
+
+## A minion kill pays the champion that landed the blow, and nobody else.
+func _check_rewards() -> void:
+	await _isolate_arena()
+	var champion := _root.champion
+	var rewards: RewardConfig = _root.director.config.rewards
+	# Passive income would blur the comparison; it has its own check below.
+	var passive := champion.wallet.passive_rate
+	champion.wallet.passive_rate = 0.0
+
+	var gold_before := champion.wallet.gold
+	var experience_before := champion.experience.total
+	var victim := _spawn_dummy(champion.global_position + Vector3(3.0, 0.0, 0.0),
+		MapEnums.Team.B, 100.0, 910010)
+	await _settle_physics(2)
+	victim.health.kill(champion)
+	await _settle_physics(2)
+	var earned := champion.wallet.gold - gold_before
+	print("[SmokeTest] a melee minion kill paid %.0f gold and %.0f XP" % [
+		earned, champion.experience.total - experience_before
+	])
+	_expect(is_equal_approx(earned, rewards.melee_minion_gold),
+		"a minion kill did not pay the configured gold")
+	_expect(is_equal_approx(champion.experience.total - experience_before, rewards.minion_xp),
+		"a minion kill did not pay the configured experience")
+
+	# A minion that dies to nothing pays nobody.
+	gold_before = champion.wallet.gold
+	var unclaimed := _spawn_dummy(champion.global_position + Vector3(4.0, 0.0, 0.0),
+		MapEnums.Team.B, 100.0, 910011)
+	await _settle_physics(2)
+	unclaimed.health.kill(null)
+	await _settle_physics(2)
+	_expect(is_equal_approx(champion.wallet.gold, gold_before),
+		"an unclaimed minion death still paid gold")
+
+	# Killing your own side pays nothing either.
+	gold_before = champion.wallet.gold
+	var friendly := _spawn_dummy(champion.global_position + Vector3(5.0, 0.0, 0.0),
+		MapEnums.Team.A, 100.0, 910012)
+	await _settle_physics(2)
+	friendly.health.kill(champion)
+	await _settle_physics(2)
+	_expect(is_equal_approx(champion.wallet.gold, gold_before), "killing an ally paid gold")
+
+	champion.wallet.passive_rate = passive
+
+
+# --- levels ------------------------------------------------------------------
+
+## Experience turns into a level, a level turns into stats and a skill point.
+func _check_progression() -> void:
+	var champion := _root.champion
+	var level_before := champion.level.level
+	var health_before := champion.stats.value("max_health")
+	var needed := champion.experience.needed()
+	_expect(needed > 0.0, "the champion is already at the level cap")
+
+	champion.experience.add(needed, "test")
+	await _settle_physics(2)
+	_expect(champion.level.level == level_before + 1,
+		"enough experience did not produce a level")
+	_expect(champion.stats.value("max_health") > health_before,
+		"levelling up granted no stat growth")
+	_expect(champion.level.skill_points > 0, "levelling up granted no skill point")
+	print("[SmokeTest] level %d -> %d, max health %.0f -> %.0f" % [
+		level_before, champion.level.level, health_before, champion.stats.value("max_health")
+	])
+
+	# Growth is one modifier recomputed per level, so it can never stack.
+	var health_at_level := champion.stats.value("max_health")
+	champion.level.reapply_growth()
+	_expect(is_equal_approx(champion.stats.value("max_health"), health_at_level),
+		"reapplying level growth stacked it")
+	champion.level.clear_points()
+
+
+# --- shop and items ----------------------------------------------------------
+
+## Buying is a base activity: the same request is refused in the lane and
+## granted at the fountain, and the item it grants actually changes the stats.
+func _check_shop_and_items() -> void:
+	var champion := _root.champion
+	var director := _root.director
+	var catalog: ShopCatalog = director.config.shop_catalog
+	var item: ItemData = catalog.item_by_id("longblade")
+	_expect(item != null, "the prototype shop has no longblade")
+	if item == null:
+		return
+
+	var mid := _root.map.layout.lane_point(MapEnums.Lane.MID, 0.5)
+	champion.teleport_to(Vector3(mid.x, 0.0, mid.y))
+	await _settle_physics(2)
+	champion.wallet.add(5000.0, "test")
+	_expect(director.purchases.zone_for(champion) == null, "the lane counts as a shop zone")
+	_expect(not director.purchases.purchase(champion, item.id), "an item was sold in the lane")
+	_expect(director.purchases.rejection_reason(champion, item) == "not in the shop",
+		"the wrong reason was given for a purchase outside the shop")
+
+	champion.teleport_to(champion.spawn_point)
+	await _settle_physics(2)
+	_expect(director.purchases.zone_for(champion) != null, "the fountain is not a shop zone")
+
+	var gold_before := champion.wallet.gold
+	var damage_before := champion.stats.value("attack_damage")
+	_expect(director.purchases.purchase(champion, item.id), "buying at the fountain failed")
+	_expect(is_equal_approx(champion.wallet.gold, gold_before - item.cost),
+		"a purchase did not deduct the item's cost")
+	_expect(champion.inventory.count() == 1, "a bought item did not enter the inventory")
+	_expect(is_equal_approx(champion.stats.value("attack_damage"),
+		damage_before + item.bonus_attack_damage), "a bought item applied no stat bonus")
+	print("[SmokeTest] bought %s for %.0f gold: attack damage %.0f -> %.0f" % [
+		item.display_name, item.cost, damage_before, champion.stats.value("attack_damage")
+	])
+
+	# Items survive a death; buffs do not.
+	champion.health.kill(null)
+	await _settle_physics(2)
+	champion.respawn()
+	await _settle_physics(2)
+	_expect(champion.inventory.count() == 1, "respawning dropped the champion's items")
+	_expect(is_equal_approx(champion.stats.value("attack_damage"),
+		damage_before + item.bonus_attack_damage), "respawning dropped the item's stat bonus")
+
+	# No gold, no item.
+	champion.wallet.gold = 0.0
+	var expensive: ItemData = catalog.item_by_id("arcane_ember")
+	_expect(director.purchases.rejection_reason(champion, expensive) == "not enough gold",
+		"a broke champion was not told it is broke")
+	_expect(not director.purchases.purchase(champion, expensive.id),
+		"an item was sold without enough gold")
+	_expect(champion.inventory.count() == 1, "a refused purchase still filled a slot")
+
+	_expect(director.dev_clear_inventory() == 1, "clearing the inventory removed nothing")
+	_expect(is_equal_approx(champion.stats.value("attack_damage"), damage_before),
+		"removing an item left its stat bonus behind")
+	champion.wallet.add(1000.0, "test")
+
+
+# --- attack-range visibility -------------------------------------------------
+
+## The whole point of the range system: almost nothing has a ring, almost all
+## of the time. Each rule gets its own assertion.
+func _check_range_visibility() -> void:
+	await _isolate_arena()
+	var champion := _root.champion
+	var view := _root.range_view
+	_root.combat_debug.set_overlay_visible(false)
+	view.set_own_range_visible(false)
+	champion.teleport_to(champion.spawn_point)
+	await _settle_physics(2)
+	Vision.recompute()
+	view.refresh()
+
+	_expect(not view.is_ring_visible_for(champion), "the player's range ring is on at spawn")
+	_expect(view.visible_ring_count() == 0, "something drew a range ring at spawn")
+
+	# C — or a touch button — toggles the local champion's own ring, and only it.
+	_root.commands.request_range_toggle()
+	view.refresh()
+	_expect(view.is_own_range_visible(), "the range toggle did not turn the ring on")
+	_expect(view.is_ring_visible_for(champion), "the player's own ring did not appear")
+	for enemy in _root.director.enemy_champions:
+		_expect(not view.is_ring_visible_for(enemy), "an enemy champion's range was visible")
+	_root.commands.request_range_toggle()
+	view.refresh()
+	_expect(not view.is_ring_visible_for(champion), "the range toggle did not turn the ring off")
+	print("[SmokeTest] the range toggle shows only the local champion's own ring")
+
+	# An enemy tower earns a ring only while it is actually threatening.
+	# Mid, not top: the turret-combat check destroys the top outer tower, and a
+	# dead tower threatens nobody.
+	var tower := _root.director.turret_for("MID_OUTER_TURRET_B")
+	var friendly := _root.director.turret_for("MID_OUTER_TURRET_A")
+	_expect(tower != null and friendly != null, "the mid outer towers have no controllers")
+	if tower == null or friendly == null:
+		return
+	_expect(tower.is_alive() and friendly.is_alive(), "the mid outer towers are not standing")
+	view.refresh()
+	_expect(not view.is_ring_visible_for(tower), "a distant enemy tower showed its range")
+
+	champion.teleport_to(tower.global_position + Vector3(tower.attack_range() * 0.6, 0.0, 0.0))
+	await _settle_physics(2)
+	Vision.recompute()
+	view.refresh()
+	_expect(view.is_ring_visible_for(tower), "a tower the champion stands inside showed no range")
+	_expect(not view.is_ring_visible_for(friendly), "an allied tower showed its range")
+	print("[SmokeTest] only the enemy tower the champion is standing inside shows a ring")
+
+	# Fog of war hides the threat as well as the tower.
+	var sight := champion.vision.radius
+	champion.vision.radius = 1.0
+	Vision.recompute()
+	view.refresh()
+	_expect(not view.is_ring_visible_for(tower), "a tower the champion cannot see showed its range")
+	champion.vision.radius = sight
+	Vision.recompute()
+	view.refresh()
+	_expect(view.is_ring_visible_for(tower), "restoring vision did not restore the ring")
+
+	# Walk out: the ring goes away with the threat.
+	champion.teleport_to(champion.spawn_point)
+	await _settle_physics(2)
+	Vision.recompute()
+	view.refresh()
+	_expect(not view.is_ring_visible_for(tower), "leaving a tower's range left its ring up")
+
+	# Minions never get one outside the developer view, which shows everything.
+	var minion := _spawn_dummy(champion.global_position + Vector3(4.0, 0.0, 0.0),
+		MapEnums.Team.B, 200.0, 910020)
+	await _settle_physics(2)
+	view.refresh()
+	_expect(not view.is_ring_visible_for(minion), "a minion drew a range ring")
+	_root.combat_debug.set_overlay_visible(true)
+	view.refresh()
+	_expect(view.is_ring_visible_for(tower) and view.is_ring_visible_for(friendly),
+		"the combat debug view did not reveal every range")
+	_root.combat_debug.set_overlay_visible(false)
+	view.refresh()
+	minion.queue_free()
+	await _settle_physics(4)
+
+
 ## Test helper. [param health] overrides the resource value without touching
 ## the shared .tres, so a dummy can survive long enough to be observed.
-func _spawn_dummy(at: Vector3, team: int, health: float = 0.0) -> MinionController:
+## A [param net_id] above zero opts the dummy into the vision system, which
+## tracks units by net id; leave it at zero for checks that do not care.
+func _spawn_dummy(at: Vector3, team: int, health: float = 0.0, net_id: int = 0) -> MinionController:
 	var stats: MinionStats = _root.director.config.wave.melee_stats
 	if health > 0.0:
 		stats = stats.duplicate()
 		stats.max_health = health
 	var minion := MinionController.new()
+	minion.net_id = net_id
 	minion.initialize(team, stats)
 	minion.name = "TestDummy%s%d" % [MapEnums.team_name(team), randi() % 1000]
 	_root.units.add_child(minion)
@@ -443,6 +789,23 @@ func _capture_screenshots() -> void:
 	camera.set_focus(Vector3(-30.0, 0.0, 6.0))
 	camera.set_distance(38.0)
 	await _save_frame("low_angle.png")
+
+	# The full HUD at the fountain, with the shop open and a bought item in a
+	# slot: the picture the acceptance loop ends on.
+	_root.combat_debug.set_overlay_visible(false)
+	champion.teleport_to(champion.spawn_point)
+	champion.wallet.add(3000.0, "screenshot")
+	await _settle_physics(6)
+	_root.director.purchases.purchase(champion, "vital_stone")
+	_root.director.purchases.purchase(champion, "traveller_boots")
+	_root.hud.open_shop()
+	camera.locked_to_target = true
+	camera.set_follow_target(champion)
+	camera.pitch_degrees = -52.0
+	camera.set_distance(34.0)
+	await _settle(20)
+	await _save_frame("base_shop.png")
+	_root.hud.close_shop()
 
 
 func _save_frame(file_name: String) -> void:

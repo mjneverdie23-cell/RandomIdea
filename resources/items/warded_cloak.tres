@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = "warded_cloak"
+display_name = "Warded Cloak"
+cost = 400.0
+description = "Magic resist against ability damage."
+icon_color = Color(0.38, 0.62, 0.78, 1)
+icon_glyph = "MR"
+category = "defence"
+bonus_magic_resist = 0.15

@@ -1,11 +1,11 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=28 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/game_root.gd" id="1_root"]
 [ext_resource type="Script" path="res://scripts/map/map_controller.gd" id="2_map"]
 [ext_resource type="Script" path="res://scripts/camera/gameplay_camera.gd" id="3_cam"]
 [ext_resource type="Script" path="res://scripts/input/input_commands.gd" id="4_cmd"]
 [ext_resource type="Script" path="res://scripts/input/pc_input_controller.gd" id="5_pc"]
-[ext_resource type="Script" path="res://scripts/game/prototype_hud.gd" id="6_hud"]
+[ext_resource type="Script" path="res://scripts/ui/moba_hud.gd" id="6_hud"]
 [ext_resource type="Resource" path="res://resources/maps/default_map.tres" id="7_mapcfg"]
 [ext_resource type="Script" path="res://scripts/game/game_director.gd" id="8_director"]
 [ext_resource type="Script" path="res://scripts/input/dev_input_controller.gd" id="9_dev"]
@@ -19,6 +19,9 @@
 [ext_resource type="Script" path="res://scripts/game/network_debug_overlay.gd" id="18_netdbg"]
 [ext_resource type="Script" path="res://scripts/ui/multiplayer_menu.gd" id="19_menu"]
 [ext_resource type="Resource" path="res://resources/net/enet_transport.tres" id="20_transport"]
+[ext_resource type="Script" path="res://scripts/game/range_visualizer.gd" id="21_range"]
+[ext_resource type="Resource" path="res://resources/ui/prototype_hud.tres" id="22_hudcfg"]
+[ext_resource type="Resource" path="res://resources/ui/range_display.tres" id="23_rangecfg"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.145098, 0.203922, 0.290196, 1)
@@ -44,6 +47,8 @@ tonemap_white = 1.4
 script = ExtResource("1_root")
 modes = [ExtResource("12_full"), ExtResource("13_solo")]
 transport = ExtResource("20_transport")
+hud_config = ExtResource("22_hudcfg")
+range_config = ExtResource("23_rangecfg")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Env")
@@ -84,8 +89,12 @@ script = ExtResource("8_director")
 [node name="CombatDebug" type="Node3D" parent="."]
 script = ExtResource("10_combatdbg")
 
+[node name="RangeVisualizer" type="Node3D" parent="."]
+script = ExtResource("21_range")
+
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")
+config = ExtResource("22_hudcfg")
 
 [node name="MatchSession" type="Node" parent="."]
 script = ExtResource("14_session")

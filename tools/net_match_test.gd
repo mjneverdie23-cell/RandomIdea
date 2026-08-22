@@ -6,9 +6,11 @@ extends Node
 ##
 ## It hosts a match, launches a second headless process as the client, plays a
 ## scripted 1v1 and checks both halves: team assignment, ownership, client input
-## reaching the authority, and replication of movement, damage, death, respawn,
-## minions, turrets, the nexus and the result. The client's observations come
-## back through a file and are asserted here, so one command covers both sides.
+## reaching the authority, replication of movement, damage, death, respawn,
+## minions, turrets, the nexus, gold, levels and items, the result — and that a
+## client cannot grant itself any of the economy or progression state. The
+## client's observations come back through a file and are asserted here, so one
+## command covers both sides.
 
 const MAIN_SCENE := "res://scenes/Main.tscn"
 const CLIENT_SCENE := "res://tools/NetClientTest.tscn"
@@ -84,6 +86,7 @@ func _run() -> void:
 		return
 	await _check_seating()
 	await _check_client_input()
+	await _check_economy_authority()
 	await _check_damage_and_respawn()
 	await _check_minions()
 	await _check_victory()
@@ -124,6 +127,9 @@ func _check_seating() -> void:
 	# replicate rather than a stationary opponent.
 	_root.pc_input.set_process(false)
 	_root.commands.set_move_direction(Vector2(0.0, -1.0))
+	# Range rings are local presentation. The host turns its own on; the client
+	# is asserted never to see a ring on anyone.
+	_root.range_view.set_own_range_visible(true)
 	print("[NetHost] seated peer %d as team A and peer %d as team B" % [team_a.peer_id, team_b.peer_id])
 
 
@@ -145,6 +151,51 @@ func _check_client_input() -> void:
 	_root.relay._request_ability(0, Vector3.ZERO)
 	_expect(_root.relay.rejected_count() > before,
 		"a command from an unseated peer was not rejected")
+
+
+## The host owns the client's purse, level and inventory. It grants all three
+## here so the client can be asserted to have received them, and re-checks the
+## client's own forgery attempts from the authoritative side afterwards.
+func _check_economy_authority() -> void:
+	var remote := _root.session.session_for_team(MapEnums.Team.B)
+	if remote == null or not remote.has_champion():
+		_fail("no remote champion to pay")
+		return
+	var champion: ChampionController = remote.champion
+	var catalog: ShopCatalog = _root.director.config.shop_catalog
+	var item: ItemData = catalog.item_by_id("longblade")
+	_expect(item != null, "the shop catalogue did not reach the host")
+	if item == null:
+		return
+
+	champion.wallet.add(2000.0, "test")
+	# Buying is a fountain activity for the client's champion too, so it is put
+	# back on its own pad rather than the rule being relaxed.
+	champion.teleport_to(champion.spawn_point)
+	await _wait(0.2)
+	_expect(_root.director.purchases.zone_for(champion) != null,
+		"the client's champion cannot reach its own shop")
+	_expect(_root.director.purchases.purchase(champion, item.id),
+		"the host could not buy an item for the client's champion")
+	_expect(champion.inventory.count() == 1, "the purchase did not fill a slot on the host")
+
+	champion.experience.add(champion.experience.needed(), "test")
+	_expect(champion.level.level == 2, "the host could not level the client's champion")
+	print("[NetHost] client champion: %.0f gold, level %d, %d item(s)" % [
+		champion.wallet.gold, champion.level.level, champion.inventory.count()
+	])
+
+	# Whatever the client did to its local copy, the server's numbers are sane
+	# and its ability is still locked.
+	await _wait(1.5)
+	_expect(champion.wallet.gold < 100000.0,
+		"the client's forged gold reached the host (%.0f)" % champion.wallet.gold)
+	_expect(champion.abilities.rank(0) == 0,
+		"a client forged an ability rank on the host")
+	_expect(champion.abilities.cooldown_remaining(0) <= 0.0,
+		"a locked ability cast on the host for a client")
+	_expect(get_tree().get_nodes_in_group("wards").is_empty(),
+		"a client placed a ward on the host")
 
 
 func _check_damage_and_respawn() -> void:
@@ -229,6 +280,33 @@ func _check_client_report() -> void:
 		"the destroyed nexus did not replicate to the client")
 	_expect(String(_client_report["outcome"]) == "DEFEAT",
 		"the client scored the result as %s instead of DEFEAT" % _client_report.get("outcome", "?"))
+
+	# Replicated economy and progression.
+	_expect(float(_client_report["client_gold"]) > 1000.0,
+		"gold granted by the host did not reach the client")
+	_expect(int(_client_report["client_level"]) >= 2, "the level did not reach the client")
+	_expect(Array(_client_report["client_items"]).has("longblade"),
+		"the purchased item did not reach the client")
+
+	# And every way the client tried to grant itself something.
+	_expect(bool(_client_report["forged_cast_attempted"]),
+		"the client never ran its forgery attempt")
+	_expect(bool(_client_report["upgrade_call_blocked"]),
+		"a client was able to spend a skill point locally")
+	_expect(bool(_client_report["purchase_call_blocked"]),
+		"a client was able to buy an item locally")
+	_expect(bool(_client_report["ward_call_blocked"]),
+		"a client was able to place a ward locally")
+	_expect(bool(_client_report["gold_forgery_reverted"]),
+		"forged gold survived on the client instead of being overwritten")
+	_expect(int(_client_report["client_rank_q"]) == 0,
+		"a forged ability rank survived on the client instead of being corrected")
+
+	# One player's range ring is that player's business.
+	_expect(bool(_client_report["own_ring_hidden_by_default"]),
+		"the client's own range ring was on without being asked for")
+	_expect(not bool(_client_report["opponent_ring_visible"]),
+		"the host's range ring replicated to the client")
 
 
 ## The client exits after reporting; the host must notice and clean up.

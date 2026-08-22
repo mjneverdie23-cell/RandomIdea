@@ -26,6 +26,9 @@ var river: Dictionary = {}
 ## collision and no navigation meaning, so a layout can dress its terrain
 ## without any builder learning about that map.
 var decor: Array[Dictionary] = []
+## Bushes: {id, position, radius}. Gameplay state, not decoration — see
+## [VisionManager].
+var bushes: Array[Dictionary] = []
 
 ## Union of these is walkable, minus the union of [member blocked_shapes].
 var walkable_shapes: Array[Dictionary] = []
@@ -62,6 +65,7 @@ func rebuild() -> void:
 	camps.clear()
 	objectives.clear()
 	decor.clear()
+	bushes.clear()
 	walkable_shapes.clear()
 	blocked_shapes.clear()
 	structure_shapes.clear()
@@ -72,6 +76,7 @@ func rebuild() -> void:
 	_build_turrets()
 	_build_jungles()
 	_build_objectives()
+	_build_bushes()
 
 
 # --- lanes -------------------------------------------------------------------
@@ -173,6 +178,7 @@ func _build_bases() -> void:
 		spawn_points.append({
 			"id": "TEAM_%s_SPAWN" % team_id,
 			"team": team,
+			"role": SpawnPointManager.ROLE_CHAMPION,
 			"position": spawn_pos,
 			# Face the map centre so a champion spawns looking down mid.
 			"facing": (Vector2.ZERO - spawn_pos).normalized(),
@@ -381,6 +387,54 @@ func _build_objectives() -> void:
 		walkable_shapes.append(MapShapes.disk(pos, config.objective_radius))
 
 
+# --- bushes ------------------------------------------------------------------
+
+## Adds one bush and makes the ground under it walkable, so a bush beside a
+## lane is a real pocket you can stand in rather than a decal on a wall.
+func add_bush(id: String, position: Vector2, radius: float = -1.0) -> void:
+	var size: float = radius if radius > 0.0 else config.bush_radius
+	bushes.append({"id": id, "position": position, "radius": size})
+	walkable_shapes.append(MapShapes.disk(position, size))
+
+
+## A point offset sideways from a lane, used to sit a bush beside it.
+func lane_side_point(lane: int, fraction: float, side: float, offset: float) -> Vector2:
+	var entry := lane_data(lane)
+	if entry.is_empty():
+		return Vector2.ZERO
+	var path: PackedVector2Array = entry["path"]
+	var length: float = entry["length"]
+	var here := MapShapes.point_along_polyline(path, length * fraction)
+	var direction := MapShapes.direction_along_polyline(path, length * fraction)
+	return here + Vector2(-direction.y, direction.x) * side * offset
+
+
+## Lane, river and objective bushes for the three-lane map. Deliberately few:
+## the point is a handful of strategically useful ones, not cover everywhere.
+func _build_bushes() -> void:
+	var offset := config.bush_lane_offset
+	for spec in [
+		["TOP_BUSH_1", MapEnums.Lane.TOP, 0.30, 1.0],
+		["TOP_BUSH_2", MapEnums.Lane.TOP, 0.70, -1.0],
+		["BOT_BUSH_1", MapEnums.Lane.BOT, 0.30, -1.0],
+		["BOT_BUSH_2", MapEnums.Lane.BOT, 0.70, 1.0],
+	]:
+		add_bush(spec[0], lane_side_point(spec[1], spec[2], spec[3], offset))
+
+	# River bushes guard the two jungle entrances either side of the centre.
+	for spec in [["RIVER_BUSH_1", 0.34, 1.0], ["RIVER_BUSH_2", 0.66, -1.0]]:
+		var here := river_point(spec[1])
+		var direction := river_direction()
+		add_bush(spec[0], here + Vector2(-direction.y, direction.x) * spec[2] * offset)
+
+	# One beside each neutral objective, the classic place to hide a steal.
+	for objective in objectives:
+		var position: Vector2 = objective["position"]
+		var away := position.normalized() if position.length() > 0.01 else Vector2.UP
+		add_bush("%s_BUSH" % objective["id"],
+			position + Vector2(-away.y, away.x) * (float(objective["radius"]) + config.bush_radius * 0.7))
+
+
 # --- queries -----------------------------------------------------------------
 
 ## Point at fraction [param t] (0 = team A base, 1 = team B base) along a lane.
@@ -476,6 +530,8 @@ func required_ids() -> PackedStringArray:
 		ids.append(String(entry["id"]))
 	if not river.is_empty():
 		ids.append(String(river["id"]))
+	for bush in bushes:
+		ids.append(String(bush["id"]))
 	return ids
 
 
@@ -494,6 +550,8 @@ func reachability_targets() -> PackedStringArray:
 	for entry in jungles:
 		ids.append(String(entry["id"]))
 	for entry in camps:
+		ids.append(String(entry["id"]))
+	for entry in bushes:
 		ids.append(String(entry["id"]))
 	return ids
 

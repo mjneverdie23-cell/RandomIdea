@@ -34,6 +34,13 @@ var spawner: NetworkSpawner
 const STRUCTURE_NET_ID_BASE := 1000000
 
 var player: ChampionController
+## Gold and XP for kills. Listens to the battle registry, not to the units.
+var rewards: RewardSystem
+## The only place an item changes hands.
+var purchases: PurchaseSystem
+## One buy zone per team, placed at that team's fountain on whichever map is
+## loaded. Both maps get theirs from the same code path.
+var shops: Array[ShopZone] = []
 ## Fill empty team seats with AI champions. Offline only: a networked match
 ## keeps its seats for humans, and the second seat is what it waits for.
 var ai_opponents_enabled: bool = true
@@ -45,6 +52,9 @@ var enemy_champions: Array[ChampionController] = []
 var match_state := MatchState.new()
 
 var _target_indicator: TargetIndicator
+## champion net id -> seconds until the next ward may be placed.
+var _ward_cooldowns: Dictionary = {}
+var _next_ward_id: int = 0
 
 
 func setup(map_controller: MapController, command_bus: InputCommands, unit_container: Node3D,
@@ -67,7 +77,24 @@ func start() -> void:
 	_target_indicator.name = "TargetIndicator"
 	container.add_child(_target_indicator)
 
+	# Champions are built inside the spawner, on the host and on every client
+	# alike, so the match data they need travels with the builder rather than
+	# being patched in afterwards.
+	if spawner != null:
+		spawner.match_config = config
+
+	rewards = RewardSystem.new()
+	rewards.name = "Rewards"
+	add_child(rewards)
+	rewards.setup(config.rewards)
+
+	purchases = PurchaseSystem.new()
+	purchases.name = "Purchases"
+	add_child(purchases)
+	purchases.setup(config.shop_catalog)
+
 	match_state.reset()
+	_create_shop_zones()
 	if config.spawn_turret_controllers:
 		_create_turret_controllers()
 	if config.spawn_nexus_controllers:
@@ -126,6 +153,7 @@ func _spawn_session_champion(player_session: PlayerSession) -> ChampionControlle
 			bus.name = "Commands"
 		player_session.attach_commands(bus)
 	champion.bind_commands(player_session.commands)
+	_bind_economy_commands(player_session.commands, champion)
 	if player_session.is_local:
 		player = champion
 		champion.targeting.target_changed.connect(_on_player_target_changed)
@@ -150,6 +178,9 @@ func adopt_local_champion() -> ChampionController:
 func _process(delta: float) -> void:
 	if match_state.is_running():
 		match_state.elapsed += delta
+	if rewards != null:
+		rewards.tick(delta)
+	_tick_ward_cooldowns(delta)
 
 
 # --- champions ---------------------------------------------------------------
@@ -201,6 +232,118 @@ func _friendly_structure_points(team: int) -> Array[Vector3]:
 func _on_player_target_changed(target: Node3D) -> void:
 	if _target_indicator != null:
 		_target_indicator.follow(target)
+
+
+# --- shops and economy -------------------------------------------------------
+
+## A buy zone at each team's fountain. The position comes from the layout's
+## spawn points, so the three-lane map and the one-lane arena both get theirs
+## without either knowing the other exists.
+func _create_shop_zones() -> void:
+	for spawn in map.layout.spawn_points:
+		# Champion fountains only: a layout may also publish minion spawns, and
+		# nobody shops at those.
+		if String(spawn.get("role", SpawnPointManager.ROLE_CHAMPION)) \
+				!= SpawnPointManager.ROLE_CHAMPION:
+			continue
+		var team := int(spawn["team"])
+		var zone := ShopZone.new()
+		var id := "TEAM_%s_SHOP" % MapEnums.team_name(team)
+		zone.setup(id, team, config.shop_zone_radius)
+		container.add_child(zone)
+		var position: Vector2 = spawn["position"]
+		zone.global_position = Vector3(position.x, 0.0, position.y)
+		zone.build_visual()
+		map.registry.register(id, "shop", {
+			"id": id, "team": team, "position": position, "radius": config.shop_zone_radius,
+		}, zone)
+		purchases.register_zone(zone)
+		shops.append(zone)
+
+
+func shop_for(team: int) -> ShopZone:
+	for zone in shops:
+		if zone.team == team:
+			return zone
+	return null
+
+
+## Connects a player's command bus to the systems that own their money and
+## their eyes. Ability upgrades are champion-local and stay on the champion.
+func _bind_economy_commands(bus: InputCommands, champion: ChampionController) -> void:
+	bus.purchase_requested.connect(func(item_id: String) -> void:
+		if Net.is_authority():
+			purchases.purchase(champion, item_id))
+	bus.ward_requested.connect(func(aim: Vector3) -> void:
+		if Net.is_authority():
+			place_ward(champion, aim))
+
+
+# --- wards -------------------------------------------------------------------
+
+## Places a ward for [param champion]. Authority only: a client asks through
+## [CommandRelay] and sees the result arrive from the spawner.
+func place_ward(champion: ChampionController, at: Vector3) -> Ward:
+	if not Net.is_authority() or champion == null or not champion.is_alive():
+		return null
+	var ward_config: WardConfig = config.ward_config
+	if ward_config == null:
+		return null
+	if ward_cooldown_for(champion) > 0.0:
+		return null
+	var point := map.clamp_to_play_field(Vector3(at.x, 0.0, at.z))
+	var reach: float = ward_config.place_range
+	var offset := point - champion.global_position
+	offset.y = 0.0
+	if offset.length() > reach:
+		point = champion.global_position + offset.normalized() * reach
+	# The oldest ward makes way rather than the request failing: a limit the
+	# player has to count in their head is a worse rule than a rolling one.
+	_retire_excess_wards(champion, ward_config.max_active - 1)
+	_next_ward_id += 1
+	var ward: Ward = spawner.spawn_ward({
+		"team": champion.team,
+		"config": ward_config.resource_path,
+		"spawn": Vector3(point.x, 0.0, point.z),
+		"ward_id": _next_ward_id,
+		"owner_net_id": champion.net_id,
+	})
+	if ward == null:
+		return null
+	_ward_cooldowns[champion.net_id] = ward_config.cooldown
+	champion.ward_placed.emit(ward)
+	return ward
+
+
+## Wards this champion currently has standing, oldest first.
+func wards_of(champion: ChampionController) -> Array:
+	var out: Array = []
+	for ward in get_tree().get_nodes_in_group("wards"):
+		if is_instance_valid(ward) and ward.owner_net_id == champion.net_id:
+			out.append(ward)
+	return out
+
+
+func _retire_excess_wards(champion: ChampionController, keep: int) -> void:
+	var standing := wards_of(champion)
+	var excess := standing.size() - maxi(keep, 0)
+	for i in maxi(excess, 0):
+		standing[i].queue_free()
+
+
+func ward_cooldown_for(champion: ChampionController) -> float:
+	if champion == null:
+		return 0.0
+	return float(_ward_cooldowns.get(champion.net_id, 0.0))
+
+
+func _tick_ward_cooldowns(delta: float) -> void:
+	for id in _ward_cooldowns.keys():
+		var left: float = float(_ward_cooldowns[id]) - delta
+		if left <= 0.0:
+			_ward_cooldowns.erase(id)
+		else:
+			_ward_cooldowns[id] = left
 
 
 # --- turrets -----------------------------------------------------------------
@@ -404,6 +547,59 @@ func dev_kill_all_enemies() -> int:
 		unit.health.kill(player)
 		killed += 1
 	return killed
+
+
+# --- developer: progression, economy and vision ------------------------------
+
+func dev_grant_gold(amount: float) -> bool:
+	if not Net.is_authority() or player == null or player.wallet == null:
+		return false
+	player.wallet.add(amount, "developer")
+	return true
+
+
+func dev_grant_experience(amount: float) -> bool:
+	if not Net.is_authority() or player == null or player.experience == null:
+		return false
+	player.experience.add(amount, "developer")
+	return true
+
+
+func dev_level_up() -> bool:
+	if not Net.is_authority() or player == null or player.level == null:
+		return false
+	return player.level.level_up()
+
+
+## Spends whatever the champion is entitled to, then tops the rest up for free.
+func dev_unlock_abilities() -> int:
+	if not Net.is_authority() or player == null or player.abilities == null:
+		return 0
+	var granted := player.abilities.unlock_all(player.level.level if player.level != null else 1)
+	if player.level != null:
+		player.level.clear_points()
+	return granted
+
+
+func dev_place_ward() -> bool:
+	if player == null:
+		return false
+	return place_ward(player, player.global_position + player.facing_direction() * 4.0) != null
+
+
+## Local debug reveal: it shows the map to this machine's own team only, and
+## never travels, so it cannot be used to peek in a networked match.
+func dev_toggle_reveal() -> bool:
+	var team := local_team()
+	var revealed := not Vision.state.is_revealed(team)
+	Vision.reveal_for(team, revealed)
+	return revealed
+
+
+func dev_clear_inventory() -> int:
+	if purchases == null:
+		return 0
+	return purchases.clear_inventory(player)
 
 
 ## Compact snapshot used by the HUD and the headless smoke test.

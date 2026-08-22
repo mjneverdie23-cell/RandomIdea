@@ -30,6 +30,7 @@ var terrain: TerrainBuilder
 var lanes: LaneManager
 var jungle: JungleManager
 var objectives: ObjectiveManager
+var bushes: BushManager
 var bases: BaseManager
 var spawns: SpawnPointManager
 var debug_renderer: MapDebugRenderer
@@ -59,6 +60,7 @@ func build() -> void:
 	lanes.build(layout, registry)
 	jungle.build(layout, registry)
 	objectives.build(layout, registry)
+	bushes.build(layout, registry)
 	spawns.build(layout, registry)
 
 	navigation.configure(layout)
@@ -94,6 +96,7 @@ func _ensure_children() -> void:
 	lanes = _ensure_child(lanes, LaneManager, "Lanes", navigation)
 	jungle = _ensure_child(jungle, JungleManager, "Jungle", navigation)
 	objectives = _ensure_child(objectives, ObjectiveManager, "Objectives", navigation)
+	bushes = _ensure_child(bushes, BushManager, "Bushes", navigation)
 	spawns = _ensure_child(spawns, SpawnPointManager, "SpawnPoints", self)
 	debug_renderer = _ensure_child(debug_renderer, MapDebugRenderer, "Debug", self)
 
@@ -156,6 +159,7 @@ func describe() -> Dictionary:
 		"camps": layout.camps.size(),
 		"jungles": layout.jungles.size(),
 		"objectives": layout.objectives.size(),
+		"bushes": layout.bushes.size(),
 		"spawns": layout.spawn_points.size(),
 		"wall_boxes": terrain.wall_rects().size(),
 		"nav_floor_boxes": terrain.floor_rects().size(),

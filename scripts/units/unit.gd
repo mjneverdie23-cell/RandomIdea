@@ -32,8 +32,16 @@ var combat: CombatComponent
 var targeting: TargetingComponent
 var movement: MovementComponent
 var visual: Node3D
-## Champions fill this in; everything else leaves it null.
+## Champions fill these in; everything else leaves them null.
 var abilities: AbilityComponent
+## Spendable ability resource. Null on anything whose stats leave it at zero.
+var resource_pool: ResourceComponent
+var wallet: WalletComponent
+var experience: ExperienceComponent
+var level: LevelComponent
+var inventory: InventoryComponent
+## Sight this unit grants its team.
+var vision: VisionSource
 
 var gameplay_enabled: bool = true
 
@@ -94,6 +102,17 @@ func _ready() -> void:
 		add_child(movement)
 		movement.setup(self, stats, uses_navigation and simulated, body_radius())
 
+	if stats.value("max_resource") > 0.0:
+		resource_pool = ResourceComponent.new()
+		resource_pool.name = "ResourcePool"
+		add_child(resource_pool)
+		resource_pool.setup(stats)
+
+	vision = VisionSource.new()
+	vision.name = "Vision"
+	vision.setup(team, stats.value("vision_radius"))
+	add_child(vision)
+
 	visual = Node3D.new()
 	visual.name = "Visual"
 	add_child(visual)
@@ -115,6 +134,8 @@ func _physics_process(delta: float) -> void:
 	combat.tick(delta)
 	if health.is_alive():
 		health.regenerate(stats.value("health_regen"), delta)
+		if resource_pool != null:
+			resource_pool.regenerate(delta)
 	if gameplay_enabled and health.is_alive():
 		_think(delta)
 	if movement != null:
@@ -212,6 +233,17 @@ func heal(amount: float) -> float:
 
 func is_enemy_of(other_team: int) -> bool:
 	return team != other_team
+
+
+## Can [param team] see this unit right now? Targeting, the minimap and the
+## renderer all route through here so they cannot disagree.
+func is_visible_to(other_team: int) -> bool:
+	return Vision.is_visible_to(self, other_team)
+
+
+## True while standing in a bush, whoever is looking.
+func is_concealed() -> bool:
+	return Vision.is_in_bush(self)
 
 
 ## Radius used for range checks and click selection.

@@ -17,6 +17,10 @@ extends Node
 ## walking forever.
 @export_range(0.1, 2.0, 0.05) var keepalive: float = 0.25
 
+## A forged item id is looked up and missed anyway; the cap just stops a peer
+## from making the server hash a megabyte.
+const MAX_ITEM_ID_LENGTH := 64
+
 var session: MatchSession
 ## The bus fed by this machine's input device.
 var local_bus: InputCommands
@@ -34,6 +38,9 @@ func setup(match_session: MatchSession, bus: InputCommands) -> void:
 	bus.ability_requested.connect(_on_local_ability)
 	bus.basic_attack_requested.connect(_on_local_attack)
 	bus.recall_requested.connect(_on_local_recall)
+	bus.ability_upgrade_requested.connect(_on_local_upgrade)
+	bus.purchase_requested.connect(_on_local_purchase)
+	bus.ward_requested.connect(_on_local_ward)
 
 
 func rejected_count() -> int:
@@ -78,6 +85,21 @@ func _on_local_attack(aim_point: Vector3) -> void:
 func _on_local_recall() -> void:
 	if _forwarding():
 		_request_recall.rpc_id(NetTypes.SERVER_PEER_ID)
+
+
+func _on_local_upgrade(slot: int) -> void:
+	if _forwarding():
+		_request_upgrade.rpc_id(NetTypes.SERVER_PEER_ID, slot)
+
+
+func _on_local_purchase(item_id: String) -> void:
+	if _forwarding():
+		_request_purchase.rpc_id(NetTypes.SERVER_PEER_ID, item_id)
+
+
+func _on_local_ward(aim_point: Vector3) -> void:
+	if _forwarding():
+		_request_ward.rpc_id(NetTypes.SERVER_PEER_ID, aim_point)
 
 
 # --- authority side ----------------------------------------------------------
@@ -150,3 +172,41 @@ func _request_recall() -> void:
 	var player := _authorise()
 	if player != null:
 		player.commands.request_recall()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_upgrade(slot: int) -> void:
+	var player := _authorise()
+	if player == null:
+		return
+	if slot < 0 or slot >= InputCommands.ABILITY_NAMES.size():
+		_rejected += 1
+		return
+	# The champion still checks its own level, rank cap and skill-point balance;
+	# a client asking for a rank it has not earned changes nothing.
+	player.commands.request_ability_upgrade(slot)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_purchase(item_id: String) -> void:
+	var player := _authorise()
+	if player == null:
+		return
+	if item_id.length() > MAX_ITEM_ID_LENGTH:
+		_rejected += 1
+		return
+	# Note that the client sends an item id, never a price, a stat block or a
+	# slot: the server looks the item up in its own catalogue, charges its own
+	# price and picks the slot. Gold and inventory are never client-authored.
+	player.commands.request_purchase(item_id)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_ward(aim_point: Vector3) -> void:
+	var player := _authorise()
+	if player == null:
+		return
+	# The point is clamped to the field here and to the champion's own placement
+	# range by the director, so a client cannot ward the enemy fountain.
+	player.commands.set_aim_point(_sanitise_aim(aim_point))
+	player.commands.request_ward()

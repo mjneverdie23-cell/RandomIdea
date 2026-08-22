@@ -9,6 +9,15 @@ extends Resource
 @export var enemy_loadout: ChampionLoadout
 @export var wave: WaveConfig
 
+@export_group("Progression and economy")
+@export var progression: ProgressionData
+@export var ability_progression: AbilityProgressionData
+@export var rewards: RewardConfig
+@export var shop_catalog: ShopCatalog
+@export var ward_config: WardConfig
+## Radius of the buy zone placed at each team's fountain.
+@export_range(2.0, 30.0, 0.5) var shop_zone_radius: float = 9.0
+
 @export_group("Nexus")
 @export var nexus_stats: UnitStats
 ## Attach a [NexusController] to each nexus the map placed, making it a real,

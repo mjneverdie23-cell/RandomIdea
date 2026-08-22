@@ -155,6 +155,11 @@ func _check_reports() -> void:
 		_expect(int(report["owned_champions"]) == 1, "a client did not own exactly one champion")
 		_expect(int(report["simulated_units"]) == 0, "a client simulated units")
 		_expect(int(report["turrets_seen"]) == 4, "turrets did not replicate to a client")
+		_expect(bool(report["upgrade_call_blocked"]) and bool(report["purchase_call_blocked"])
+			and bool(report["ward_call_blocked"]),
+			"a client could grant itself progression against a dedicated server")
+		_expect(bool(report["gold_forgery_reverted"]), "forged gold survived on a client")
+		_expect(int(report["client_rank_q"]) == 0, "a forged ability rank survived on a client")
 		seen_teams.append(int(report["local_team"]))
 	_expect(seen_teams.has(MapEnums.Team.A) and seen_teams.has(MapEnums.Team.B),
 		"the two clients did not report one team each")

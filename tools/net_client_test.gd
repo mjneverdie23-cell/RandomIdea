@@ -34,6 +34,21 @@ var _observations := {
 	"nexus_b_min_health": -1.0,
 	"outcome": "",
 	"simulated_units": 0,
+	# Progression and economy arrive from the server; none of it is decided here.
+	"client_gold": 0.0,
+	"client_level": 0,
+	"client_items": [],
+	"client_rank_q": 0,
+	# Every one of these must come back true: a client that can grant itself
+	# gold, items, ranks or wards is not a client.
+	"upgrade_call_blocked": false,
+	"purchase_call_blocked": false,
+	"ward_call_blocked": false,
+	"gold_forgery_reverted": false,
+	"forged_cast_attempted": false,
+	# Range rings never travel: the host turns its own on, and this must not.
+	"own_ring_hidden_by_default": false,
+	"opponent_ring_visible": false,
 	"finished": false,
 }
 
@@ -46,6 +61,11 @@ var _written := false
 var _ending := false
 var _end_grace := 0.0
 var _own_start := Vector3.ZERO
+## Forgery attempt: run once, a couple of seconds in, then checked a second later.
+var _forgery_done := false
+var _forged_gold := 0.0
+var _forged_at := 0.0
+var _debug_view_disabled := false
 
 
 func _ready() -> void:
@@ -81,6 +101,14 @@ func _observe() -> void:
 	_observations["connected"] = Net.is_connected_now()
 	if _root == null or not _root.started:
 		return
+
+	# The developer combat overlay reveals every range by design, which would
+	# mask the thing being checked here: that nothing about the host's own ring
+	# travels. Turn it off so a ring on screen can only mean replication.
+	if not _debug_view_disabled:
+		_debug_view_disabled = true
+		_root.combat_debug.set_overlay_visible(false)
+		_root.range_view.set_own_range_visible(false)
 
 	var session: MatchSession = _root.session
 	_observations["roster_size"] = maxi(int(_observations["roster_size"]), session.player_count())
@@ -121,6 +149,10 @@ func _observe() -> void:
 	_observations["foreign_champions"] = maxi(int(_observations["foreign_champions"]), foreign)
 
 	_track_own_champion()
+	_track_progression()
+	_track_range_rings()
+	_attempt_forgery()
+	_check_forgery_result()
 	_drive_input()
 
 	if session.phase == NetTypes.MatchPhase.ENDED:
@@ -171,6 +203,74 @@ func _track_own_champion() -> void:
 		_observations["saw_own_death"] = true
 	elif _saw_dead:
 		_observations["saw_own_respawn"] = true
+
+
+## Gold, level and items are replicated state on a client. The last value seen
+## is the one the host is asserted against.
+func _track_progression() -> void:
+	var champion: ChampionController = _root.champion
+	if champion == null or not is_instance_valid(champion):
+		return
+	if champion.wallet != null and not _forgery_pending():
+		_observations["client_gold"] = champion.wallet.gold
+	if champion.level != null:
+		_observations["client_level"] = champion.level.level
+	if champion.abilities != null:
+		_observations["client_rank_q"] = champion.abilities.rank(0)
+	if champion.inventory != null and champion.inventory.count() > 0:
+		_observations["client_items"] = Array(champion.inventory.item_ids())
+
+
+## The host has its own ring on. Nothing about that may reach this process.
+func _track_range_rings() -> void:
+	var view: RangeVisualizer = _root.range_view
+	for unit in Battle.all():
+		if unit.kind != Unit.Kind.CHAMPION or unit == _root.champion:
+			continue
+		if view.is_ring_visible_for(unit):
+			_observations["opponent_ring_visible"] = true
+
+
+func _forgery_pending() -> bool:
+	return _forgery_done and not bool(_observations["gold_forgery_reverted"])
+
+
+## Tries every way a client could cheat, and records that each one failed.
+##
+## The three calls below are the real authority gates: [PurchaseSystem],
+## [GameDirector.place_ward] and [ChampionController.spend_skill_point] all
+## refuse outright when this process is not the authority. Writing the numbers
+## into the local components instead is the other half of the attempt — the
+## next snapshot from the host simply overwrites them.
+func _attempt_forgery() -> void:
+	var champion: ChampionController = _root.champion
+	if champion == null or not is_instance_valid(champion) or _forgery_done or _elapsed < 2.5:
+		return
+	_forgery_done = true
+	_observations["own_ring_hidden_by_default"] = not _root.range_view.is_own_range_visible()
+	_observations["upgrade_call_blocked"] = not champion.spend_skill_point(0)
+	_observations["purchase_call_blocked"] = \
+		not _root.director.purchases.purchase(champion, "longblade")
+	_observations["ward_call_blocked"] = \
+		_root.director.place_ward(champion, champion.global_position) == null
+
+	_forged_gold = 999999.0
+	champion.wallet.gold = _forged_gold
+	champion.abilities.ranks[0] = 5
+	# A locally "unlocked" ability still has to pass the server's own check.
+	_root.commands.request_ability(0)
+	_observations["forged_cast_attempted"] = true
+	_forged_at = _elapsed
+
+
+func _check_forgery_result() -> void:
+	if not _forgery_done or _elapsed < _forged_at + 1.0:
+		return
+	var champion: ChampionController = _root.champion
+	if champion == null or not is_instance_valid(champion) or champion.wallet == null:
+		return
+	if champion.wallet.gold < _forged_gold:
+		_observations["gold_forgery_reverted"] = true
 
 
 ## Holds a movement command so the host has something to validate and apply.

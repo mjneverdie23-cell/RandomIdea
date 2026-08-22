@@ -17,6 +17,6 @@ func execute(caster: Node3D, aim_point: Vector3) -> bool:
 		target = caster.targeting.current_target
 	Projectile.launch(
 		caster.projectile_parent(), caster.get_muzzle_position(), target, goal,
-		projectile_speed, damage, caster, color, projectile_size, impact_radius
+		projectile_speed, effective_damage(caster), caster, color, projectile_size, impact_radius
 	)
 	return true

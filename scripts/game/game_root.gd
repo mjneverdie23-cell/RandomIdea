@@ -24,6 +24,10 @@ static var _pending_mode_id: String = ""
 @export var mode_index: int = 0
 @export var player_team: int = MapEnums.Team.A
 @export var transport: NetworkTransport
+## Presentation data shared by both modes. Kept here rather than in a
+## [MatchConfig] because it describes the client's view, not the match.
+@export var hud_config: HudConfig
+@export var range_config: RangeDisplayConfig
 ## Prints a navigation reachability report on startup (also used headless).
 @export var print_startup_report: bool = true
 
@@ -34,8 +38,9 @@ static var _pending_mode_id: String = ""
 @onready var dev_input: DevInputController = $DevInputController
 @onready var director: GameDirector = $GameDirector
 @onready var combat_debug: CombatDebugOverlay = $CombatDebug
+@onready var range_view: RangeVisualizer = $RangeVisualizer
 @onready var units: Node3D = $Units
-@onready var hud: PrototypeHud = $HUD
+@onready var hud: MobaHud = $HUD
 @onready var session: MatchSession = $MatchSession
 @onready var spawner: NetworkSpawner = $NetworkSpawner
 @onready var state_sync: NetworkStateSync = $NetworkStateSync
@@ -128,6 +133,9 @@ func start_session(request: Dictionary) -> void:
 
 	mode = _resolve_mode(String(request.get("mode_id", "")))
 	_apply_mode(mode)
+	# The vision autoload outlives a scene reload, so a new match starts from a
+	# clean slate rather than inheriting the last one's bushes and reveals.
+	Vision.reset()
 	map.build()
 
 	session.open(_required_players(net_mode))
@@ -144,13 +152,20 @@ func start_session(request: Dictionary) -> void:
 	commands.debug_toggle_requested.connect(_on_debug_toggle)
 	commands.restart_requested.connect(restart_match)
 
-	state_sync.setup(units)
+	state_sync.setup(units, director.config.shop_catalog)
 	relay.setup(session, commands)
+	range_view.setup(range_config)
+	combat_debug.overlay_toggled.connect(range_view.set_debug_all)
 	combat_debug.set_overlay_visible(director.config.combat_debug_on_start)
+	commands.range_toggle_requested.connect(_on_range_toggle)
+	commands.shop_toggle_requested.connect(func() -> void: hud.toggle_shop())
 	dev_input.setup(director, combat_debug)
 	dev_input.network_debug_requested.connect(func() -> void: net_debug.toggle())
 	dev_input.menu_requested.connect(open_menu)
+	dev_input.shop_toggle_requested.connect(func() -> void: hud.toggle_shop())
 	net_debug.setup(session, state_sync, relay, director)
+	if hud_config != null:
+		hud.config = hud_config
 	hud.bind(self)
 
 	session.phase_changed.connect(_on_phase_changed)
@@ -274,8 +289,16 @@ func _set_local_champion(unit: ChampionController) -> void:
 	champion = unit
 	camera.set_follow_target(unit)
 	combat_debug.setup(unit)
+	range_view.set_local_champion(unit)
 	hud.attach_champion(unit)
 	local_champion_changed.emit(unit)
+
+
+## The range toggle is a command, not a key: a touch button raises the same
+## request. It is presentation only and never leaves this machine.
+func _on_range_toggle() -> void:
+	var shown := range_view.toggle_own_range()
+	hud.show_toast("Attack range %s" % ("shown" if shown else "hidden"))
 
 
 # --- mode --------------------------------------------------------------------

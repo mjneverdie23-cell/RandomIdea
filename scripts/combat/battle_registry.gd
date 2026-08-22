@@ -45,10 +45,23 @@ func of_team(team: int) -> Array:
 	return out
 
 
+## Every living enemy, whether or not it can be seen. Use
+## [method visible_enemies_of] for anything that should respect fog of war.
 func enemies_of(team: int) -> Array:
 	var out: Array = []
 	for unit in all():
 		if unit.team != team and unit.is_alive():
+			out.append(unit)
+	return out
+
+
+## Enemies this team currently has vision of. Target acquisition, click
+## selection and the minimap all use this, so a champion in a bush is genuinely
+## untargetable rather than merely invisible.
+func visible_enemies_of(team: int) -> Array:
+	var out: Array = []
+	for unit in enemies_of(team):
+		if Vision.is_visible_to(unit, team):
 			out.append(unit)
 	return out
 
@@ -68,7 +81,7 @@ func find_target(from: Vector3, team: int, max_range: float, kind_priority: Arra
 	var best: Node3D = null
 	var best_rank := 1 << 30
 	var best_distance := INF
-	for unit in enemies_of(team):
+	for unit in visible_enemies_of(team):
 		var distance := from.distance_to(unit.global_position)
 		if distance > max_range:
 			continue
@@ -86,7 +99,7 @@ func find_target(from: Vector3, team: int, max_range: float, kind_priority: Arra
 func pick_enemy_near(point: Vector3, team: int, radius: float) -> Node3D:
 	var best: Node3D = null
 	var best_distance := radius
-	for unit in enemies_of(team):
+	for unit in visible_enemies_of(team):
 		var offset: Vector3 = unit.global_position - point
 		offset.y = 0.0
 		var distance: float = offset.length() - unit.select_radius()
@@ -97,6 +110,8 @@ func pick_enemy_near(point: Vector3, team: int, radius: float) -> Node3D:
 
 
 ## Every living enemy inside a sphere, used by area abilities.
+## Area damage ignores concealment on purpose: an ability that lands on a bush
+## still hits whoever is standing in it.
 func enemies_in_radius(center: Vector3, team: int, radius: float) -> Array:
 	var out: Array = []
 	for unit in enemies_of(team):

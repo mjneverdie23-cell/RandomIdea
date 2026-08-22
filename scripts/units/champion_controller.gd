@@ -14,8 +14,12 @@ signal recall_interrupted()
 signal respawn_started(duration: float)
 signal respawn_finished()
 signal target_selected(target: Node3D)
+signal skill_point_spent(slot: int, rank: int)
+signal ward_placed(ward: Ward)
 
 @export var loadout: ChampionLoadout
+## Progression, economy and shop data for this match. Supplied by the director.
+var match_config: MatchConfig
 ## Peer that owns this champion in a networked match; 0 means nobody.
 var owner_peer_id: int = 0
 ## When true the champion picks its own targets and walks itself.
@@ -50,9 +54,89 @@ func _ready() -> void:
 	abilities.name = "Abilities"
 	add_child(abilities)
 	abilities.setup(self, loadout.abilities if loadout != null else [])
+	_build_progression()
 
 	targeting.auto_acquire = ai_enabled
 	_build_selection_ring()
+
+
+## Gold, XP, levels and items. All four are components so nothing about
+## progression lives in this controller beyond wiring.
+func _build_progression() -> void:
+	var progression: ProgressionData = match_config.progression if match_config != null else null
+	var ability_progression: AbilityProgressionData = \
+		match_config.ability_progression if match_config != null else null
+	var rewards: RewardConfig = match_config.rewards if match_config != null else null
+
+	wallet = WalletComponent.new()
+	wallet.name = "Wallet"
+	add_child(wallet)
+	wallet.setup(rewards.starting_gold if rewards != null else 0.0,
+		rewards.passive_gold_per_second if rewards != null else 0.0)
+
+	experience = ExperienceComponent.new()
+	experience.name = "Experience"
+	add_child(experience)
+	experience.setup(progression)
+
+	level = LevelComponent.new()
+	level.name = "Level"
+	add_child(level)
+	level.setup(self, experience, progression, ability_progression)
+
+	inventory = InventoryComponent.new()
+	inventory.name = "Inventory"
+	add_child(inventory)
+	inventory.setup(self, loadout.inventory_slots if loadout != null else 6)
+
+	abilities.setup_progression(ability_progression)
+	# Level 1 arrives with a point to spend, so the first ability is a choice.
+	level.levelled_up.connect(func(_l: int, _p: int) -> void: _on_levelled_up())
+
+
+func _on_levelled_up() -> void:
+	AbilityPulse.spawn(projectile_parent(), global_position, body_radius() * 3.0,
+		Color(1.0, 0.88, 0.35), 0.6)
+
+
+# --- skill points ------------------------------------------------------------
+
+## Authority-side upgrade. Returns true when a point actually moved.
+func spend_skill_point(slot: int) -> bool:
+	if not Net.is_authority() or level == null or abilities == null:
+		return false
+	if not abilities.can_upgrade(slot, level.level):
+		return false
+	if not level.spend_point():
+		return false
+	if not abilities.upgrade(slot):
+		level.refund_point()
+		return false
+	skill_point_spent.emit(slot, abilities.rank(slot))
+	return true
+
+
+## An AI champion has nobody to click the "+" buttons for it, so it spends its
+## own points in slot order. A player's points are never spent automatically:
+## choosing where they go is the decision the level-up exists to offer.
+func auto_spend_skill_points() -> int:
+	var spent := 0
+	while level != null and level.skill_points > 0:
+		var slots := upgradeable_slots()
+		if slots.is_empty() or not spend_skill_point(slots[0]):
+			break
+		spent += 1
+	return spent
+
+
+func upgradeable_slots() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	if level == null or abilities == null or level.skill_points <= 0:
+		return out
+	for slot in InputCommands.ABILITY_NAMES.size():
+		if abilities.can_upgrade(slot, level.level):
+			out.append(slot)
+	return out
 
 
 ## Connects a champion to the device-independent command bus.
@@ -64,6 +148,7 @@ func bind_commands(bus: InputCommands) -> void:
 	bus.basic_attack_requested.connect(_on_basic_attack_requested)
 	bus.recall_requested.connect(_on_recall_requested)
 	bus.recall_cancelled.connect(cancel_recall)
+	bus.ability_upgrade_requested.connect(_on_upgrade_requested)
 
 
 func _build_visual() -> void:
@@ -92,6 +177,8 @@ func _build_selection_ring() -> void:
 
 func _think(delta: float) -> void:
 	abilities.tick(delta)
+	if inventory != null:
+		inventory.tick(delta)
 	# Drops dead or invalid targets. Acquisition belongs to the brain (AI) or to
 	# the click handler (player), so nothing re-targets behind their back.
 	targeting.tick(delta, loadout.ai_aggro_range if loadout != null else 16.0)
@@ -154,6 +241,8 @@ func ai_state_name() -> String:
 
 
 func _think_ai(delta: float) -> void:
+	if level != null and level.skill_points > 0:
+		auto_spend_skill_points()
 	if ai != null:
 		ai.think(delta)
 		return
@@ -174,6 +263,13 @@ func _auto_attack() -> void:
 
 
 # --- input handlers ----------------------------------------------------------
+
+func _on_upgrade_requested(slot: int) -> void:
+	# Offline and on a host this runs directly; a client's request arrives here
+	# only after CommandRelay has validated the sender.
+	if Net.is_authority():
+		spend_skill_point(slot)
+
 
 func _on_ability_requested(slot: int, aim_point: Vector3) -> void:
 	if not is_alive():
@@ -251,6 +347,8 @@ func _tick_recall(delta: float) -> void:
 	_recalling = false
 	teleport_to(spawn_point)
 	health.heal(health.maximum)
+	if resource_pool != null:
+		resource_pool.refill()
 	AbilityPulse.spawn(projectile_parent(), global_position, 3.0, PrototypeMeshes.team_color(team), 0.5)
 	recall_finished.emit()
 
@@ -286,12 +384,24 @@ func _process(delta: float) -> void:
 func respawn() -> void:
 	_respawn_left = 0.0
 	teleport_to(spawn_point)
+	stats.clear_modifiers()
+	_reapply_permanent_modifiers()
 	var ratio: float = loadout.respawn_health_ratio if loadout != null else 1.0
 	health.revive(ratio)
-	stats.clear_modifiers()
+	if resource_pool != null:
+		resource_pool.refill()
 	abilities.reset_cooldowns()
 	targeting.clear_target()
 	respawn_finished.emit()
+
+
+## Dying clears buffs and debuffs; it must not clear the champion's levels or
+## the items it paid for. Both are re-registered here after the wipe.
+func _reapply_permanent_modifiers() -> void:
+	if level != null:
+		level.reapply_growth()
+	if inventory != null:
+		inventory.reapply_all()
 
 
 func teleport_to(point: Vector3) -> void:
@@ -308,7 +418,10 @@ func reset_champion() -> void:
 		respawn()
 		return
 	teleport_to(spawn_point)
-	health.revive(1.0)
 	stats.clear_modifiers()
+	_reapply_permanent_modifiers()
+	health.revive(1.0)
+	if resource_pool != null:
+		resource_pool.refill()
 	abilities.reset_cooldowns()
 	targeting.clear_target()

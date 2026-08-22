@@ -63,6 +63,12 @@ extends Resource
 ## Distance of each objective arena from the map centre, along the river.
 @export_range(5.0, 120.0, 0.5) var objective_offset: float = 42.0
 
+@export_group("Bushes")
+## Radius of every bush this map places.
+@export_range(1.0, 20.0, 0.5) var bush_radius: float = 5.0
+## How far a lane bush sits from the lane centre line.
+@export_range(0.0, 40.0, 0.5) var bush_lane_offset: float = 9.0
+
 @export_group("Terrain")
 ## Rasterisation cell size used to turn the walkable description into walls.
 @export_range(0.5, 4.0, 0.25) var terrain_cell_size: float = 1.5

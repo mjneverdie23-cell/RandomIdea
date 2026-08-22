@@ -10,7 +10,9 @@ extends Node
 ## and one nexus per team and no inhibitors, every required identifier exists,
 ## the whole lane is navigable from both spawns, waves spawn from both bases,
 ## the AI drives the enemy champion, and destroying the enemy nexus produces a
-## victory.
+## victory. It also proves the systems added on top of both maps work here
+## unchanged: bushes hide, both bases sell, and the shared HUD binds — none of
+## which has a Solo Lane implementation of its own.
 
 const MAIN_SCENE := "res://scenes/Main.tscn"
 const MODE_ID := "solo_lane"
@@ -18,6 +20,7 @@ const SETTLE_FRAMES := 20
 
 const REQUIRED_IDS := [
 	"SOLO_LANE",
+	"SOLO_BUSH_1", "SOLO_BUSH_2", "SOLO_BUSH_3", "SOLO_BUSH_4",
 	"SOLO_SPAWN_A", "SOLO_SPAWN_B",
 	"SOLO_MINION_SPAWN_A", "SOLO_MINION_SPAWN_B",
 	"SOLO_OUTER_TURRET_A", "SOLO_INNER_TURRET_A",
@@ -50,6 +53,7 @@ func _run() -> void:
 	await _check_navigation()
 	await _check_lane_traversal()
 	_check_sandbox()
+	await _check_shared_systems()
 	await _check_waves()
 	await _check_ai_opponent()
 	await _check_nexus_siege()
@@ -178,6 +182,61 @@ func _check_sandbox() -> void:
 	var spawn := _root.map.position_of("SOLO_SPAWN_A")
 	_expect(director.player.global_position.distance_to(spawn) < 3.0,
 		"the player did not spawn at SOLO_SPAWN_A")
+
+
+## Everything the systems layer added is shared code driven by map data, so the
+## only thing worth checking here is that Solo Lane's data actually reaches it.
+func _check_shared_systems() -> void:
+	var director := _root.director
+	var layout := _root.map.layout
+
+	_expect(layout.bushes.size() == 4, "expected four bushes beside the solo lane")
+	_expect(Vision.zones().size() == layout.bushes.size(),
+		"not every solo bush registered a vision zone")
+	_expect(director.shops.size() == 2, "expected a shop in both solo bases")
+	for team in [MapEnums.Team.A, MapEnums.Team.B]:
+		var shop := director.shop_for(team)
+		_expect(shop != null, "team %s has no shop zone" % MapEnums.team_name(team))
+		if shop == null:
+			continue
+		var spawn := _root.map.position_of("SOLO_SPAWN_%s" % MapEnums.team_name(team))
+		_expect(shop.global_position.distance_to(spawn) < 2.0,
+			"the team %s shop is not at its fountain" % MapEnums.team_name(team))
+
+	var champion := _root.champion
+	_expect(champion.wallet != null and champion.level != null and champion.inventory != null,
+		"the solo champion has no progression components")
+	_expect(champion.level.level == 1, "the solo champion did not start at level 1")
+	_expect(director.purchases.zone_for(champion) != null,
+		"the solo champion cannot shop at its own fountain")
+	_expect(_root.hud.minimap != null and _root.hud.ability_bar != null,
+		"the shared HUD did not build on the solo map")
+
+	# One bush, one hider, the same rule as the three-lane map.
+	var bush := Vision.zone_by_id("SOLO_BUSH_1")
+	_expect(bush != null, "SOLO_BUSH_1 has no vision zone")
+	if bush == null:
+		return
+	var hider := _spawn_dummy(bush.global_position, MapEnums.Team.B, 920001)
+	champion.teleport_to(bush.global_position + Vector3(bush.radius + 4.0, 0.0, 0.0))
+	await _settle_physics(4)
+	Vision.recompute()
+	_expect(not Vision.is_visible_to(hider, MapEnums.Team.A),
+		"a solo-lane bush did not hide an enemy")
+	print("[SoloTest] solo bushes hide, both bases sell, the shared HUD is bound")
+	hider.queue_free()
+	champion.teleport_to(champion.spawn_point)
+	await _settle_physics(4)
+
+
+## Minimal dummy for the vision check; the smoke test covers combat dummies.
+func _spawn_dummy(at: Vector3, team: int, net_id: int) -> MinionController:
+	var minion := MinionController.new()
+	minion.net_id = net_id
+	minion.initialize(team, _root.director.config.wave.melee_stats)
+	_root.units.add_child(minion)
+	minion.global_position = at + Vector3.UP * 0.2
+	return minion
 
 
 func _check_waves() -> void:

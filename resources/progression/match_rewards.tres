@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="RewardConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/reward_config.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+starting_gold = 500.0
+passive_gold_per_second = 2.4
+melee_minion_gold = 21.0
+ranged_minion_gold = 17.0
+siege_minion_gold = 45.0
+minion_xp = 32.0
+turret_gold = 250.0
+turret_xp = 120.0
+champion_gold = 300.0
+champion_xp = 200.0
+xp_share_radius = 14.0
+shared_xp_ratio = 0.5

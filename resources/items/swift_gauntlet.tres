@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = "swift_gauntlet"
+display_name = "Swift Gauntlet"
+cost = 500.0
+description = "Faster swings, better minion clear."
+icon_color = Color(0.92, 0.62, 0.28, 1)
+icon_glyph = "AS"
+category = "offence"
+bonus_attack_speed = 0.3

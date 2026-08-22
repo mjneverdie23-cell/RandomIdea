@@ -14,7 +14,7 @@ signal modifier_expired(id: String)
 const FIELDS := [
 	"max_health", "health_regen", "damage_reduction",
 	"attack_damage", "attack_range", "attack_speed", "projectile_speed",
-	"move_speed",
+	"ability_power", "max_resource", "resource_regen", "move_speed", "vision_radius",
 ]
 
 var base: UnitStats

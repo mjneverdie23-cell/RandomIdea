@@ -8,6 +8,7 @@ id = "f_bulwark"
 display_name = "Bulwark"
 slot = 3
 cooldown = 14.0
+resource_cost = 22.0
 cast_range = 0.0
 damage = 0.0
 radius = 2.5

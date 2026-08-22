@@ -11,6 +11,9 @@ extends Resource
 ## resource carries its own slot index.
 @export var abilities: Array[AbilityData] = []
 
+@export_group("Inventory")
+@export_range(1, 8, 1) var inventory_slots: int = 6
+
 @export_group("Respawn")
 @export_range(0.5, 120.0, 0.5) var respawn_time: float = 8.0
 ## Health fraction restored on respawn.
