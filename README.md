@@ -1,6 +1,6 @@
 # RandomIdea — Godot 4 MOBA map prototype
 
-A playable low-poly 3D MOBA prototype in **Godot 4.3**: two game modes sharing
+A playable low-poly 3D MOBA prototype in **Godot 4.7**: two game modes sharing
 one set of systems — a Wild Rift-style three-lane map and a compact one-lane
 arena — with champions, minion waves, turrets, a destructible nexus, damage,
 death, respawn and win conditions. Everything on screen is primitive geometry
@@ -132,7 +132,7 @@ cylinders, spheres and capsules created in code.
 
 ## Running it
 
-Open the project in Godot 4.3 and press **Play** (`scenes/Main.tscn` is the
+Open the project in Godot 4.7 and press **Play** (`scenes/Main.tscn` is the
 main scene). You spawn as Team A in the bottom-left fountain.
 
 | Input | Action |

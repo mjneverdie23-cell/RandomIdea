@@ -11,8 +11,17 @@ extends NavigationRegion3D
 
 signal navigation_baked
 
+## How long [method await_synchronization] will wait before giving up. A bake
+## this map size publishes in a handful of frames; the budget only exists so a
+## broken map cannot hang a caller forever.
+const SYNC_FRAME_BUDGET := 120
+
 var _config: MapConfig
 var _baked := false
+## The navigation map's iteration id captured just before the last bake.
+## "bake_navigation_mesh() returned" and "the server is answering queries
+## against the new mesh" are two different moments; this tells them apart.
+var _iteration_before_bake: int = -1
 
 
 func configure(layout: MapLayout) -> void:
@@ -64,19 +73,73 @@ func rebuild(on_thread: bool = false) -> void:
 	if navigation_mesh == null:
 		push_error("NavigationSetup.rebuild() called before configure().")
 		return
+	_iteration_before_bake = map_iteration()
 	bake_navigation_mesh(on_thread)
 	_baked = true
 	navigation_baked.emit()
 
 
-## Resolves once the navigation server has published the freshly baked map.
-## Queries made before this point fail with "before first map synchronization".
+## Resolves once the navigation server is actually answering queries against
+## the mesh that was just baked.
+##
+## Godot 4.4 made map synchronisation asynchronous by default
+## (navigation/world/map_use_async_iterations), so "bake_navigation_mesh()
+## returned" and "the server serves this mesh" are several frames apart. The
+## old two-physics-frame wait was a race the engine won often enough to look
+## like a flaky map: the startup probe reported a perfectly good spawn as
+## off-navmesh, and a rebuilt map answered against the previous mesh.
+##
+## Neither counter published by the server is sufficient on its own — the map
+## iteration advances once before the region's polygons are merged, and the
+## region bounds arrive a frame before the map-level queries work. So this asks
+## the map the one question whose answer is known in advance: a point taken
+## from the middle of a polygon of the mesh just baked must snap to itself.
 func await_synchronization() -> void:
 	var tree := get_tree()
 	if tree == null:
 		return
 	await tree.physics_frame
-	await tree.physics_frame
+	var sample := mesh_sample_point()
+	if not get_world_3d().navigation_map.is_valid() or sample == Vector3.INF:
+		return
+	var frames := 0
+	while frames < SYNC_FRAME_BUDGET and not _map_serves(sample):
+		await tree.physics_frame
+		frames += 1
+	if frames >= SYNC_FRAME_BUDGET:
+		push_warning("NavigationSetup: navigation map did not synchronise in %d frames."
+			% SYNC_FRAME_BUDGET)
+
+
+## True when the merged map resolves [param point] back to itself, which it can
+## only do once this region's polygons are part of it.
+func _map_serves(point: Vector3) -> bool:
+	if map_iteration() == _iteration_before_bake:
+		return false  # nothing new has been published yet
+	var closest := closest_navigable_point(point)
+	return closest.distance_to(point) <= maxf(navigation_mesh.cell_size * 2.0, 0.2)
+
+
+## A point in the middle of one of the baked polygons — on the mesh by
+## construction, and read locally so it is available before the server has
+## published anything.
+func mesh_sample_point() -> Vector3:
+	if navigation_mesh == null or navigation_mesh.get_polygon_count() == 0:
+		return Vector3.INF
+	var vertices := navigation_mesh.get_vertices()
+	var indices := navigation_mesh.get_polygon(0)
+	if indices.is_empty():
+		return Vector3.INF
+	var centroid := Vector3.ZERO
+	for index in indices:
+		centroid += vertices[index]
+	return global_transform * (centroid / float(indices.size()))
+
+
+## The server's published-version counter for this world's navigation map.
+func map_iteration() -> int:
+	var map_rid := get_world_3d().navigation_map
+	return NavigationServer3D.map_get_iteration_id(map_rid) if map_rid.is_valid() else -1
 
 
 func is_baked() -> bool:

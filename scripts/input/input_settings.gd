@@ -101,9 +101,19 @@ static func describe(event: InputEventKey) -> String:
 		parts.append("Shift")
 	if event.alt_pressed:
 		parts.append("Alt")
-	var code := event.physical_keycode if event.physical_keycode != 0 else event.keycode
-	parts.append(OS.get_keycode_string(DisplayServer.keyboard_get_keycode_from_physical(code)))
+	parts.append(OS.get_keycode_string(_layout_keycode(event)))
 	return " + ".join(parts)
+
+
+## Physical keycodes are positions on the board; translating one to the label
+## printed on the player's own key needs a real keyboard behind the display
+## server. The headless server has none and errors if asked, so the untranslated
+## code — which is the US label — is the fallback.
+static func _layout_keycode(event: InputEventKey) -> int:
+	var code := event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	if DisplayServer.get_name() == "headless":
+		return code
+	return DisplayServer.keyboard_get_keycode_from_physical(code)
 
 
 static func _mouse_name(index: int) -> String:

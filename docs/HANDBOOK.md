@@ -804,6 +804,18 @@ once.
   the mechanic.
 - **Godot renames duplicate node names** to `@Name@id`. Never show a node name
   in UI or match on it; use `display_label()` and net ids.
+- **Navigation synchronises asynchronously since Godot 4.4.**
+  `bake_navigation_mesh()` returning does not mean the server answers queries
+  against the new mesh, and neither published counter is sufficient on its own:
+  the map iteration advances once *before* the region's polygons are merged,
+  and the region bounds land a frame before map-level queries work. Waiting a
+  fixed couple of frames — which is what this did on 4.3 — reported good spawns
+  as off-navmesh. `await_synchronization()` now asks the map the one question
+  whose answer is known in advance: a point from the middle of a freshly baked
+  polygon must snap to itself.
+- **`DisplayServer.keyboard_get_keycode_from_physical()` errors on the headless
+  server**, which has no keyboard layout to consult. Guard any display-server
+  call that needs real hardware, or the test suites fill with backtraces.
 - **RPCs route by node path**, so a scene instanced under differently-named
   parents on two peers will silently fail to talk. Both network tests name
   their root `NetTest` for exactly this reason.
