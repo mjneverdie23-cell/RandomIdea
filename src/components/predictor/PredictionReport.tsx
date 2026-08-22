@@ -206,6 +206,7 @@ const TALLY_ROWS = [
   { key: 'motivationBonus', label: 'Motivation', hint: 'must-win +0.5, coasting −0.5, tanking −1' },
   { key: 'seriesEdge', label: 'Series edge', hint: '+0.3 per game of lead, capped at +0.6' },
   { key: 'rankBonus', label: 'Rank edge', hint: '+0.1 per place of rank gap, capped at +1.5' },
+  { key: 'darkHorseBonus', label: 'Dark horse', hint: '+0.1 per high-ceiling champion' },
 ] as const;
 
 function TallyColumn({ score, side, winner }: { score: SideScore; side: Side; winner: boolean }) {

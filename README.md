@@ -216,6 +216,7 @@ higher total is the predicted winner.
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive. **Stated by you** — see below |
 | Series edge | +0.3 per game of lead in the series so far, capped at +0.6 |
 | Rank edge | +0.1 per place of GlobalRank gap, capped at +1.5 |
+| Dark horse | +0.1 per hand-listed high-ceiling champion (Lee Sin, Akali) |
 
 The **fraud rating is reported, not scored**. Backtested over 374 games it was
 the most harmful term in the model: subtracting it cost about 1.4 points of
@@ -238,6 +239,32 @@ right. The direction is the opposite of the intuition: across July and August
 2026 the side facing elimination won only **42.0%** (60/143) of the next game.
 A team is behind because it has been losing, and that keeps being true — so the
 lead is credited rather than the pressure.
+
+#### The dark-horse list, and what measuring it showed
+
+`DARK_HORSE` in `src/predictor/engine.ts` is a hand-maintained set of champions
+credited a small extra for carry potential — the claim being that they swing a
+game more than their win rate suggests, because the ceiling is higher than the
+average. Nothing in a results export measures that, so it is stated rather than
+computed, and the set is a one-line edit.
+
+It is priced at +0.1, and the measurements are the reason it is that low rather
+than higher:
+
+- Over the 2026 season **Lee Sin appears in 12.6% of games** (228 of 230 picks
+  in the jungle) and **Akali in 10.2%** (175 of 185 mid). Both clear the 5%
+  meta bar comfortably, so in most windows they are already collecting a full
+  meta point — they are staples, not surprises.
+- Their win rates are **53.9%** and **55.1%**. Real, but slight.
+- Across the 374-game backtest the side holding more of them won **53.5%**
+  (68/127) — and adding the bonus did not improve the model at any value
+  tested. It cost one game at +0.1 and three at +0.5, with the Brier score
+  unchanged at 0.247 throughout. A *negative* bonus scored the same as a
+  positive one, which is what a term made of noise looks like.
+
+So it is kept small enough to colour a close call without overriding anything
+the data supports. Raise `DARK_HORSE_POINT` if you trust the read over the
+measurement; the backtest button will tell you what it costs.
 
 #### The rank edge, and why it carries real weight
 
@@ -400,7 +427,7 @@ would know before the game.
 **Backtest all matches** scores every match in the queue and prints the record:
 
 ```
-Accuracy 62.3% · 233R 141W
+Accuracy 62.0% · 232R 142W
 Always picking blue side would have scored 57.0%.
 374 of 374 graded · Brier 0.247 (coin flip = 0.250)
 ```

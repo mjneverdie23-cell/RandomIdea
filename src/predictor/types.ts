@@ -228,6 +228,8 @@ export interface SideScore {
   seriesEdge: number;
   /** Credit for the better GlobalRank, when the gap is wide enough. */
   rankBonus: number;
+  /** Credit for hand-listed high-ceiling champions on the board. */
+  darkHorseBonus: number;
   fraudPenalty: number;
   total: number;
 }

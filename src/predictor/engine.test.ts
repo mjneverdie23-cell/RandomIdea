@@ -11,6 +11,9 @@ import {
   behaviorTendencies,
   championWinRate,
   predict,
+  DARK_HORSE,
+  DARK_HORSE_POINT,
+  darkHorseCount,
   RANK_CAP,
   RANK_POINT,
   fraudBand,
@@ -648,6 +651,55 @@ describe('predict — rank edge', () => {
       input(),
     );
     expect(result.favourite).toBe('red');
+  });
+});
+
+describe('predict — dark horse', () => {
+  const LEE_SIN = champ('Lee Sin');
+  const AKALI = champ('Akali');
+  /** Blue's jungle and mid swapped for the two listed champions. */
+  const withDarkHorses = (count: 1 | 2) => {
+    const champions = [...DRAFT_A];
+    champions[1] = LEE_SIN;
+    if (count === 2) champions[2] = AKALI;
+    return input({ blue: { ...input().blue, champions } });
+  };
+
+  it('counts only the champions on the list', () => {
+    expect(darkHorseCount([LEE_SIN, AKALI])).toBe(2);
+    expect(darkHorseCount([LEE_SIN, null, DRAFT_A[0]!])).toBe(1);
+    expect(darkHorseCount(DRAFT_B)).toBe(0);
+    expect(DARK_HORSE.has(LEE_SIN.id)).toBe(true);
+    expect(DARK_HORSE.has(AKALI.id)).toBe(true);
+  });
+
+  it('pays per pick, and stays small', () => {
+    const one = predict(model(rostered()), withDarkHorses(1));
+    const two = predict(model(rostered()), withDarkHorses(2));
+    expect(one.blue.darkHorseBonus).toBeCloseTo(DARK_HORSE_POINT, 10);
+    expect(two.blue.darkHorseBonus).toBeCloseTo(2 * DARK_HORSE_POINT, 10);
+    expect(one.red.darkHorseBonus).toBe(0);
+    // Deliberately far below a meta point, which these champions already earn.
+    expect(DARK_HORSE_POINT).toBeLessThan(META_POINT / 2);
+  });
+
+  it('reaches the total', () => {
+    const plain = predict(model(rostered()), input());
+    const withOne = predict(model(rostered()), withDarkHorses(1));
+    expect(withOne.blue.total - plain.blue.total).toBeCloseTo(DARK_HORSE_POINT, 10);
+  });
+
+  it('names the picks in a notice', () => {
+    const notices = predict(model(rostered()), withDarkHorses(2)).notices;
+    const note = notices.find((n) => n.kind === 'draft' && n.text.includes('carry potential'));
+    expect(note?.side).toBe('blue');
+    expect(note?.text).toContain('Lee Sin');
+    expect(note?.text).toContain('Akali');
+  });
+
+  it('says nothing when neither side has one', () => {
+    const notices = predict(model(rostered()), input()).notices;
+    expect(notices.some((n) => n.text.includes('carry potential'))).toBe(false);
   });
 });
 

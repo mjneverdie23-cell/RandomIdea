@@ -13,6 +13,7 @@
  *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
  *   series edge     +0.3 per game of lead in the series so far, capped
  *   rank edge       +0.1 per place of GlobalRank gap, capped at 1.5
+ *   dark horse      +0.1 per hand-listed high-ceiling champion
  *
  * The fraud rating is reported as a notice and deliberately not scored: over
  * 374 backtested games it cost accuracy, and alone it predicted the winner only
@@ -165,6 +166,32 @@ export const NEUTRAL_WIN_RATE = 0.5;
  */
 export const SERIES_LEAD_POINT = 0.3;
 export const SERIES_LEAD_CAP = 0.6;
+
+/**
+ * Champions credited a small extra for carry potential, and what each is worth.
+ *
+ * These are hand-picked rather than derived: the claim is that a Lee Sin or an
+ * Akali in the right hands swings a game more than its win rate suggests,
+ * because the ceiling is higher than the average. Nothing in a results export
+ * measures that, so it is stated rather than computed. Edit the set to change
+ * which champions qualify.
+ *
+ * Priced deliberately low, and here is the honest reason. Measured over the
+ * 2026 season both are staples rather than surprises — Lee Sin appears in 12.6%
+ * of games and Akali in 10.2%, so both clear the meta pick-rate bar and already
+ * collect a full meta point. Their win rates are 53.9% and 55.1%: real, but
+ * slight, and largely already priced in. Backtested over 374 games the bonus
+ * did not help at any value tried, costing a game at +0.1 and three at +0.5,
+ * with the Brier score flat throughout. It is kept small so that it colours a
+ * close call without overriding anything the data actually supports.
+ */
+export const DARK_HORSE = new Set<string>(['LeeSin', 'Akali']);
+export const DARK_HORSE_POINT = 0.1;
+
+/** How many of a side's picks are on the dark-horse list. */
+export function darkHorseCount(champions: readonly (Champion | null)[]): number {
+  return champions.filter((champion) => champion !== null && DARK_HORSE.has(champion.id)).length;
+}
 
 /**
  * The rank edge: the only signal that compares teams across regions.
@@ -530,6 +557,7 @@ function scoreSide(
     motivationBonus: MOTIVATION_POINTS[input.motivation] ?? 0,
     seriesEdge: 0,
     rankBonus: 0,
+    darkHorseBonus: darkHorseCount(input.champions) * DARK_HORSE_POINT,
     fraudPenalty,
     total: 0,
   };
@@ -543,7 +571,8 @@ function finalizeTotal(score: SideScore): number {
     score.formEdge +
     score.motivationBonus +
     score.seriesEdge +
-    score.rankBonus
+    score.rankBonus +
+    score.darkHorseBonus
   );
 }
 
@@ -793,6 +822,21 @@ function buildNotices(
       text:
         `${score.team}: ${band} fraud rating (${score.fraudPenalty.toFixed(2)}) — ` +
         `reported only, it does not move the score.`,
+    });
+  }
+
+  for (const [side, entry, score] of [
+    ['blue', input.blue, blue],
+    ['red', input.red, red],
+  ] as const) {
+    if (score.darkHorseBonus <= 0) continue;
+    const names = entry.champions
+      .filter((champion): champion is Champion => champion !== null && DARK_HORSE.has(champion.id))
+      .map((champion) => champion.name);
+    notices.push({
+      kind: 'draft',
+      side,
+      text: `${score.team}: ${names.join(' and ')} on the board — carry potential (${signed(score.darkHorseBonus)}).`,
     });
   }
 
