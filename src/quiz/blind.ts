@@ -422,3 +422,55 @@ export function rungsCleared(run: BlindRun): number {
 export function lastResult(run: BlindRun): BlindResult | null {
   return run.results[run.results.length - 1] ?? null;
 }
+
+/* ------------------------------------------------------------------ */
+/* Round-end chart                                                     */
+/* ------------------------------------------------------------------ */
+
+/** The clock, in the whole seconds the chart is drawn in. */
+export const BLIND_TIME_SECONDS = Math.round(BLIND_TIME_MS / 1000);
+
+/** One bar of the time chart shown when a round ends. */
+export interface BlindTimePoint {
+  level: BlindLevel;
+  /** Whole seconds the call took, or `null` for a rung not played yet. */
+  seconds: number | null;
+  correct: boolean;
+  /** The clock ran out rather than a call being made. */
+  timedOut: boolean;
+}
+
+/**
+ * How long each rung took, in whole seconds.
+ *
+ * Rounded on purpose. The scoring runs on milliseconds because the speed bonus
+ * has to be continuous, but a bar chart drawn to three decimal places is
+ * noise pretending to be information — nobody reads "6.914s" off a bar. Every
+ * rung gets a slot whether or not it has been played, so the chart keeps its
+ * shape as a run progresses instead of growing a bar at a time.
+ *
+ * Bars are scaled by `chartAxis` against the slowest round rather than against
+ * the full 45-second clock. Most calls land in the first ten seconds, so a
+ * clock-scaled chart is four stubs of near-identical height — it answers "how
+ * much clock did you use" when the question being asked is "which of these took
+ * you longest".
+ */
+export function chartAxis(points: readonly BlindTimePoint[]): number {
+  const recorded = points
+    .map((point) => point.seconds)
+    .filter((seconds): seconds is number => seconds !== null);
+  return Math.max(1, ...recorded);
+}
+
+export function timeChart(run: BlindRun): BlindTimePoint[] {
+  return BLIND_LEVELS.map((level, index) => {
+    const result = run.results[index];
+    if (!result) return { level, seconds: null, correct: false, timedOut: false };
+    return {
+      level,
+      seconds: Math.round(result.elapsedMs / 1000),
+      correct: result.correct,
+      timedOut: result.call === null,
+    };
+  });
+}

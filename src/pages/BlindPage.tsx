@@ -4,6 +4,7 @@ import { DraftBoard } from '../components/draft/DraftBoard.tsx';
 import { GameContextBar } from '../components/GameContextBar.tsx';
 import { PatchMetaPanel } from '../components/meta/PatchMetaPanel.tsx';
 import { Countdown } from '../components/quiz/Countdown.tsx';
+import { BlindRoundModal } from '../components/quiz/BlindRoundModal.tsx';
 import { PredictionBar } from '../components/quiz/PredictionBar.tsx';
 import { toPrompt, type Game, type Side } from '../domain/types.ts';
 import {
@@ -255,30 +256,13 @@ export function BlindPage() {
       )}
 
       {revealing && result && (
-        <section
-          className={`blind-reveal blind-reveal--${result.correct ? 'correct' : 'wrong'}`}
-          role="status"
-        >
-          <div className="blind-reveal-main">
-            <span className="blind-reveal-label">
-              {result.correct
-                ? 'Read it right'
-                : result.call === null
-                  ? 'Out of time'
-                  : 'Wrong call'}
-            </span>
-            <span className="dim">
-              {game[game.winner].teamName} won in {formatSeconds(result.elapsedMs)} of your clock.
-              {result.correct
-                ? result.speedBonus > 0 && ` ${result.speedBonus} of that was speed.`
-                : ' No points this level — the run continues.'}
-            </span>
-          </div>
-          <span className="blind-reveal-points num">+{result.points}</span>
-          <button type="button" className="btn btn-primary" onClick={() => dispatch({ type: 'next' })}>
-            {run.level + 1 >= BLIND_LEVELS.length ? 'Finish' : 'Next level'} →
-          </button>
-        </section>
+        <BlindRoundModal
+          run={run}
+          result={result}
+          game={game}
+          last={run.level + 1 >= BLIND_LEVELS.length}
+          onContinue={() => dispatch({ type: 'next' })}
+        />
       )}
 
       {run.status === 'playing' && (

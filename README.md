@@ -241,6 +241,27 @@ hinted rung is worth a quarter of face value: still worth answering, never worth
 defaulting to. And the clock keeps running while you read them, so a hint costs
 time as well as points.
 
+#### What comes up when a round ends
+
+A modal, not a strip under the board — the round is genuinely over, there is
+nothing left to read on the draft, and holding you there until you dismiss it is
+the point. It carries the answer (which team won, what you called, how long you
+took), the points with the speed half broken out, and a bar chart of the seconds
+each round has taken so far.
+
+The chart is drawn in **whole seconds**. Scoring runs on milliseconds because
+the speed bonus has to be continuous, but a bar labelled `6.914s` is noise
+pretending to be information.
+
+Bars are scaled against the **slowest round of the run**, not against the full
+45-second clock. Most calls land inside ten seconds, so a clock-scaled chart is
+four stubs of near-identical height — it answers "how much clock did you use"
+when the question being asked is "which of these took you longest". The caption
+names the tallest bar so the axis is never ambiguous. Every level keeps a slot
+from the first round, so the chart holds its shape instead of growing a bar at a
+time, and bars are coloured by what happened: green for a correct read, red for
+a wrong one, hatched for running the clock out.
+
 #### The blind board
 
 Blind runs get their own leaderboard rather than another category on the quiz

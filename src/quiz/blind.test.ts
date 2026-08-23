@@ -18,6 +18,9 @@ import {
   MIN_RATED_GAMES,
   speedFactor,
   SPEED_SHARE,
+  timeChart,
+  chartAxis,
+  BLIND_TIME_SECONDS,
   rateGames,
   rungsCleared,
 } from './blind.ts';
@@ -393,6 +396,74 @@ describe('blindReducer', () => {
     expect(fresh).toEqual(createBlindRun(fresh.games));
     expect(fresh.score).toBe(0);
     expect(fresh.timeMs).toBe(0);
+  });
+});
+
+describe('timeChart', () => {
+  const ladder = () => buildLadder(rateGames(pool()), 'seed');
+  const answer = (state: ReturnType<typeof createBlindRun>, correct: boolean, elapsedMs: number) =>
+    blindReducer(
+      blindReducer(state, {
+        type: 'answer',
+        prediction: correct
+          ? currentBlindGame(state)!.winner
+          : currentBlindGame(state)!.winner === 'blue'
+            ? 'red'
+            : 'blue',
+        elapsedMs,
+      }),
+      { type: 'next' },
+    );
+
+  it('keeps a slot for every level from the start', () => {
+    const chart = timeChart(createBlindRun(ladder()));
+    expect(chart.map((point) => point.level)).toEqual([...BLIND_LEVELS]);
+    expect(chart.every((point) => point.seconds === null)).toBe(true);
+  });
+
+  it('rounds to whole seconds', () => {
+    // 6.914s is noise pretending to be information on a bar chart.
+    let state = createBlindRun(ladder());
+    state = answer(state, true, 6_914);
+    state = answer(state, true, 12_500);
+    state = answer(state, true, 12_499);
+    expect(timeChart(state).map((point) => point.seconds)).toEqual([7, 13, 12, null]);
+  });
+
+  it('marks each bar right, wrong or timed out', () => {
+    let state = createBlindRun(ladder());
+    state = answer(state, true, 1_000);
+    state = answer(state, false, 2_000);
+    state = blindReducer(
+      blindReducer(state, { type: 'answer', prediction: null, elapsedMs: 45_000 }),
+      { type: 'next' },
+    );
+    const chart = timeChart(state);
+    expect(chart[0]).toMatchObject({ correct: true, timedOut: false });
+    expect(chart[1]).toMatchObject({ correct: false, timedOut: false });
+    expect(chart[2]).toMatchObject({ correct: false, timedOut: true, seconds: 45 });
+    expect(chart[3]!.seconds).toBeNull();
+  });
+
+  it('reports the clock in the same whole seconds the bars use', () => {
+    expect(BLIND_TIME_SECONDS).toBe(45);
+    expect(Number.isInteger(BLIND_TIME_SECONDS)).toBe(true);
+  });
+
+  it('scales the axis to the slowest round, not the whole clock', () => {
+    // Four calls inside ten seconds against a 45s axis is four identical
+    // stubs; against the slowest of them the differences are the chart.
+    let state = createBlindRun(ladder());
+    state = answer(state, true, 1_000);
+    state = answer(state, true, 5_000);
+    state = answer(state, true, 3_000);
+    expect(chartAxis(timeChart(state))).toBe(5);
+  });
+
+  it('never divides by zero on an unplayed or instant run', () => {
+    expect(chartAxis(timeChart(createBlindRun(ladder())))).toBe(1);
+    const instant = answer(createBlindRun(ladder()), true, 200);
+    expect(chartAxis(timeChart(instant))).toBe(1);
   });
 });
 
