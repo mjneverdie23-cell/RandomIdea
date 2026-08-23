@@ -13,27 +13,42 @@ interface DraftBoardProps {
   /** Set only after the user has answered. */
   winner?: Side | null;
   compact?: boolean;
+  /**
+   * Hide who is playing, leaving only the champions on the board.
+   *
+   * Blind mode's whole question is "can you read this draft", which stops being
+   * a question the moment a badge says T1. Team names, tags, logos and player
+   * names all go; the bans and picks stay.
+   */
+  anonymous?: boolean;
 }
 
 export const DraftBoard = memo(function DraftBoard({
   game,
   winner = null,
   compact = false,
+  anonymous = false,
 }: DraftBoardProps) {
   return (
     <section
       className={`draft${compact ? ' is-compact' : ''}`}
       data-winner={winner ?? undefined}
-      aria-label={`Draft: ${game.blue.teamName} versus ${game.red.teamName}`}
+      aria-label={
+        anonymous
+          ? 'Draft: blue side versus red side, teams hidden'
+          : `Draft: ${game.blue.teamName} versus ${game.red.teamName}`
+      }
     >
-      <DraftSide team={game.blue} isWinner={winner === 'blue'} />
+      <DraftSide team={game.blue} isWinner={winner === 'blue'} anonymous={anonymous} />
 
       <div className="draft-center">
-        <div className="draft-center-tags">
-          <TeamLogo teamName={game.blue.teamName} tag={game.blue.tag} size="sm" />
-          <span className="dim">/</span>
-          <TeamLogo teamName={game.red.teamName} tag={game.red.tag} size="sm" />
-        </div>
+        {!anonymous && (
+          <div className="draft-center-tags">
+            <TeamLogo teamName={game.blue.teamName} tag={game.blue.tag} size="sm" />
+            <span className="dim">/</span>
+            <TeamLogo teamName={game.red.teamName} tag={game.red.tag} size="sm" />
+          </div>
+        )}
         <div className="draft-vs">VS</div>
         <div className="draft-center-meta">
           <span className="badge badge-strong">Game {game.gameNumber}</span>
@@ -45,15 +60,23 @@ export const DraftBoard = memo(function DraftBoard({
         </div>
       </div>
 
-      <DraftSide team={game.red} isWinner={winner === 'red'} />
+      <DraftSide team={game.red} isWinner={winner === 'red'} anonymous={anonymous} />
     </section>
   );
 });
 
-function DraftSide({ team, isWinner }: { team: TeamSide; isWinner: boolean }) {
+function DraftSide({
+  team,
+  isWinner,
+  anonymous,
+}: {
+  team: TeamSide;
+  isWinner: boolean;
+  anonymous: boolean;
+}) {
   const sideLabel = team.side === 'blue' ? 'Blue Side' : 'Red Side';
   return (
-    <div className={`draft-side draft-side--${team.side}`}>
+    <div className={`draft-side draft-side--${team.side}${anonymous ? ' is-anonymous' : ''}`}>
       <header className="side-head">
         <BanRow bans={team.bans} side={team.side} />
         <div className="side-id">
@@ -61,11 +84,13 @@ function DraftSide({ team, isWinner }: { team: TeamSide; isWinner: boolean }) {
             {sideLabel}
             {isWinner && <span className="winner-stamp">Winner</span>}
           </span>
-          <span className="side-team" title={team.teamName}>
-            {team.teamName}
+          <span className="side-team" title={anonymous ? 'Hidden' : team.teamName}>
+            {anonymous ? '—' : team.teamName}
           </span>
         </div>
-        <TeamLogo teamName={team.teamName} tag={team.tag} size="lg" className="side-tag" />
+        {!anonymous && (
+          <TeamLogo teamName={team.teamName} tag={team.tag} size="lg" className="side-tag" />
+        )}
       </header>
 
       <div className="picks">
@@ -80,8 +105,8 @@ function DraftSide({ team, isWinner }: { team: TeamSide; isWinner: boolean }) {
             </div>
             <span className="pick-role">{ROLE_SHORT[slot.role]}</span>
             <div className="pick-info">
-              <span className="pick-player" title={slot.playerName}>
-                {slot.playerName}
+              <span className="pick-player" title={anonymous ? 'Hidden' : slot.playerName}>
+                {anonymous ? '—' : slot.playerName}
               </span>
               <span className="pick-champ" title={slot.champion.name}>
                 {slot.champion.name}

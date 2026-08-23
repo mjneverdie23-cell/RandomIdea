@@ -193,6 +193,54 @@ The results screen reports where a finished run landed on its own board
 Runs recorded before question styles existed have no style attached; they show
 under "any style" rather than being guessed into a bucket.
 
+### Blind mode
+
+A separate game at `/blind`: a four-rung survival ladder played with the draft
+alone. No team names, no player names, no tournament, no date, no patch — the
+bans, the picks and the league, and nothing else.
+
+One question per rung, each drawn to be harder than the last. Call it right and
+you climb; call it wrong and the run is over, with a panel offering **Restart**
+(a fresh ladder, not the same four games) or **Home**. Clear all four and you
+have beaten it.
+
+**Three hints** are available on every rung, in order, and taking one costs
+nothing but the record of having taken it:
+
+1. Reveal teams and players
+2. Reveal the patch and its meta
+3. Reveal the tournament and date
+
+#### How a level's difficulty is decided
+
+Difficulty is the gap between the two teams' season win rates, which is the
+closest thing the data has to "how obvious was this on paper". The bands are cut
+from the real distribution rather than guessed — measured across the 2026
+season, the favourite went on to win:
+
+| rung | gap in win rate | games | favourite won |
+| --- | --- | --- | --- |
+| Easy | 0.22 and up | 344 | **78.8%** |
+| Medium | 0.12 – 0.22 | 611 | **64.5%** |
+| Hard | 0.05 – 0.12 | 418 | **58.6%** |
+| Impossible | below 0.05 | 373 | **51.7%** |
+
+Two details make those numbers mean what they say.
+
+Each team's record is taken over the whole pool **minus the game being rated**.
+Leaving it in is a quiet form of leakage: a team's win rate is nudged up by the
+game it just won, which at small gaps is enough to flip which side counts as the
+favourite. It made the coin-flip rung look 6 points more predictable than it is
+— 57.7% against the 51.7% that shows up once the game is excluded.
+
+The **easy** rung additionally requires that the favourite actually won. Without
+it about a fifth of easy questions are upsets, which makes the one rung that has
+to be winnable a trap. Every rung above takes whatever the band offers, upsets
+included, because that is the difficulty being asked for.
+
+A team needs at least 10 games before its win rate is used to rate anything, so
+a side with two matches on record cannot land a question on the wrong rung.
+
 ### Reproducibility
 
 Every quiz carries a seed. The same seed against the same dataset produces the

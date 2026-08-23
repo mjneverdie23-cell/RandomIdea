@@ -6,6 +6,7 @@ import { PredictorProvider } from './state/PredictorContext.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { SetupPage } from './pages/SetupPage.tsx';
 import { QuizPage } from './pages/QuizPage.tsx';
+import { BlindPage } from './pages/BlindPage.tsx';
 import { ResultsPage } from './pages/ResultsPage.tsx';
 import { LeaderboardPage } from './pages/LeaderboardPage.tsx';
 import { DataPage } from './pages/DataPage.tsx';
@@ -23,6 +24,7 @@ export default function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/setup" element={<SetupPage />} />
                 <Route path="/quiz" element={<QuizPage />} />
+                <Route path="/blind" element={<BlindPage />} />
                 <Route path="/results" element={<ResultsPage />} />
                 <Route path="/predictor" element={<PredictorPage />} />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />

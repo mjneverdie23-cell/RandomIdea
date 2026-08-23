@@ -76,6 +76,9 @@ export function HomePage() {
             >
               Quick play · 10 mixed
             </button>
+            <Link className="btn btn-lg" to="/blind">
+              Blind mode
+            </Link>
           </div>
 
           <dl className="hero-facts">
