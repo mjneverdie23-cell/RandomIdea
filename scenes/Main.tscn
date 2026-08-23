@@ -1,4 +1,4 @@
-[gd_scene load_steps=31 format=3]
+[gd_scene load_steps=32 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/game_root.gd" id="1_root"]
 [ext_resource type="Script" path="res://scripts/map/map_controller.gd" id="2_map"]
@@ -20,6 +20,7 @@
 [ext_resource type="Script" path="res://scripts/ui/multiplayer_menu.gd" id="19_menu"]
 [ext_resource type="Script" path="res://scripts/ui/settings_panel.gd" id="24_settings"]
 [ext_resource type="Script" path="res://scripts/game/nameplate_overlay.gd" id="25_plates"]
+[ext_resource type="Script" path="res://scripts/game/ability_aim_indicator.gd" id="27_aim"]
 [ext_resource type="Resource" path="res://resources/ui/nameplates.tres" id="26_platecfg"]
 [ext_resource type="Resource" path="res://resources/net/enet_transport.tres" id="20_transport"]
 [ext_resource type="Script" path="res://scripts/game/range_visualizer.gd" id="21_range"]
@@ -98,6 +99,9 @@ script = ExtResource("21_range")
 
 [node name="Nameplates" type="Node3D" parent="."]
 script = ExtResource("25_plates")
+
+[node name="AbilityAim" type="Node3D" parent="."]
+script = ExtResource("27_aim")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")

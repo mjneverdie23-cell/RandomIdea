@@ -147,6 +147,8 @@ main scene). You spawn as Team A in the bottom-left fountain.
 | `B` | Recall (channel, interrupted by moving) |
 | `Ctrl+Q` `Ctrl+E` `Ctrl+R` `Ctrl+F` | Spend a skill point on that ability |
 | `C` (hold) | Show **your own** attack range while held |
+| `Tab` (hold) | Scoreboard — every champion's level, K/D/A and items |
+| `Shift` + `Q`/`E`/`R`/`F` (hold) | Aim that ability; it casts when you let the ability key go |
 | `P` | Open the shop (buying still needs your base) |
 | `O` | Controls / key bindings |
 | `Space` | Toggle camera lock / free pan |
@@ -252,6 +254,11 @@ The smoke test boots the real game scene and asserts that:
 * a bush fades the champion by exactly the configured amount, never below
   legibility, and clears completely on the way out without changing vision;
 * K/D/A counts a champion kill, a death and neither for a minion;
+* the scoreboard lists every champion with own team first, and holding the
+  control opens it and releasing closes it;
+* Q reaches further than the basic attack, aiming an ability shows an indicator
+  without casting, the arrow is clamped to the ability's range, and releasing
+  is what fires it;
 * rebinding writes the input map, a duplicate is refused, reset restores the
   defaults and a saved binding reloads;
 * a second map configuration builds and passes the same reachability check.
@@ -608,6 +615,32 @@ does, and the developer cheats stay off the panel entirely.
 
 Only the keyboard event of an action is replaced, so rebinding "zoom in" to a
 key does not cost you the mouse wheel.
+
+### Aiming an ability
+
+Tapping an ability casts it straight away. Holding the aim modifier
+(`Shift`) with an ability key down instead lines it up: `AbilityAimIndicator`
+draws a ring at that ability's own cast range and an arrow from the champion to
+the cursor, clamped to the range so it points at the shot that would actually
+go out. Letting the ability key go casts it; letting the modifier go first
+cancels.
+
+The ring is the point: Q reaches 16 m and the basic attack 8 m, and until there
+was something to look at, the difference was a number in a `.tres` file. Both
+are local presentation and neither is replicated — an opponent never sees what
+you are lining up.
+
+Basic attacks are travelling shots rather than instant hits, so an auto and an
+ability look like the same kind of thing; the basic attack's projectile is
+deliberately the smaller of the two (`UnitStats.projectile_size`).
+
+### The scoreboard
+
+Held with `Tab`. Every champion in the match, your team first: level, K/D/A and
+item slots, read live off the same components the HUD reads, so on a client it
+shows what the server replicated and nothing it worked out for itself. Gold is
+shown for your own team only — the rest of the board is public knowledge in a
+real match, and how much money the enemy is sitting on is not.
 
 ### Health bars and names
 

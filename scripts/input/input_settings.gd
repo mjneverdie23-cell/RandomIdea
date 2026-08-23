@@ -21,9 +21,9 @@ const SECTION := "bindings"
 const GROUPS: Array[Dictionary] = [
 	{"title": "Movement", "actions": ["move_up", "move_left", "move_down", "move_right"]},
 	{"title": "Combat", "actions": ["basic_attack", "ability_q", "ability_e", "ability_r",
-		"ability_f", "recall"]},
+		"ability_f", "recall", "aim_ability"]},
 	{"title": "Levelling", "actions": ["upgrade_q", "upgrade_e", "upgrade_r", "upgrade_f"]},
-	{"title": "Interface", "actions": ["toggle_shop", "show_range", "camera_lock",
+	{"title": "Interface", "actions": ["toggle_shop", "show_range", "show_scoreboard", "camera_lock",
 		"camera_zoom_in", "camera_zoom_out", "toggle_debug", "open_settings", "restart_match"]},
 ]
 
@@ -31,6 +31,8 @@ const LABELS := {
 	"move_up": "Move up", "move_left": "Move left",
 	"move_down": "Move down", "move_right": "Move right",
 	"basic_attack": "Basic attack", "recall": "Recall",
+	"aim_ability": "Aim modifier (hold with an ability)",
+	"show_scoreboard": "Scoreboard (hold)",
 	"ability_q": "Ability 1", "ability_e": "Ability 2",
 	"ability_r": "Ability 3", "ability_f": "Ability 4",
 	"upgrade_q": "Upgrade ability 1", "upgrade_e": "Upgrade ability 2",

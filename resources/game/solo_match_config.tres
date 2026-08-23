@@ -35,5 +35,5 @@ spawn_turret_controllers = true
 enemy_champion_ai = true
 starting_enemy_champions = 1
 ai_push_target = 0.5
-bush_concealment_fade = 0.25
+bush_concealment_fade = 0.4
 combat_debug_on_start = false

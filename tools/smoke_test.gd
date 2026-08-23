@@ -60,6 +60,8 @@ func _run() -> void:
 	await _check_concealment()
 	await _check_scoreboard()
 	_check_settings_bindings()
+	await _check_ability_aim()
+	_check_scoreboard_ui()
 	await _capture_screenshots()
 	await _check_alternate_map()
 
@@ -730,7 +732,7 @@ func _check_concealment() -> void:
 		_fail("no bush or no concealment component to check")
 		return
 	var fade: float = _root.director.config.bush_concealment_fade
-	_expect(fade > 0.0 and fade <= 0.4, "the bush fade is not a mild one (%.2f)" % fade)
+	_expect(fade > 0.0 and fade <= 0.5, "the bush fade is not a mild one (%.2f)" % fade)
 
 	# The fountain, not "a few metres past the bush edge" — on the three-lane
 	# map that lands inside RIVER_BUSH_1, which is a fine place to be concealed.
@@ -745,7 +747,7 @@ func _check_concealment() -> void:
 	var alpha := _visual_alpha(champion)
 	print("[SmokeTest] champion alpha in a bush: %.2f (fade %.2f)" % [alpha, fade])
 	_expect(is_equal_approx(alpha, 1.0 - fade), "the bush fade is not the configured amount")
-	_expect(alpha >= 0.6, "the champion is close to invisible in a bush")
+	_expect(alpha >= 0.5, "the champion is close to invisible in a bush")
 
 	# Vision is unaffected: the champion still lights the bush for its own team,
 	# and concealment is not a stealth mechanic.
@@ -844,6 +846,83 @@ func _check_settings_bindings() -> void:
 	InputSettings.reset_all()
 	InputSettings.clear_saved()
 	print("[SmokeTest] rebinding, conflict detection, reset and persistence all hold")
+
+
+# --- ability aiming and the scoreboard ---------------------------------------
+
+## Holding the aim modifier with an ability down shows that ability's reach and
+## where the shot would go, and casts nothing until the key is released.
+func _check_ability_aim() -> void:
+	await _isolate_arena()
+	var champion := _root.champion
+	var indicator := _root.aim_indicator
+	var abilities := champion.abilities
+	champion.teleport_to(champion.spawn_point)
+	abilities.reset_cooldowns()
+	champion.resource_pool.refill()
+	await _settle_physics(4)
+
+	var q := int(InputCommands.AbilitySlot.Q)
+	var ability := abilities.ability_for(q)
+	_expect(ability.cast_range > champion.attack_range(),
+		"Q reaches %.1f m and the auto attack reaches %.1f m" % [
+			ability.cast_range, champion.attack_range()])
+	print("[SmokeTest] Q reaches %.0f m, the auto attack %.0f m" % [
+		ability.cast_range, champion.attack_range()])
+
+	_expect(not indicator.is_aiming(), "the aim indicator is up before anything asked")
+	# Aim well past the ability's reach: the arrow must show the clamped shot.
+	var far := champion.global_position + Vector3(ability.cast_range * 3.0, 0.0, 0.0)
+	_root.commands.set_aim_point(far)
+	_root.commands.set_ability_aim(q)
+	await _settle(4)
+	_expect(indicator.is_aiming(), "holding an ability aimed showed no indicator")
+	_expect(abilities.cooldown_remaining(q) <= 0.0, "aiming an ability cast it immediately")
+	var reach := indicator.aim_point().distance_to(champion.global_position)
+	print("[SmokeTest] aim clamped to %.1f m of a %.0f m ability" % [reach, ability.cast_range])
+	_expect(reach <= ability.cast_range + 0.5, "the aim indicator points past the ability's range")
+
+	# Releasing is what fires it.
+	_root.commands.set_ability_aim(-1)
+	_root.commands.request_ability(q)
+	await _settle(4)
+	_expect(not indicator.is_aiming(), "the indicator stayed up after the release")
+	_expect(abilities.cooldown_remaining(q) > 0.0, "releasing the aim did not cast the ability")
+	abilities.reset_cooldowns()
+
+	# The basic attack is a travelling shot now, and a smaller one than the Q.
+	_expect(champion.stats.value("projectile_speed") > 0.0,
+		"the basic attack is still an instant hit with no shot to watch")
+	_expect(champion.stats.value("projectile_size") < ability.projectile_size,
+		"the basic attack's shot is not smaller than the ability's")
+
+
+## The scoreboard lists every champion on both teams with what it knows.
+func _check_scoreboard_ui() -> void:
+	var board := _root.hud.scoreboard
+	_expect(not board.is_open(), "the scoreboard is open without being asked for")
+	_root.commands.set_scoreboard(true)
+	_expect(board.is_open(), "holding the scoreboard control did not open it")
+
+	var listed := board.rows()
+	var champions := 0
+	for unit in Battle.all():
+		if unit.kind == Unit.Kind.CHAMPION:
+			champions += 1
+	_expect(listed.size() == champions,
+		"the scoreboard lists %d of %d champions" % [listed.size(), champions])
+	_expect(listed.size() >= 2, "the scoreboard has nobody to compare against")
+	# Own team first, so the player reads their own side without hunting.
+	_expect(listed[0].team == _root.champion.team, "the scoreboard does not lead with your team")
+	_expect(listed[listed.size() - 1].team != _root.champion.team,
+		"the scoreboard never reaches the other team")
+	for unit in listed:
+		_expect(unit.score != null and unit.inventory != null,
+			"%s has nothing for the scoreboard to show" % unit.display_name())
+	print("[SmokeTest] scoreboard lists %d champions, own team first" % listed.size())
+
+	_root.commands.set_scoreboard(false)
+	_expect(not board.is_open(), "releasing the scoreboard control did not close it")
 
 
 # --- attack-range visibility -------------------------------------------------

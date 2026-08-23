@@ -26,6 +26,8 @@ the [Invariants](#invariants) section before going further.
 | Retune wards | `resources/vision/prototype_ward.tres` | no |
 | Restyle the HUD or the minimap | `resources/ui/prototype_hud.tres` | no |
 | Change what health bars and names show | `resources/ui/nameplates.tres` | no |
+| Retune the aim ring and arrow | `resources/ui/range_display.tres` | no |
+| Give a unit a visible shot | its `.tres`: `projectile_speed` above 0, plus `projectile_size` | no |
 | Change which attack ranges are drawn | `resources/ui/range_display.tres` (colours, two rules) or `RangeVisualizer` (the rules) | maybe |
 | Move or resize the bushes | the map's `_build_bushes()` + `bush_radius` | small |
 | Move the shops | they follow each layout's champion spawn point | no |
@@ -722,6 +724,17 @@ Three things worth knowing before you touch it:
 * Defaults are captured from the project's own input map on first use, not
   written out a second time by hand.
 
+### The scoreboard
+
+`Scoreboard` is a HUD widget like the shop, held open with Tab. It reads
+`ScoreComponent`, `LevelComponent` and `InventoryComponent` off every champion
+in `Battle`, which is why it needs no replication of its own — those three are
+already server-authoritative and already sent.
+
+It shows gold for your own team only. That is a deliberate line, not an
+oversight: the rest of the board is public knowledge in a match, and the
+enemy's bank balance is not.
+
 ### Health bars and champion names
 
 `NameplateOverlay` owns both, for every unit kind, on both maps, from
@@ -740,6 +753,23 @@ The pieces of one plate are coplanar, so distance sorting cannot separate them
 and `render_priority` has to say which is on top — backing, then fill, then the
 name's outline, then its glyphs. Getting that last pair backwards renders the
 name as a solid black blob.
+
+### Aiming an ability
+
+Three pieces, none of which knows about the others' business.
+`PCInputController` notices the aim modifier held with an ability key and calls
+`InputCommands.set_ability_aim(slot)`; `AbilityAimIndicator` draws the ring and
+the arrow; the cast is the ordinary `request_ability()` the controller fires on
+release. Nothing new reaches the champion, so an aimed cast and a tapped one
+are the same call and the authority validates both identically.
+
+The arrow is clamped with `AbilityData.clamp_aim()` — the same clamp the
+ability itself applies when it fires — so what you see and what goes out cannot
+disagree.
+
+Both the aim modifier and the ability keys are polled rather than driven by
+press/release events, for the reason the range ring is: a key-up swallowed by a
+panel would otherwise leave a player stuck aiming something they cannot cancel.
 
 ### Attack ranges
 
@@ -877,6 +907,8 @@ once.
 - **A test point "just outside" one bush can be inside another.** `bush.radius
   + 6` on the three-lane map lands in `RIVER_BUSH_1`. Assert
   `Vision.zone_at(p) == null` rather than assuming.
+- **A cone mesh points up.** `PrototypeMeshes.cone()` builds along +Y, so an
+  arrow head that should point along +Z needs laying down by 90 degrees first.
 - **Two systems drawing the same thing is one too many.** Health bars used to
   live in the developer overlay, which is why turning that off to hide debug
   identifiers also took the bars with it. `NameplateOverlay` owns them now and

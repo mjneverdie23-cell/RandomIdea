@@ -59,5 +59,10 @@ extends Resource
 @export_range(200.0, 900.0, 10.0) var shop_width: float = 420.0
 @export_range(24.0, 120.0, 2.0) var shop_row_height: float = 54.0
 
+@export_group("Scoreboard")
+@export_range(300.0, 1400.0, 10.0) var scoreboard_width: float = 620.0
+@export_range(20.0, 80.0, 1.0) var scoreboard_row_height: float = 34.0
+@export_range(10.0, 60.0, 1.0) var scoreboard_item_size: float = 22.0
+
 @export_group("Toasts")
 @export_range(0.5, 10.0, 0.1) var toast_duration: float = 2.2

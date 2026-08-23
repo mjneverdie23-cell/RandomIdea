@@ -28,6 +28,11 @@ signal ward_requested(aim_point: Vector3)
 signal shop_toggle_requested()
 ## True while the player is holding the show-range control down.
 signal range_display_changed(active: bool)
+## The ability slot currently being aimed, or -1 for none. While a slot is
+## being aimed it is not cast: the cast goes out when the player lets go.
+signal ability_aim_changed(slot: int)
+## True while the player is holding the scoreboard control down.
+signal scoreboard_changed(active: bool)
 signal settings_toggle_requested()
 
 ## Desired movement on the XZ plane in world space, length 0..1.
@@ -36,6 +41,10 @@ var move_direction: Vector2 = Vector2.ZERO
 var aim_point: Vector3 = Vector3.ZERO
 ## Whether the show-range control is currently held.
 var range_display_active: bool = false
+## Slot being aimed right now, or -1.
+var ability_aim_slot: int = -1
+## Whether the scoreboard control is currently held.
+var scoreboard_active: bool = false
 
 
 func set_move_direction(direction: Vector2) -> void:
@@ -104,6 +113,22 @@ func set_range_display(active: bool) -> void:
 		return
 	range_display_active = active
 	range_display_changed.emit(active)
+
+
+## Begin or end aiming an ability. Pass -1 to stop. Nothing is cast here — the
+## caller fires [method request_ability] when the player commits.
+func set_ability_aim(slot: int) -> void:
+	if slot == ability_aim_slot:
+		return
+	ability_aim_slot = slot
+	ability_aim_changed.emit(slot)
+
+
+func set_scoreboard(active: bool) -> void:
+	if active == scoreboard_active:
+		return
+	scoreboard_active = active
+	scoreboard_changed.emit(active)
 
 
 func request_settings_toggle() -> void:

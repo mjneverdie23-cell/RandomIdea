@@ -23,6 +23,9 @@ extends Resource
 @export_range(0.05, 10.0, 0.05) var attack_speed: float = 0.8
 ## 0 makes the hit instant; anything higher spawns a travelling projectile.
 @export_range(0.0, 200.0, 1.0) var projectile_speed: float = 0.0
+## Radius of that projectile. Deliberately smaller than an ability's shot, so a
+## basic attack reads as the lighter thing it is.
+@export_range(0.05, 2.0, 0.05) var projectile_size: float = 0.3
 ## Flat bonus added to ability damage. Items and levels raise it.
 @export_range(0.0, 2000.0, 1.0) var ability_power: float = 0.0
 

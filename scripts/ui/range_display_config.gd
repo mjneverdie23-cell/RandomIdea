@@ -17,6 +17,13 @@ extends Resource
 @export var debug_ally_color: Color = Color(0.40, 0.70, 0.95, 0.55)
 @export var debug_enemy_color: Color = Color(0.90, 0.50, 0.45, 0.55)
 
+@export_group("Ability aiming")
+## The ring and arrow shown while an ability is being aimed.
+@export var aim_color: Color = Color(0.45, 0.85, 1.0, 0.9)
+@export_range(0.05, 2.0, 0.01) var aim_ring_thickness: float = 0.3
+@export_range(0.05, 3.0, 0.05) var aim_arrow_width: float = 0.55
+@export_range(0.1, 4.0, 0.1) var aim_arrow_head: float = 1.6
+
 @export_group("Rules")
 ## An enemy tower reveals its ring once the local champion is inside it. Vision
 ## of the tower is required as well, so fog of war still hides a threat.

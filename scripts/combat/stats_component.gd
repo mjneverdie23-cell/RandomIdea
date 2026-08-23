@@ -13,7 +13,7 @@ signal modifier_expired(id: String)
 ## Field name -> {"add": float, "mult": float}
 const FIELDS := [
 	"max_health", "health_regen", "damage_reduction",
-	"attack_damage", "attack_range", "attack_speed", "projectile_speed",
+	"attack_damage", "attack_range", "attack_speed", "projectile_speed", "projectile_size",
 	"ability_power", "max_resource", "resource_regen", "move_speed", "vision_radius",
 ]
 

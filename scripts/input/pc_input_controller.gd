@@ -13,6 +13,8 @@ extends Node
 ## Ctrl + Q/E/R/F  spend a skill point on that ability
 ## B             recall
 ## C (held)      show my own attack range while it is down
+## Shift + Q/E/R/F (held)  aim the ability, cast it on release
+## Tab (held)     scoreboard
 ## P             open/close the shop (buying still needs the base zone)
 ## O             settings
 ## Space         toggle camera lock
@@ -49,6 +51,8 @@ var _camera: Camera3D
 var _commands: InputCommands
 ## Ground plane the mouse is projected onto to produce an aim point.
 var _ground := Plane(Vector3.UP, 0.0)
+## Ability slot the player is currently aiming with the modifier held, or -1.
+var _aiming: int = -1
 
 
 func _ready() -> void:
@@ -84,6 +88,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_commands.request_settings_toggle()
 	elif event.is_action_pressed("restart_match"):
 		_commands.request_restart()
+	elif Input.is_action_pressed("aim_ability"):
+		pass  # Shift + an ability key aims it; the cast is handled on release.
 	else:
 		for slot in UPGRADE_ACTIONS:
 			if event.is_action_pressed(UPGRADE_ACTIONS[slot], false, true):
@@ -104,6 +110,30 @@ func _process(_delta: float) -> void:
 	# a panel or lost to a window focus change would otherwise strand the ring
 	# on screen. Reading the held state every frame is self-correcting.
 	_commands.set_range_display(Input.is_action_pressed("show_range"))
+	_commands.set_scoreboard(Input.is_action_pressed("show_scoreboard"))
+	_update_ability_aim()
+
+
+## Holding the aim modifier with an ability key down shows that ability's range
+## and where it would go; letting the ability key go casts it. Polled for the
+## same reason the range ring is: a swallowed key-up must not leave the player
+## stuck in an aim they cannot cancel.
+func _update_ability_aim() -> void:
+	var wanted := -1
+	if Input.is_action_pressed("aim_ability"):
+		for slot in ABILITY_ACTIONS:
+			if Input.is_action_pressed(ABILITY_ACTIONS[slot]):
+				wanted = slot
+				break
+	if wanted == _aiming:
+		return
+	var released := _aiming
+	_aiming = wanted
+	_commands.set_ability_aim(wanted)
+	# Letting go of the ability key commits the cast; letting go of the
+	# modifier first cancels it, which is the escape hatch.
+	if released >= 0 and wanted < 0 and Input.is_action_pressed("aim_ability"):
+		_commands.request_ability(released)
 
 
 func _camera_relative_move() -> Vector2:

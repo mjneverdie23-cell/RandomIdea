@@ -85,13 +85,19 @@ func try_attack(target: Node3D) -> bool:
 	if projectile_speed > 0.0:
 		Projectile.launch(
 			projectile_parent, unit.get_muzzle_position(), target, target.get_aim_position(),
-			projectile_speed, damage, unit, PrototypeMeshes.team_color(unit.team).lightened(0.3)
+			projectile_speed, damage, unit,
+			PrototypeMeshes.team_color(unit.team).lightened(0.3), _projectile_size()
 		)
 	else:
 		target.apply_damage(damage, unit)
 		_spawn_tracer(target)
 	attack_hit.emit(target, damage)
 	return true
+
+
+func _projectile_size() -> float:
+	var size := stats.value("projectile_size")
+	return size if size > 0.0 else 0.3
 
 
 ## Cheap instant-hit feedback: a short-lived line from muzzle to target.

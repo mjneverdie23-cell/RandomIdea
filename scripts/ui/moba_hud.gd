@@ -36,6 +36,7 @@ var item_bar: ItemBar
 var actions: ActionButtons
 var minimap: Minimap
 var shop: ShopUi
+var scoreboard: Scoreboard
 
 var _root: GameRoot
 var _attached: ChampionController
@@ -84,7 +85,7 @@ func attach_champion(champion: ChampionController) -> void:
 		return
 	_champion = champion
 	_attached = champion
-	for widget in [champion_panel, ability_bar, item_bar, actions, minimap, shop]:
+	for widget in [champion_panel, ability_bar, item_bar, actions, minimap, shop, scoreboard]:
 		widget.attach(champion)
 	_connect_champion(champion)
 
@@ -148,6 +149,7 @@ func _build_ui() -> void:
 	_build_minimap()
 	_build_settings_button()
 	_build_shop()
+	_build_scoreboard()
 
 	# Three single-line messages stack above the ability bar, one line apart.
 	var bar_height := int(ability_bar.preferred_size().y)
@@ -296,6 +298,24 @@ func _bottom_label(above: int, half_width: int, color: Color) -> Label:
 	return label
 
 
+## Held open with Tab. Full-rect so it can centre itself whatever the window
+## size, and mouse-transparent so it never eats a click.
+func _build_scoreboard() -> void:
+	scoreboard = Scoreboard.new()
+	scoreboard.name = "Scoreboard"
+	scoreboard.setup(config)
+	scoreboard.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(scoreboard)
+
+
+func set_scoreboard_open(open: bool) -> void:
+	scoreboard.set_open(open)
+
+
+func is_scoreboard_open() -> bool:
+	return scoreboard.is_open()
+
+
 func _make_label(preset: int) -> RichTextLabel:
 	var label := RichTextLabel.new()
 	label.bbcode_enabled = true
@@ -440,6 +460,7 @@ func _controls_text() -> String:
 		"[color=#ffd36b]Ctrl+Q E R F[/color] spend a skill point on that ability",
 		"[color=#b9c2ce]Hold C[/color] show my range   [color=#b9c2ce]P[/color] shop",
 		"[color=#b9c2ce]Space[/color] camera lock          [color=#b9c2ce]O[/color] settings",
+		"[color=#b9c2ce]Hold Tab[/color] scoreboard   [color=#b9c2ce]Shift+ability[/color] aim it",
 		"",
 		"[b]Developer[/b]",
 		"[color=#b9c2ce]F1[/color] enemy champion  [color=#b9c2ce]F2[/color] minion wave",

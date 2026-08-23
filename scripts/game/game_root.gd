@@ -41,6 +41,7 @@ static var _pending_mode_id: String = ""
 @onready var combat_debug: CombatDebugOverlay = $CombatDebug
 @onready var range_view: RangeVisualizer = $RangeVisualizer
 @onready var nameplates: NameplateOverlay = $Nameplates
+@onready var aim_indicator: AbilityAimIndicator = $AbilityAim
 @onready var units: Node3D = $Units
 @onready var hud: MobaHud = $HUD
 @onready var session: MatchSession = $MatchSession
@@ -162,9 +163,12 @@ func start_session(request: Dictionary) -> void:
 	relay.setup(session, commands)
 	range_view.setup(range_config)
 	nameplates.setup(nameplate_config, director.player_team, camera)
+	aim_indicator.setup(range_config)
+	commands.ability_aim_changed.connect(aim_indicator.aim)
 	combat_debug.overlay_toggled.connect(range_view.set_debug_all)
 	combat_debug.set_overlay_visible(director.config.combat_debug_on_start)
 	commands.range_display_changed.connect(range_view.set_own_range_visible)
+	commands.scoreboard_changed.connect(func(open: bool) -> void: hud.set_scoreboard_open(open))
 	commands.settings_toggle_requested.connect(_on_settings_toggle)
 	commands.shop_toggle_requested.connect(func() -> void: hud.toggle_shop())
 	dev_input.setup(director, combat_debug)
@@ -302,6 +306,7 @@ func _set_local_champion(unit: ChampionController) -> void:
 	combat_debug.setup(unit)
 	range_view.set_local_champion(unit)
 	nameplates.set_local_team(unit.team)
+	aim_indicator.set_champion(unit)
 	hud.attach_champion(unit)
 	local_champion_changed.emit(unit)
 
