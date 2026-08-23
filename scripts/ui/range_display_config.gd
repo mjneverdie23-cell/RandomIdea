@@ -18,8 +18,6 @@ extends Resource
 @export var debug_enemy_color: Color = Color(0.90, 0.50, 0.45, 0.55)
 
 @export_group("Rules")
-## The local champion's own ring starts hidden and is toggled by the player.
-@export var own_range_visible_on_start: bool = false
 ## An enemy tower reveals its ring once the local champion is inside it. Vision
 ## of the tower is required as well, so fog of war still hides a threat.
 @export var show_threatening_enemy_towers: bool = true

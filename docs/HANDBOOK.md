@@ -25,6 +25,7 @@ the [Invariants](#invariants) section before going further.
 | Add, price or retune a shop item | `resources/items/*.tres` + `resources/shops/prototype_shop.tres` | no |
 | Retune wards | `resources/vision/prototype_ward.tres` | no |
 | Restyle the HUD or the minimap | `resources/ui/prototype_hud.tres` | no |
+| Change what health bars and names show | `resources/ui/nameplates.tres` | no |
 | Change which attack ranges are drawn | `resources/ui/range_display.tres` (colours, two rules) or `RangeVisualizer` (the rules) | maybe |
 | Move or resize the bushes | the map's `_build_bushes()` + `bush_radius` | small |
 | Move the shops | they follow each layout's champion spawn point | no |
@@ -721,6 +722,25 @@ Three things worth knowing before you touch it:
 * Defaults are captured from the project's own input map on first use, not
   written out a second time by hand.
 
+### Health bars and champion names
+
+`NameplateOverlay` owns both, for every unit kind, on both maps, from
+`resources/ui/nameplates.tres`. Turning a category off is a checkbox
+(`champion_name`, `minion_health`, `structure_health`); the bar widths, the
+low-health colour switch and the distance cull are all in the same resource.
+
+Two things it deliberately does *not* do. It does not read a name from
+`UnitStats` for a champion — the player and the bot share one stat resource, so
+`ChampionController.display_name()` overrides to use the loadout instead. And
+it does not decide who is visible: `_should_show()` asks `Vision`, exactly like
+targeting and the minimap, so a bar cannot leak a position the rules say is
+hidden.
+
+The pieces of one plate are coplanar, so distance sorting cannot separate them
+and `render_priority` has to say which is on top — backing, then fill, then the
+name's outline, then its glyphs. Getting that last pair backwards renders the
+name as a solid black blob.
+
 ### Attack ranges
 
 `RangeVisualizer` owns every ring in the game. Nothing else draws an attack
@@ -731,10 +751,14 @@ gameplay markers, and `MapDebugRenderer`'s turret circles are behind F9. The rul
 two of the rules (`show_threatening_enemy_towers`, `threat_hysteresis`) are in
 `resources/ui/range_display.tres`.
 
-The toggle is a **command**, not a key: `InputCommands.request_range_toggle()`,
-raised by `C` on a keyboard and by a HUD button on a touch build. Rings are
-local presentation and are never replicated — the server still decides whether
-an attack is in range, and one player's toggle is invisible to the other.
+Showing your own ring is **held, not toggled**, and it is a command rather than
+a key: `InputCommands.set_range_display(bool)`, driven by `C` on a keyboard and
+by a press-and-hold button on a touch build. `PCInputController` polls the
+action in `_process` instead of listening for press/release, because a key-up
+swallowed by a panel or lost to a focus change would otherwise strand the ring
+on screen; polling a held state is self-correcting. Rings are local
+presentation and are never replicated — the server still decides whether an
+attack is in range, and one player's ring is invisible to the other.
 
 If you want a new case to show a ring, add it to `_wants_ring()`. Resist the
 urge to make it unconditional; that is exactly what this system replaced.
@@ -853,5 +877,9 @@ once.
 - **A test point "just outside" one bush can be inside another.** `bush.radius
   + 6` on the three-lane map lands in `RIVER_BUSH_1`. Assert
   `Vision.zone_at(p) == null` rather than assuming.
+- **Two systems drawing the same thing is one too many.** Health bars used to
+  live in the developer overlay, which is why turning that off to hide debug
+  identifiers also took the bars with it. `NameplateOverlay` owns them now and
+  the overlay owns only what is genuinely developer output.
 - **A `PanelContainer` lays out its children**, so a full-screen dimmer parented
   to one covers the panel instead of the map. Make it a sibling.

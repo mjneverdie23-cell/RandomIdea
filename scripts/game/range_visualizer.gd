@@ -8,9 +8,9 @@ extends Node3D
 ## player nothing. A range ring is only useful when it answers a question the
 ## player is actually asking, so exactly three things put one on screen:
 ##
-##   * the local champion's own range, while the player has toggled it on
-##     (the [signal InputCommands.range_toggle_requested] action, bound to C on
-##     a keyboard and to a button on a touch HUD);
+##   * the local champion's own range, for exactly as long as the player holds
+##     the show-range control down (bound to C on a keyboard, and to a
+##     press-and-hold button on a touch HUD);
 ##   * an enemy tower that is currently threatening the local champion — the
 ##     champion stands inside its real attack range and can actually see it;
 ##   * everything at once, while the developer combat overlay is on.
@@ -19,8 +19,6 @@ extends Node3D
 ## minions. Rings are local presentation with no replication — the server
 ## remains the only judge of whether an attack is in range, and one player
 ## toggling their own ring cannot be seen by anyone else.
-
-signal own_range_toggled(is_visible: bool)
 
 ## Rings are cheap but not free, and nothing here needs a frame tick.
 const REFRESH_INTERVAL := 0.1
@@ -40,7 +38,6 @@ var _timer: float = 0.0
 
 func setup(display_config: RangeDisplayConfig, champion: ChampionController = null) -> void:
 	config = display_config if display_config != null else RangeDisplayConfig.new()
-	_own_visible = config.own_range_visible_on_start
 	local_champion = champion
 	if not Battle.unit_unregistered.is_connected(_on_unit_unregistered):
 		Battle.unit_unregistered.connect(_on_unit_unregistered)
@@ -54,18 +51,12 @@ func set_local_champion(champion: ChampionController) -> void:
 
 # --- the player's own ring ---------------------------------------------------
 
-## Raised by the range-toggle command, never by a key check, so a mobile
-## button reaches it the same way the C key does.
-func toggle_own_range() -> bool:
-	set_own_range_visible(not _own_visible)
-	return _own_visible
-
-
+## Driven by the show-range command, never by a key check, so a mobile
+## press-and-hold button reaches it the same way the C key does.
 func set_own_range_visible(value: bool) -> void:
 	if _own_visible == value:
 		return
 	_own_visible = value
-	own_range_toggled.emit(value)
 	refresh()
 
 
@@ -92,9 +83,9 @@ func _wants_ring(unit: Node3D) -> bool:
 		return unit.kind != Unit.Kind.MINION or not config.show_minions_in_debug_only
 	match unit.kind:
 		Unit.Kind.CHAMPION:
-			# Only ever the local player's own champion, and only on request.
-			# An enemy champion's range is never shown in normal gameplay, and
-			# neither is an ally's.
+			# Only ever the local player's own champion, and only while the
+			# control is held. An enemy champion's range is never shown in
+			# normal gameplay, and neither is an ally's.
 			return _own_visible and unit == local_champion
 		Unit.Kind.TURRET:
 			return _is_threatening_tower(unit)

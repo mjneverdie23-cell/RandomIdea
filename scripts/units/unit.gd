@@ -276,6 +276,14 @@ func kind_name() -> String:
 	return KIND_NAMES[kind]
 
 
+## The name a player sees over a champion. Unlike [method display_label] it
+## carries no team suffix, because the nameplate is already team-coloured.
+func display_name() -> String:
+	if stats_resource != null and not stats_resource.display_name.is_empty():
+		return stats_resource.display_name
+	return kind_name().capitalize()
+
+
 ## Human-readable identity for debug text. Node names are an implementation
 ## detail (Godot rewrites duplicates), so nothing user-facing should use them.
 func display_label() -> String:

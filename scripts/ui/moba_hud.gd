@@ -438,7 +438,7 @@ func _controls_text() -> String:
 		"[color=#b9c2ce]LMB[/color]   select + attack",
 		"[color=#b9c2ce]Q E R F[/color] abilities   [color=#b9c2ce]B[/color] recall",
 		"[color=#ffd36b]Ctrl+Q E R F[/color] spend a skill point on that ability",
-		"[color=#b9c2ce]C[/color] show my attack range   [color=#b9c2ce]P[/color] shop",
+		"[color=#b9c2ce]Hold C[/color] show my range   [color=#b9c2ce]P[/color] shop",
 		"[color=#b9c2ce]Space[/color] camera lock          [color=#b9c2ce]O[/color] settings",
 		"",
 		"[b]Developer[/b]",

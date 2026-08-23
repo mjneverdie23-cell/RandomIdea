@@ -26,13 +26,16 @@ signal ability_upgrade_requested(slot: int)
 signal purchase_requested(item_id: String)
 signal ward_requested(aim_point: Vector3)
 signal shop_toggle_requested()
-signal range_toggle_requested()
+## True while the player is holding the show-range control down.
+signal range_display_changed(active: bool)
 signal settings_toggle_requested()
 
 ## Desired movement on the XZ plane in world space, length 0..1.
 var move_direction: Vector2 = Vector2.ZERO
 ## Where the player is currently pointing, on the ground plane.
 var aim_point: Vector3 = Vector3.ZERO
+## Whether the show-range control is currently held.
+var range_display_active: bool = false
 
 
 func set_move_direction(direction: Vector2) -> void:
@@ -94,8 +97,13 @@ func request_shop_toggle() -> void:
 	shop_toggle_requested.emit()
 
 
-func request_range_toggle() -> void:
-	range_toggle_requested.emit()
+## Held, not toggled: the ring is on screen exactly while the control is down,
+## which a touch button reproduces with a press-and-hold.
+func set_range_display(active: bool) -> void:
+	if active == range_display_active:
+		return
+	range_display_active = active
+	range_display_changed.emit(active)
 
 
 func request_settings_toggle() -> void:

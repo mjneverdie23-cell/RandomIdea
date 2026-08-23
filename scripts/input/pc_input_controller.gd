@@ -12,7 +12,7 @@ extends Node
 ## Q E R F       placeholder abilities
 ## Ctrl + Q/E/R/F  spend a skill point on that ability
 ## B             recall
-## C             show/hide my own attack range
+## C (held)      show my own attack range while it is down
 ## P             open/close the shop (buying still needs the base zone)
 ## O             settings
 ## Space         toggle camera lock
@@ -78,8 +78,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		_commands.request_camera_zoom(-1.0)
 	elif event.is_action_pressed("camera_zoom_out"):
 		_commands.request_camera_zoom(1.0)
-	elif event.is_action_pressed("toggle_range"):
-		_commands.request_range_toggle()
 	elif event.is_action_pressed("toggle_shop"):
 		_commands.request_shop_toggle()
 	elif event.is_action_pressed("open_settings"):
@@ -102,6 +100,10 @@ func _process(_delta: float) -> void:
 		return
 	_commands.set_move_direction(_camera_relative_move())
 	_commands.set_aim_point(_mouse_ground_point())
+	# Polled rather than driven by press/release events: a key-up swallowed by
+	# a panel or lost to a window focus change would otherwise strand the ring
+	# on screen. Reading the held state every frame is self-correcting.
+	_commands.set_range_display(Input.is_action_pressed("show_range"))
 
 
 func _camera_relative_move() -> Vector2:

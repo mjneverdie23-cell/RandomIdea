@@ -155,6 +155,15 @@ func upgradeable_slots() -> PackedInt32Array:
 	return out
 
 
+## A champion's identity is its loadout, not its stat block — the player and
+## the bot share one [UnitStats] resource, so reading the name from there would
+## put "Prototype Champion" over both of them.
+func display_name() -> String:
+	if loadout != null and not loadout.display_name.is_empty():
+		return loadout.display_name
+	return super.display_name()
+
+
 ## Connects a champion to the device-independent command bus.
 func bind_commands(bus: InputCommands) -> void:
 	commands = bus

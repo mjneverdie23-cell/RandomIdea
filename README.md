@@ -146,7 +146,7 @@ main scene). You spawn as Team A in the bottom-left fountain.
 | `F` | Bulwark — self-buff (damage reduction, speed, heal) |
 | `B` | Recall (channel, interrupted by moving) |
 | `Ctrl+Q` `Ctrl+E` `Ctrl+R` `Ctrl+F` | Spend a skill point on that ability |
-| `C` | Show/hide **your own** attack range |
+| `C` (hold) | Show **your own** attack range while held |
 | `P` | Open the shop (buying still needs your base) |
 | `O` | Controls / key bindings |
 | `Space` | Toggle camera lock / free pan |
@@ -239,12 +239,16 @@ The smoke test boots the real game scene and asserts that:
   and growth cannot stack;
 * buying is refused in the lane and granted at the fountain, deducts the price,
   fills a slot, applies the stats, survives a respawn and is refused when broke;
-* the range rules: nothing on spawn, `C` toggles only your own ring, an enemy
+* the range rules: nothing on spawn, holding `C` shows only your own ring and
+  releasing it hides it again, an enemy
   champion never gets one, an enemy tower gets one only while it is inside
   range *and* visible, fog of war takes it away, minions never get one, and
   `F10` reveals everything;
-* normal gameplay renders zero world-space name labels, and the developer
-  overlay still renders them;
+* normal gameplay renders champion names and nothing else in world space — no
+  registry identifier, no debug syntax — and the developer overlay still adds
+  its own on top;
+* every unit has a health bar, a minion has no name, a dead unit has no plate,
+  and a hidden enemy's bar does not give away the bush;
 * a bush fades the champion by exactly the configured amount, never below
   legibility, and clears completely on the way out without changing vision;
 * K/D/A counts a champion kill, a death and neither for a minion;
@@ -605,6 +609,23 @@ does, and the developer cheats stay off the panel entirely.
 Only the keyboard event of an action is replaced, so rebinding "zoom in" to a
 key does not cost you the mouse wheel.
 
+### Health bars and names
+
+`NameplateOverlay` draws the two things a player reads mid-fight: a health bar
+over every unit, and a name over every champion. It is normal presentation, not
+debug output — the distinction that matters is that the developer overlay draws
+internal identifiers, state machines and navigation targets and is off unless
+you ask for it, while this is always on.
+
+One system for both maps and all three unit kinds, driven by
+`resources/ui/nameplates.tres`. It answers to the same `VisionManager` as
+everything else, so a champion you cannot see has no plate — a health bar can
+never give away a bush.
+
+A champion's name comes from its **loadout**, not its stat block: the player
+and the bot share one `UnitStats` resource, so reading it from there would put
+"Prototype Champion" over both of them.
+
 ### Attack ranges: three cases, and no others
 
 Permanent rings under every champion and tower buried the map they were meant
@@ -612,7 +633,7 @@ to explain. `RangeVisualizer` replaced them with one rule set:
 
 | Case | Ring |
 |---|---|
-| Your own champion | only while you have asked for it (`C`, or the HUD button) |
+| Your own champion | only while you hold the show-range control (`C`) |
 | An enemy champion | **never** in normal gameplay |
 | An allied tower | never |
 | An enemy tower | only while you are inside its real attack range **and** can see it |
@@ -622,6 +643,11 @@ to explain. `RangeVisualizer` replaced them with one rule set:
 The developer overlay is **off** by default. It used to ship on, which is what
 put a ring under every champion and tower and a name label over every unit in
 normal play: names and ranges are the same switch, and that switch is F10.
+
+The control is held, not toggled — the ring is on screen for exactly as long
+as the key is down. `PCInputController` polls the action every frame rather
+than reacting to press/release events, so a key-up swallowed by a panel or lost
+to a window focus change cannot strand a ring on screen.
 
 The radius drawn is the unit's live `attack_range()`, so an item or a level
 that extends it extends the ring. Rings are local presentation and are never

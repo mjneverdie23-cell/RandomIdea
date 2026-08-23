@@ -56,6 +56,7 @@ func _run() -> void:
 	await _check_shop_and_items()
 	await _check_range_visibility()
 	await _check_clean_presentation()
+	await _check_nameplates()
 	await _check_concealment()
 	await _check_scoreboard()
 	_check_settings_bindings()
@@ -618,15 +619,16 @@ func _check_shop_and_items() -> void:
 
 # --- presentation, concealment, scoreboard and bindings ----------------------
 
-## Normal gameplay renders no identifiers and no range rings. Both used to be
-## on because the combat overlay defaulted to visible, which is the one switch
-## that turns names and rings on together.
+## Normal gameplay renders no *identifiers* and no range rings. It does render
+## champion names and health bars, which are what a player reads in a fight —
+## the previous version of this check banned both, because the one switch that
+## turned identifiers on turned those on too.
 func _check_clean_presentation() -> void:
 	await _isolate_arena()
 	_root.combat_debug.set_overlay_visible(false)
-	_root.range_view.set_own_range_visible(false)
+	_root.commands.set_range_display(false)
 	_root.range_view.refresh()
-	await _settle(4)
+	await _settle(6)
 
 	_expect(not _root.director.config.combat_debug_on_start,
 		"the combat debug overlay is on by default")
@@ -634,27 +636,89 @@ func _check_clean_presentation() -> void:
 	_expect(_root.range_view.visible_ring_count() == 0,
 		"a range ring is showing with every rule saying it should not")
 
-	# The only two places a name is ever drawn in the world are the two debug
-	# overlays, and both are off.
-	var labels := _count_visible_labels(_root)
-	print("[SmokeTest] visible world labels in normal play: %d" % labels)
-	_expect(labels == 0, "%d object name labels are visible in normal gameplay" % labels)
+	# Whatever is on screen must be a champion's own name, never a registry id
+	# or a scrap of debug syntax.
+	var labels := _visible_labels(_root)
+	var allowed := _champion_names()
+	print("[SmokeTest] visible world labels in normal play: %s" % [labels])
+	for text in labels:
+		_expect(allowed.has(text), "'%s' is not a champion name" % text)
+		_expect(not _root.map.registry.has(text), "'%s' is a map identifier" % text)
+		for fragment in ["->", "cmd:", "nav:", "/", "_"]:
+			_expect(not (fragment in text), "'%s' looks like debug output" % text)
 
+	# The developer overlay still adds its own on top.
 	_root.combat_debug.set_overlay_visible(true)
-	await _settle(4)
-	_expect(_count_visible_labels(_root) > 0, "the developer overlay shows no labels either")
+	await _settle(6)
+	_expect(_visible_labels(_root).size() > labels.size(),
+		"the developer overlay added no labels of its own")
 	_root.combat_debug.set_overlay_visible(false)
-	await _settle(4)
+	await _settle(6)
 
 
-## Every Label3D whose whole ancestor chain is visible.
-func _count_visible_labels(node: Node) -> int:
-	var total := 0
+func _champion_names() -> PackedStringArray:
+	var out := PackedStringArray()
+	for unit in Battle.all():
+		if unit.kind == Unit.Kind.CHAMPION and not out.has(unit.display_name()):
+			out.append(unit.display_name())
+	return out
+
+
+## Health bars and champion names are always-on presentation, and they obey the
+## same vision rule as everything else.
+func _check_nameplates() -> void:
+	await _isolate_arena()
+	var champion := _root.champion
+	var plates := _root.hud.get_parent().get_node("Nameplates") as NameplateOverlay
+	champion.teleport_to(champion.spawn_point)
+	await _settle(6)
+	# The plates refresh on their own interval, which is right for a game and
+	# useless in headless where a hundred frames pass inside it. Force it.
+	Vision.recompute()
+	plates.refresh()
+	_expect(plates.is_plate_visible(champion), "the player champion has no nameplate")
+	_expect(plates.name_shown_for(champion) == champion.display_name(),
+		"the champion's plate shows the wrong name")
+
+	var minion := _spawn_dummy(champion.global_position + Vector3(4.0, 0.0, 0.0),
+		MapEnums.Team.B, 400.0, 910040)
+	await _settle(8)
+	Vision.recompute()
+	plates.refresh()
+	_expect(plates.is_plate_visible(minion), "a minion has no health bar")
+	_expect(plates.name_shown_for(minion).is_empty(), "a minion is showing a name")
+	print("[SmokeTest] champion plate '%s', minion bar shown, %d plates live" % [
+		plates.name_shown_for(champion), plates.plate_count()
+	])
+
+	# A dead unit has no plate, and neither does one this team cannot see.
+	minion.health.kill(null)
+	await _settle(8)
+	plates.refresh()
+	_expect(not plates.is_plate_visible(minion), "a dead unit kept its health bar")
+	minion.queue_free()
+
+	var bush := Vision.zone_by_id("TOP_BUSH_1")
+	var hider := _spawn_dummy(bush.global_position, MapEnums.Team.B, 400.0, 910041)
+	champion.teleport_to(bush.global_position + Vector3(bush.radius + 12.0, 0.0, 0.0))
+	await _settle(8)
+	Vision.recompute()
+	plates.refresh()
+	_expect(not Vision.is_visible_to(hider, champion.team), "the bush did not hide the dummy")
+	_expect(not plates.is_plate_visible(hider), "a hidden enemy's health bar gave away the bush")
+	hider.queue_free()
+	champion.teleport_to(champion.spawn_point)
+	await _settle(6)
+
+
+## The text of every Label3D whose whole ancestor chain is visible.
+func _visible_labels(node: Node) -> PackedStringArray:
+	var out := PackedStringArray()
 	for child in node.get_children():
 		if child is Label3D and child.is_visible_in_tree():
-			total += 1
-		total += _count_visible_labels(child)
-	return total
+			out.append(child.text)
+		out.append_array(_visible_labels(child))
+	return out
 
 
 ## Standing in a bush fades the champion a little. It must stay a *little*, and
@@ -751,6 +815,7 @@ func _check_settings_bindings() -> void:
 	for action in InputSettings.actions():
 		_expect(InputMap.has_action(action), "settings lists an unknown action %s" % action)
 	_expect(InputSettings.binding_text("ability_q") == "Q", "ability 1 is not bound to Q")
+	_expect(InputSettings.binding_text("show_range") == "C", "the range control is not on C")
 	_expect(InputSettings.binding_text("basic_attack") == "Left click",
 		"the mouse binding is not described")
 
@@ -799,17 +864,19 @@ func _check_range_visibility() -> void:
 	_expect(not view.is_ring_visible_for(champion), "the player's range ring is on at spawn")
 	_expect(view.visible_ring_count() == 0, "something drew a range ring at spawn")
 
-	# C — or a touch button — toggles the local champion's own ring, and only it.
-	_root.commands.request_range_toggle()
+	# Held, not toggled: the ring is on screen while the control is down and
+	# gone the moment it is released.
+	_root.commands.set_range_display(true)
 	view.refresh()
-	_expect(view.is_own_range_visible(), "the range toggle did not turn the ring on")
+	_expect(view.is_own_range_visible(), "holding the range control did not show the ring")
 	_expect(view.is_ring_visible_for(champion), "the player's own ring did not appear")
 	for enemy in _root.director.enemy_champions:
 		_expect(not view.is_ring_visible_for(enemy), "an enemy champion's range was visible")
-	_root.commands.request_range_toggle()
+	_root.commands.set_range_display(false)
 	view.refresh()
-	_expect(not view.is_ring_visible_for(champion), "the range toggle did not turn the ring off")
-	print("[SmokeTest] the range toggle shows only the local champion's own ring")
+	_expect(not view.is_own_range_visible(), "releasing the range control left it on")
+	_expect(not view.is_ring_visible_for(champion), "the ring survived releasing the control")
+	print("[SmokeTest] holding the range control shows only the local champion's own ring")
 
 	# An enemy tower earns a ring only while it is actually threatening.
 	# Mid, not top: the turret-combat check destroys the top outer tower, and a

@@ -23,7 +23,7 @@ const GROUPS: Array[Dictionary] = [
 	{"title": "Combat", "actions": ["basic_attack", "ability_q", "ability_e", "ability_r",
 		"ability_f", "recall"]},
 	{"title": "Levelling", "actions": ["upgrade_q", "upgrade_e", "upgrade_r", "upgrade_f"]},
-	{"title": "Interface", "actions": ["toggle_shop", "toggle_range", "camera_lock",
+	{"title": "Interface", "actions": ["toggle_shop", "show_range", "camera_lock",
 		"camera_zoom_in", "camera_zoom_out", "toggle_debug", "open_settings", "restart_match"]},
 ]
 
@@ -35,7 +35,7 @@ const LABELS := {
 	"ability_r": "Ability 3", "ability_f": "Ability 4",
 	"upgrade_q": "Upgrade ability 1", "upgrade_e": "Upgrade ability 2",
 	"upgrade_r": "Upgrade ability 3", "upgrade_f": "Upgrade ability 4",
-	"toggle_shop": "Open shop", "toggle_range": "Show my attack range",
+	"toggle_shop": "Open shop", "show_range": "Show attack range (hold)",
 	"camera_lock": "Camera lock", "camera_zoom_in": "Zoom in",
 	"camera_zoom_out": "Zoom out", "toggle_debug": "Map debug view",
 	"open_settings": "Settings", "restart_match": "Restart match",

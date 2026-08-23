@@ -194,6 +194,35 @@ static func polyline(points: PackedVector2Array, color: Color, y: float) -> Mesh
 	return node
 
 
+## Camera-facing coloured quad, used for the world-space bars. Its material is
+## deliberately *not* the shared cached one: a health bar recolours itself as it
+## drains, and mutating a cached material would recolour half the map with it.
+## [param anchor_left] pins the quad's left edge to its origin so scaling it on
+## X fills from the left like a bar rather than growing from the middle.
+## [param priority] orders coplanar quads: transparent materials are sorted by
+## distance, which cannot separate a bar's fill from the backing it sits on, so
+## the fill asks to be drawn after.
+static func billboard_quad(size: Vector2, color: Color, anchor_left: bool = false,
+		priority: int = 0) -> MeshInstance3D:
+	var quad := QuadMesh.new()
+	quad.size = size
+	if anchor_left:
+		quad.center_offset = Vector3(size.x * 0.5, 0.0, 0.0)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	material.billboard_keep_scale = true
+	material.no_depth_test = true
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.render_priority = priority
+	var node := MeshInstance3D.new()
+	node.mesh = quad
+	node.material_override = material
+	return node
+
+
 static func _instance(mesh: Mesh, color: Color, unshaded: bool = false) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.mesh = mesh

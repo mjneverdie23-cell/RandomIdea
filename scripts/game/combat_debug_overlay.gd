@@ -7,10 +7,13 @@ extends Node3D
 ## are ever rendered in the world. It starts hidden, so normal gameplay shows no
 ## identifiers and no range rings at all.
 ##
-## It attaches a gizmo to every unit the [BattleRegistry] knows about — health
-## bar, current target line and a state line covering the movement command,
+## It attaches a gizmo to every unit the [BattleRegistry] knows about — a
+## current target line and a state line covering the movement command,
 ## navigation target and respawn timer. Nothing here feeds back into gameplay,
 ## so turning it off changes nothing but the picture.
+##
+## Health bars are not here: [NameplateOverlay] draws those for the player at
+## all times, and two systems drawing the same bar is one too many.
 ##
 ## Attack-range rings deliberately do not live here any more: they are drawn by
 ## [RangeVisualizer], which shows them only when they mean something. Turning
@@ -21,11 +24,8 @@ extends Node3D
 
 signal overlay_toggled(is_visible: bool)
 
-const BAR_WIDTH := 2.4
-const BAR_HEIGHT := 0.26
 const REFRESH_INTERVAL := 0.1
 
-@export var show_health_bars: bool = true
 @export var show_target_lines: bool = true
 @export var show_state_labels: bool = true
 
@@ -76,19 +76,10 @@ func _on_unit_registered(unit: Node3D) -> void:
 	root.visible = _overlay_visible
 	unit.add_child(root)
 
-	var top: float = unit.body_height() + 0.9
-	var background := _bar_quad(BAR_WIDTH, BAR_HEIGHT, Color(0.05, 0.06, 0.08, 0.85), false)
-	background.position = Vector3(0.0, top, 0.0)
-	root.add_child(background)
-
-	var fill_pivot := Node3D.new()
-	fill_pivot.position = Vector3(-BAR_WIDTH * 0.5, top, 0.01)
-	root.add_child(fill_pivot)
-	var fill := _bar_quad(BAR_WIDTH, BAR_HEIGHT * 0.78, _health_color(unit), true)
-	fill_pivot.add_child(fill)
-
+	# Above the nameplate, which owns the space directly over the unit.
+	var top: float = unit.body_height() + 1.75
 	var label := Label3D.new()
-	label.position = Vector3(0.0, top + 0.55, 0.0)
+	label.position = Vector3(0.0, top, 0.0)
 	label.font_size = 34
 	label.pixel_size = 0.011
 	label.outline_size = 8
@@ -104,7 +95,7 @@ func _on_unit_registered(unit: Node3D) -> void:
 	line.top_level = true  # draw in world space, not the unit's local space
 	root.add_child(line)
 
-	_gizmos[unit] = {"root": root, "fill": fill_pivot, "label": label, "line": line}
+	_gizmos[unit] = {"root": root, "label": label, "line": line}
 	_apply_layer_visibility(_gizmos[unit])
 
 
@@ -123,8 +114,6 @@ func _process(delta: float) -> void:
 			_gizmos.erase(unit)
 			continue
 		var gizmo: Dictionary = _gizmos[unit]
-		var ratio: float = unit.health.health_ratio()
-		gizmo["fill"].scale = Vector3(maxf(ratio, 0.001), 1.0, 1.0)
 		_update_target_line(unit, gizmo["line"])
 		if refresh_text:
 			gizmo["label"].text = _describe(unit)
@@ -196,30 +185,6 @@ func _cooldown_text(champion: Node3D) -> String:
 	return " ".join(parts)
 
 
-func _health_color(unit: Node3D) -> Color:
-	return Color(0.35, 0.85, 0.4) if unit.team == MapEnums.Team.A else Color(0.9, 0.4, 0.35)
-
-
-func _bar_quad(width: float, height: float, color: Color, anchor_left: bool) -> MeshInstance3D:
-	var quad := QuadMesh.new()
-	quad.size = Vector2(width, height)
-	if anchor_left:
-		quad.center_offset = Vector3(width * 0.5, 0.0, 0.0)
-	var node := MeshInstance3D.new()
-	node.mesh = quad
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	material.billboard_keep_scale = true
-	material.no_depth_test = true
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	node.material_override = material
-	return node
-
-
 func _apply_layer_visibility(gizmo: Dictionary) -> void:
-	gizmo["fill"].visible = show_health_bars
 	gizmo["label"].visible = show_state_labels
 	gizmo["line"].visible = show_target_lines

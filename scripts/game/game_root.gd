@@ -28,6 +28,7 @@ static var _pending_mode_id: String = ""
 ## [MatchConfig] because it describes the client's view, not the match.
 @export var hud_config: HudConfig
 @export var range_config: RangeDisplayConfig
+@export var nameplate_config: NameplateConfig
 ## Prints a navigation reachability report on startup (also used headless).
 @export var print_startup_report: bool = true
 
@@ -39,6 +40,7 @@ static var _pending_mode_id: String = ""
 @onready var director: GameDirector = $GameDirector
 @onready var combat_debug: CombatDebugOverlay = $CombatDebug
 @onready var range_view: RangeVisualizer = $RangeVisualizer
+@onready var nameplates: NameplateOverlay = $Nameplates
 @onready var units: Node3D = $Units
 @onready var hud: MobaHud = $HUD
 @onready var session: MatchSession = $MatchSession
@@ -159,9 +161,10 @@ func start_session(request: Dictionary) -> void:
 	state_sync.setup(units, director.config.shop_catalog)
 	relay.setup(session, commands)
 	range_view.setup(range_config)
+	nameplates.setup(nameplate_config, director.player_team, camera)
 	combat_debug.overlay_toggled.connect(range_view.set_debug_all)
 	combat_debug.set_overlay_visible(director.config.combat_debug_on_start)
-	commands.range_toggle_requested.connect(_on_range_toggle)
+	commands.range_display_changed.connect(range_view.set_own_range_visible)
 	commands.settings_toggle_requested.connect(_on_settings_toggle)
 	commands.shop_toggle_requested.connect(func() -> void: hud.toggle_shop())
 	dev_input.setup(director, combat_debug)
@@ -298,6 +301,7 @@ func _set_local_champion(unit: ChampionController) -> void:
 	camera.set_follow_target(unit)
 	combat_debug.setup(unit)
 	range_view.set_local_champion(unit)
+	nameplates.set_local_team(unit.team)
 	hud.attach_champion(unit)
 	local_champion_changed.emit(unit)
 
@@ -308,13 +312,6 @@ func _on_settings_toggle() -> void:
 	if settings.toggle():
 		commands.set_move_direction(Vector2.ZERO)
 	pc_input.set_process(not settings.is_open())
-
-
-## The range toggle is a command, not a key: a touch button raises the same
-## request. It is presentation only and never leaves this machine.
-func _on_range_toggle() -> void:
-	var shown := range_view.toggle_own_range()
-	hud.show_toast("Attack range %s" % ("shown" if shown else "hidden"))
 
 
 # --- mode --------------------------------------------------------------------
