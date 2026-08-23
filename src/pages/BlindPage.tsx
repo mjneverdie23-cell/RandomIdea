@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DraftBoard } from '../components/draft/DraftBoard.tsx';
 import { GameContextBar } from '../components/GameContextBar.tsx';
@@ -6,6 +6,7 @@ import { PatchMetaPanel } from '../components/meta/PatchMetaPanel.tsx';
 import { PredictionBar } from '../components/quiz/PredictionBar.tsx';
 import { toPrompt, type Game, type Side } from '../domain/types.ts';
 import {
+  awardFor,
   BLIND_HINTS,
   BLIND_LEVELS,
   BlindLadderError,
@@ -14,23 +15,30 @@ import {
   createBlindRun,
   currentBlindGame,
   currentLevel,
+  HINT_COST,
   hintUnlocked,
   HINT_LABEL,
+  lastResult,
   LEVEL_BLURB,
   LEVEL_LABEL,
+  LEVEL_POINTS,
+  MAX_BLIND_SCORE,
   rateGames,
   rungsCleared,
   type BlindRun,
 } from '../quiz/blind.ts';
+import { blindBoardRepository, clearedLabel, entryFromRun } from '../leaderboard/blindBoard.ts';
 import { useDataset } from '../state/DatasetContext.tsx';
+import { usePlayerName } from '../state/usePlayerName.ts';
 
 /** A fresh ladder each run, so restarting is not the same four games again. */
 const newSeed = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export function BlindPage() {
   const navigate = useNavigate();
-  const { dataset, metaIndex } = useDataset();
+  const { dataset, isDemo, metaIndex } = useDataset();
   const games = dataset?.games;
+  const [playerName] = usePlayerName();
 
   const rated = useMemo(() => rateGames(games ?? []), [games]);
   const [seed, setSeed] = useState(newSeed);
@@ -67,21 +75,41 @@ export function BlindPage() {
 
   const game = currentBlindGame(run);
   const level = currentLevel(run);
-  const over = run.status !== 'playing';
+  const revealing = run.status === 'revealing';
+  const finished = run.status === 'finished';
+  const result = lastResult(run);
 
   const call = useCallback(
     (prediction: Side | null) => {
-      if (prediction === null || over) return;
+      if (prediction === null || run.status !== 'playing') return;
       dispatch({ type: 'answer', prediction });
     },
-    [over],
+    [run.status],
   );
+
+  /*
+   * Record the run once, the moment it finishes. A ref rather than state
+   * because writing the board must not itself trigger a render that could
+   * write it again.
+   */
+  const recorded = useRef<BlindRun | null>(null);
+  useEffect(() => {
+    if (!finished || recorded.current === run) return;
+    recorded.current = run;
+    void blindBoardRepository.add(entryFromRun(run, playerName, isDemo));
+  }, [finished, run, playerName, isDemo]);
 
   // B/← blue, R/→ red, H for a hint.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || over) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
       const key = event.key.toLowerCase();
+      if (run.status === 'revealing' && (key === ' ' || key === 'enter')) {
+        event.preventDefault();
+        dispatch({ type: 'next' });
+        return;
+      }
+      if (run.status !== 'playing') return;
       if (key === 'b' || key === 'arrowleft') {
         event.preventDefault();
         call('blue');
@@ -95,7 +123,7 @@ export function BlindPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [call, over]);
+  }, [call, run.status]);
 
   if (failed) {
     return (
@@ -121,22 +149,30 @@ export function BlindPage() {
     <div className="page blind-page">
       <header className="blind-hud">
         <div className="blind-rungs" role="list" aria-label="Levels">
-          {BLIND_LEVELS.map((rung, index) => (
-            <span
-              key={rung}
-              role="listitem"
-              className={
-                'blind-rung' +
-                (index < rungsCleared(run) ? ' is-cleared' : '') +
-                (index === run.level && !over ? ' is-current' : '') +
-                (index === run.level && run.status === 'lost' ? ' is-failed' : '')
-              }
-            >
-              {LEVEL_LABEL[rung]}
-            </span>
-          ))}
+          {BLIND_LEVELS.map((rung, index) => {
+            const played = run.results[index];
+            return (
+              <span
+                key={rung}
+                role="listitem"
+                className={
+                  'blind-rung' +
+                  (played?.correct ? ' is-cleared' : '') +
+                  (played && !played.correct ? ' is-failed' : '') +
+                  (index === run.level && !finished ? ' is-current' : '')
+                }
+              >
+                {LEVEL_LABEL[rung]}
+                <span className="blind-rung-pts">{LEVEL_POINTS[rung]}</span>
+              </span>
+            );
+          })}
         </div>
         <div className="blind-hud-right">
+          <div className="stat">
+            <span className="stat-label">Score</span>
+            <span className="stat-value">{run.score}</span>
+          </div>
           <div className="stat">
             <span className="stat-label">Cleared</span>
             <span className="stat-value">
@@ -151,46 +187,79 @@ export function BlindPage() {
         </div>
       </header>
 
-      <div className="blind-brief">
-        <h1>
-          {LEVEL_LABEL[level]}
-          <span className="dim"> · {LEVEL_BLURB[level]}</span>
-        </h1>
-        <p className="dim">
-          The bans, the picks and the league. Nothing else — call the winner, or spend a hint.
-        </p>
-      </div>
+      {!finished && (
+        <div className="blind-brief">
+          <h1>
+            {LEVEL_LABEL[level]}
+            <span className="dim"> · {LEVEL_BLURB[level]}</span>
+          </h1>
+          <p className="dim">
+            Worth <strong>{awardFor(level, run.hints)}</strong> points
+            {run.hints > 0 && ` after ${run.hints} hint${run.hints === 1 ? '' : 's'}`}
+            {run.hints === 0 &&
+              `, less ${Math.round(HINT_COST * 100)}% for each hint you spend.`}
+            {run.hints > 0 && ` (of ${LEVEL_POINTS[level]}).`} A wrong call costs this level
+            only — the run carries on either way.
+          </p>
+        </div>
+      )}
 
-      <GameContextBar
-        game={toPrompt(game)}
-        revealEvent={revealEvent}
-        revealPatch={revealMeta}
-      />
+      {!finished && (
+        <>
+          <GameContextBar
+            game={toPrompt(game)}
+            revealEvent={revealEvent || revealing}
+            revealPatch={revealMeta || revealing}
+          />
 
-      <DraftBoard
-        key={game.gameId}
-        game={toPrompt(game)}
-        winner={over ? game.winner : null}
-        anonymous={!revealTeams}
-      />
+          <DraftBoard
+            key={game.gameId}
+            game={toPrompt(game)}
+            winner={revealing ? game.winner : null}
+            anonymous={!revealTeams && !revealing}
+          />
 
-      <PredictionBar
-        blueTeam={revealTeams ? game.blue.teamName : 'Blue Side'}
-        redTeam={revealTeams ? game.red.teamName : 'Red Side'}
-        blueTag={revealTeams ? game.blue.tag : 'BLU'}
-        redTag={revealTeams ? game.red.tag : 'RED'}
-        prediction={over ? run.lastCall : null}
-        winner={over ? game.winner : null}
-        disabled={over}
-        onPredict={call}
-      />
+          <PredictionBar
+            blueTeam={revealTeams || revealing ? game.blue.teamName : 'Blue Side'}
+            redTeam={revealTeams || revealing ? game.red.teamName : 'Red Side'}
+            blueTag={revealTeams || revealing ? game.blue.tag : 'BLU'}
+            redTag={revealTeams || revealing ? game.red.tag : 'RED'}
+            prediction={revealing ? (result?.call ?? null) : null}
+            winner={revealing ? game.winner : null}
+            disabled={revealing}
+            onPredict={call}
+          />
+        </>
+      )}
 
-      {!over && (
+      {revealing && result && (
+        <section
+          className={`blind-reveal blind-reveal--${result.correct ? 'correct' : 'wrong'}`}
+          role="status"
+        >
+          <div className="blind-reveal-main">
+            <span className="blind-reveal-label">
+              {result.correct ? 'Read it right' : 'Wrong call'}
+            </span>
+            <span className="dim">
+              {game[game.winner].teamName} won.
+              {!result.correct && ' No points this level — the run continues.'}
+            </span>
+          </div>
+          <span className="blind-reveal-points num">+{result.points}</span>
+          <button type="button" className="btn btn-primary" onClick={() => dispatch({ type: 'next' })}>
+            {run.level + 1 >= BLIND_LEVELS.length ? 'Finish' : 'Next level'} →
+          </button>
+        </section>
+      )}
+
+      {run.status === 'playing' && (
         <section className="blind-hints">
           <div className="blind-hints-head">
             <h2>Hints</h2>
             <span className="dim">
-              {run.hints}/{BLIND_HINTS.length} taken on this level
+              {run.hints}/{BLIND_HINTS.length} taken · each costs{' '}
+              {Math.round(HINT_COST * 100)}% of this level
             </span>
           </div>
           <ol className="blind-hint-list">
@@ -210,7 +279,7 @@ export function BlindPage() {
                       disabled={!nextUp}
                       onClick={() => dispatch({ type: 'hint' })}
                     >
-                      Reveal
+                      −{LEVEL_POINTS[level] - awardFor(level, index + 1)} pts
                     </button>
                   )}
                 </li>
@@ -220,23 +289,40 @@ export function BlindPage() {
         </section>
       )}
 
-      {over && (
-        <section
-          className={`blind-over blind-over--${run.status}`}
-          role="alertdialog"
-          aria-label={run.status === 'won' ? 'Run complete' : 'Run over'}
-        >
-          <h2>{run.status === 'won' ? 'You cleared every level' : 'You lost'}</h2>
+      {finished && (
+        <section className="blind-over" role="alertdialog" aria-label="Run complete">
+          <span className="blind-over-eyebrow">Run complete</span>
+          <h2 className="num">{run.score}</h2>
           <p>
-            {run.status === 'won'
-              ? `All ${BLIND_LEVELS.length} levels, ${run.hintsTotal} hint${run.hintsTotal === 1 ? '' : 's'} spent.`
-              : `${game[game.winner].teamName} won this one. You cleared ${rungsCleared(run)} of ${BLIND_LEVELS.length}` +
-                ` on ${LEVEL_LABEL[level].toLowerCase()}.`}
+            {rungsCleared(run)} of {BLIND_LEVELS.length} read correctly
+            {run.results.some((r) => r.correct) && ` (${clearedLabel(
+              run.results.filter((r) => r.correct).map((r) => r.level),
+            )})`}
+            , {run.hintsTotal} hint{run.hintsTotal === 1 ? '' : 's'} spent. Out of{' '}
+            {MAX_BLIND_SCORE}.
           </p>
+
+          <ol className="blind-recap">
+            {run.results.map((entry) => (
+              <li key={entry.level} className={entry.correct ? 'is-correct' : 'is-wrong'}>
+                <span className="blind-recap-mark">{entry.correct ? '✓' : '✗'}</span>
+                <span className="blind-recap-level">{LEVEL_LABEL[entry.level]}</span>
+                <span className="dim">
+                  {entry.hints > 0 ? `${entry.hints} hint${entry.hints === 1 ? '' : 's'}` : 'no hints'}
+                </span>
+                <span className="blind-recap-pts num">+{entry.points}</span>
+              </li>
+            ))}
+          </ol>
+
+          <p className="dim">Saved to the blind board as {playerName}.</p>
           <div className="blind-over-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={restart}>
-              Restart
+              Play again
             </button>
+            <Link className="btn btn-lg" to="/leaderboard">
+              Leaderboard
+            </Link>
             <button type="button" className="btn btn-lg" onClick={() => navigate('/')}>
               Home
             </button>
@@ -244,7 +330,7 @@ export function BlindPage() {
         </section>
       )}
 
-      {revealMeta && (
+      {(revealMeta || revealing) && !finished && (
         <PatchMetaPanel metaIndex={metaIndex} patch={game.patch} competition={game.competition} />
       )}
     </div>

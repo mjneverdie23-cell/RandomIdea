@@ -6,9 +6,11 @@
  * the bans, the picks and the league, and nothing else: no team names, no
  * players, no tournament, no date. Read the draft or guess.
  *
- * Four questions, one per level, each drawn to be harder than the last. Get one
- * right and you climb; get one wrong and the run is over. Three hints are
- * available at any point, each giving back a piece of what was taken away.
+ * Four questions, one per level, each drawn to be harder than the last. A wrong
+ * call costs you that level's points and nothing else — you still play the rest,
+ * because ending a run on one bad guess at a coin flip is a punishment out of
+ * all proportion to the mistake. Three hints are available on each level, and
+ * each one takes a bite out of what that level can pay.
  *
  * Pure: no React, no storage, no dates of its own.
  */
@@ -62,6 +64,44 @@ export const LEVEL_BANDS: Record<BlindLevel, { min: number; max: number }> = {
 
 /** Games a team needs before its win rate is worth rating a match by. */
 export const MIN_RATED_GAMES = 10;
+
+/**
+ * What each rung pays, and why the ladder is not a straight line.
+ *
+ * Points rise faster than the rungs are numbered because the questions really
+ * do get harder — with the teams hidden every rung is closer to a coin flip
+ * than the measured hit rates suggest, and the top one genuinely is one. The
+ * progression is steep enough that clearing impossible is the difference
+ * between a good run and a great one, and shallow enough that the board is not
+ * simply a record of who got luckiest on the last question.
+ */
+export const LEVEL_POINTS: Record<BlindLevel, number> = {
+  easy: 100,
+  medium: 200,
+  hard: 350,
+  impossible: 550,
+};
+
+/** The most a flawless, hint-free run can score. */
+export const MAX_BLIND_SCORE = BLIND_LEVELS.reduce(
+  (total, level) => total + LEVEL_POINTS[level],
+  0,
+);
+
+/**
+ * What one hint costs, as a share of the level it is spent on.
+ *
+ * Hints have to cost something or every run takes all three and the board
+ * measures nothing. A quarter each leaves a fully-hinted level worth a quarter
+ * of its face value — still worth answering, never worth defaulting to.
+ */
+export const HINT_COST = 0.25;
+
+/** Points a level pays, after the hints spent on it. */
+export function awardFor(level: BlindLevel, hints: number): number {
+  const kept = Math.max(0, 1 - HINT_COST * hints);
+  return Math.round(LEVEL_POINTS[level] * kept);
+}
 
 /* ------------------------------------------------------------------ */
 /* Rating                                                              */
@@ -208,7 +248,19 @@ export function hintUnlocked(hint: BlindHint, taken: number): boolean {
 /* Run state                                                           */
 /* ------------------------------------------------------------------ */
 
-export type BlindStatus = 'playing' | 'lost' | 'won';
+export type BlindStatus = 'playing' | 'revealing' | 'finished';
+
+/** What one rung ended up worth. */
+export interface BlindResult {
+  level: BlindLevel;
+  correct: boolean;
+  /** Hints spent on this rung. */
+  hints: number;
+  /** Points banked, after the hint cost. Zero for a wrong call. */
+  points: number;
+  /** What the player called, for the recap. */
+  call: Side;
+}
 
 export interface BlindRun {
   /** One game per level, easy first. */
@@ -217,20 +269,22 @@ export interface BlindRun {
   level: number;
   /** Hints taken on the current rung, 0–3. */
   hints: number;
-  /** Hints taken across the whole run, for the end panel. */
+  /** Hints taken across the whole run. */
   hintsTotal: number;
+  /** One entry per rung played, in order. */
+  results: BlindResult[];
+  score: number;
   status: BlindStatus;
-  /** What the player called on the rung that ended the run. */
-  lastCall: Side | null;
 }
 
 export function createBlindRun(games: Game[]): BlindRun {
-  return { games, level: 0, hints: 0, hintsTotal: 0, status: 'playing', lastCall: null };
+  return { games, level: 0, hints: 0, hintsTotal: 0, results: [], score: 0, status: 'playing' };
 }
 
 export type BlindAction =
   | { type: 'hint' }
   | { type: 'answer'; prediction: Side }
+  | { type: 'next' }
   | { type: 'restart'; games: Game[] };
 
 export function blindReducer(run: BlindRun, action: BlindAction): BlindRun {
@@ -248,18 +302,34 @@ export function blindReducer(run: BlindRun, action: BlindAction): BlindRun {
       const game = run.games[run.level];
       if (!game) return run;
 
-      if (action.prediction !== game.winner) {
-        return { ...run, status: 'lost', lastCall: action.prediction };
-      }
+      const level = BLIND_LEVELS[run.level]!;
+      const correct = action.prediction === game.winner;
+      // A wrong call costs this rung's points and nothing more: the run
+      // continues, which is the difference between a mistake and a reset.
+      const points = correct ? awardFor(level, run.hints) : 0;
+
+      return {
+        ...run,
+        status: 'revealing',
+        score: run.score + points,
+        results: [
+          ...run.results,
+          { level, correct, hints: run.hints, points, call: action.prediction },
+        ],
+      };
+    }
+
+    case 'next': {
+      if (run.status !== 'revealing') return run;
       const next = run.level + 1;
       return next >= run.games.length
-        ? { ...run, status: 'won', level: run.level, lastCall: action.prediction }
-        : { ...run, level: next, hints: 0, lastCall: action.prediction };
+        ? { ...run, status: 'finished' }
+        : { ...run, level: next, hints: 0, status: 'playing' };
     }
   }
 }
 
-/** The rung being played, or the one that ended the run. */
+/** The rung being played, or the last one played once the run is over. */
 export function currentLevel(run: BlindRun): BlindLevel {
   return BLIND_LEVELS[Math.min(run.level, BLIND_LEVELS.length - 1)]!;
 }
@@ -268,7 +338,12 @@ export function currentBlindGame(run: BlindRun): Game | null {
   return run.games[run.level] ?? null;
 }
 
-/** Rungs cleared, which is the score a run ends on. */
+/** Rungs answered correctly. */
 export function rungsCleared(run: BlindRun): number {
-  return run.status === 'won' ? run.games.length : run.level;
+  return run.results.filter((result) => result.correct).length;
+}
+
+/** The result just revealed, or `null` outside the reveal. */
+export function lastResult(run: BlindRun): BlindResult | null {
+  return run.results[run.results.length - 1] ?? null;
 }

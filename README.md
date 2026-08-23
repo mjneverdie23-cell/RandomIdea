@@ -199,17 +199,45 @@ A separate game at `/blind`: a four-rung survival ladder played with the draft
 alone. No team names, no player names, no tournament, no date, no patch — the
 bans, the picks and the league, and nothing else.
 
-One question per rung, each drawn to be harder than the last. Call it right and
-you climb; call it wrong and the run is over, with a panel offering **Restart**
-(a fresh ladder, not the same four games) or **Home**. Clear all four and you
-have beaten it.
+One question per rung, each drawn to be harder than the last. A wrong call costs
+you that rung's points and nothing else — you play all four either way, because
+ending a run on one bad guess at a coin flip is a punishment out of proportion
+to the mistake.
 
-**Three hints** are available on every rung, in order, and taking one costs
-nothing but the record of having taken it:
+Harder rungs pay more, and the progression is steeper than the rung numbers:
+
+| rung | points |
+| --- | --- |
+| Easy | 100 |
+| Medium | 200 |
+| Hard | 350 |
+| Impossible | 550 |
+| **a flawless, hint-free run** | **1200** |
+
+With the teams hidden every rung sits closer to a coin flip than its measured
+hit rate suggests, and the top one genuinely is one — so clearing Impossible is
+the difference between a good run and a great one. It stops short of a curve
+steep enough to make the board a record of who got luckiest on the last
+question.
+
+**Three hints** are available on every rung, in order:
 
 1. Reveal teams and players
 2. Reveal the patch and its meta
 3. Reveal the tournament and date
+
+Each costs **25%** of the rung it is spent on, so a fully-hinted rung is worth a
+quarter of face value — still worth answering, never worth defaulting to. Hints
+have to cost something, or every run takes all three and the board measures
+nothing.
+
+#### The blind board
+
+Blind runs get their own leaderboard rather than another category on the quiz
+board: the two modes score different things, and a run of four fixed questions
+has no length, no clock and no streak to rank by. Score ranks first, then the
+run that needed **fewer hints** — two runs can bank the same points very
+differently, and the unhinted read is the better one.
 
 #### How a level's difficulty is decided
 

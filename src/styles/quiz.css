@@ -821,6 +821,60 @@
   color: var(--green);
 }
 
+.blind-rung-pts {
+  margin-left: 7px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  opacity: 0.7;
+}
+
+.blind-reveal {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+}
+
+.blind-reveal--correct {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, var(--panel));
+}
+
+.blind-reveal--wrong {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, var(--panel));
+}
+
+.blind-reveal-main {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.blind-reveal-label {
+  font-weight: 600;
+}
+
+.blind-reveal-points {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.blind-reveal--correct .blind-reveal-points {
+  color: var(--green);
+}
+
+.blind-reveal--wrong .blind-reveal-points {
+  color: var(--text-faint);
+}
+
 .blind-over {
   display: flex;
   flex-direction: column;
@@ -833,19 +887,67 @@
   background: var(--panel);
 }
 
-.blind-over--lost {
-  border-color: var(--red);
-  background: color-mix(in srgb, var(--red) 10%, var(--panel));
-}
-
-.blind-over--won {
-  border-color: var(--green);
-  background: color-mix(in srgb, var(--green) 10%, var(--panel));
+.blind-over-eyebrow {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .blind-over h2 {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 2.6rem;
+  font-family: var(--font-mono);
+}
+
+.blind-recap {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.blind-recap li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.blind-recap-mark {
+  font-family: var(--font-mono);
+  width: 1em;
+  flex: none;
+}
+
+.blind-recap li.is-correct .blind-recap-mark {
+  color: var(--green);
+}
+
+.blind-recap li.is-wrong .blind-recap-mark {
+  color: var(--red);
+}
+
+.blind-recap-level {
+  flex: 1;
+  font-weight: 600;
+}
+
+.blind-recap-pts {
+  font-family: var(--font-mono);
+}
+
+.blind-board-personal {
+  margin: 0;
 }
 
 .blind-over p {

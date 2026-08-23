@@ -12,6 +12,14 @@ import {
   type LeaderboardEntry,
   type LeaderboardFilters,
 } from '../leaderboard/repository.ts';
+import {
+  blindBoardRepository,
+  blindPersonalBest,
+  clearedLabel,
+  rankBlindEntries,
+  type BlindBoardEntry,
+} from '../leaderboard/blindBoard.ts';
+import { BLIND_LEVELS, MAX_BLIND_SCORE } from '../quiz/blind.ts';
 import { formatPercent, formatRelative, formatScore, formatSeconds } from '../lib/format.ts';
 import { MODE_LABEL, QUESTION_COUNTS, type QuizMode } from '../quiz/config.ts';
 import { MAX_QUESTION_SCORE } from '../quiz/scoring.ts';
@@ -26,8 +34,11 @@ export function LeaderboardPage() {
   });
   const [name] = usePlayerName();
 
+  const [blind, setBlind] = useState<BlindBoardEntry[] | null>(null);
+
   const load = useCallback(() => {
     void leaderboardRepository.list().then(setEntries);
+    void blindBoardRepository.list().then(setBlind);
   }, []);
 
   useEffect(load, [load]);
@@ -75,6 +86,8 @@ export function LeaderboardPage() {
           </button>
         )}
       </header>
+
+      <BlindBoard entries={blind} name={name} onClear={() => void blindBoardRepository.clear().then(load)} />
 
       <section className="panel">
         <div className="panel-header">
@@ -320,5 +333,109 @@ function FilterChip({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Blind mode's board.
+ *
+ * Kept apart from the quiz boards above rather than folded in as another
+ * category: the two modes score different things, and a run of four fixed
+ * questions has no length, no clock and no streak to rank by.
+ */
+function BlindBoard({
+  entries,
+  name,
+  onClear,
+}: {
+  entries: BlindBoardEntry[] | null;
+  name: string;
+  onClear: () => void;
+}) {
+  const ranked = useMemo(() => (entries ? rankBlindEntries(entries) : []), [entries]);
+  const mine = useMemo(() => (entries ? blindPersonalBest(entries, name) : null), [entries, name]);
+  const myRank = mine ? ranked.findIndex((entry) => entry.id === mine.id) + 1 : null;
+
+  return (
+    <section className="panel blind-board">
+      <div className="panel-header">
+        <h2>Blind mode</h2>
+        <span className="dim">
+          Four levels, {MAX_BLIND_SCORE} points if you read them all with no hints
+        </span>
+        {ranked.length > 0 && (
+          <button type="button" className="btn btn-sm btn-ghost" onClick={onClear}>
+            Clear
+          </button>
+        )}
+      </div>
+
+      {entries === null ? (
+        <div className="panel-pad dim">Loading…</div>
+      ) : ranked.length === 0 ? (
+        <div className="panel-pad empty-state">
+          <p>No blind runs yet.</p>
+          <Link className="btn btn-primary" to="/blind">
+            Play blind mode
+          </Link>
+        </div>
+      ) : (
+        <>
+          {mine && myRank && (
+            <p className="panel-pad dim blind-board-personal">
+              Your best: <strong>{mine.score}</strong> — #{myRank} of {ranked.length}.
+            </p>
+          )}
+          <div className="panel board-wrap">
+            <table className="board">
+              <thead>
+                <tr>
+                  <th scope="col" className="board-rank">
+                    #
+                  </th>
+                  <th scope="col">Player</th>
+                  <th scope="col" className="board-num">
+                    Score
+                  </th>
+                  <th scope="col" className="board-num">
+                    Levels
+                  </th>
+                  <th scope="col">Read correctly</th>
+                  <th scope="col" className="board-num">
+                    Hints
+                  </th>
+                  <th scope="col">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.slice(0, 25).map((entry, index) => (
+                  <tr
+                    key={entry.id}
+                    className={`${index < 3 ? `board-top board-top-${index + 1}` : ''}${
+                      entry.id === mine?.id ? ' is-me' : ''
+                    }`}
+                  >
+                    <td className="board-rank num">{index + 1}</td>
+                    <td>
+                      <span className="board-player">{entry.username}</span>
+                      {entry.demoData && <span className="badge badge-demo board-demo">Demo</span>}
+                    </td>
+                    <td className="board-num num board-score">{entry.score}</td>
+                    <td className="board-num num">
+                      {entry.cleared}/{BLIND_LEVELS.length}
+                    </td>
+                    <td>
+                      <span className="badge">{clearedLabel(entry.levelsCleared)}</span>
+                    </td>
+                    <td className="board-num num">{entry.hints}</td>
+                    <td className="dim">{formatRelative(entry.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

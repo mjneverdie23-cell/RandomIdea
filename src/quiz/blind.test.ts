@@ -9,7 +9,11 @@ import {
   currentBlindGame,
   currentLevel,
   hintUnlocked,
+  awardFor,
+  lastResult,
   levelForGap,
+  LEVEL_POINTS,
+  MAX_BLIND_SCORE,
   MIN_RATED_GAMES,
   rateGames,
   rungsCleared,
@@ -194,39 +198,70 @@ describe('buildLadder', () => {
 describe('blindReducer', () => {
   const ladder = () => buildLadder(rateGames(pool()), 'seed');
   const run = () => createBlindRun(ladder());
+  const right = (state: ReturnType<typeof run>) =>
+    blindReducer(state, { type: 'answer', prediction: currentBlindGame(state)!.winner });
+  const wrong = (state: ReturnType<typeof run>) =>
+    blindReducer(state, {
+      type: 'answer',
+      prediction: currentBlindGame(state)!.winner === 'blue' ? 'red' : 'blue',
+    });
 
-  it('climbs a rung on a correct call', () => {
-    const start = run();
-    const winner = currentBlindGame(start)!.winner;
-    const next = blindReducer(start, { type: 'answer', prediction: winner });
+  it('banks the level points for a correct call', () => {
+    const revealed = right(run());
+    expect(revealed.status).toBe('revealing');
+    expect(revealed.score).toBe(LEVEL_POINTS.easy);
+    expect(lastResult(revealed)!.correct).toBe(true);
+    expect(lastResult(revealed)!.points).toBe(LEVEL_POINTS.easy);
+  });
+
+  it('scores a wrong call zero and carries the run on', () => {
+    const revealed = wrong(run());
+    expect(revealed.status).toBe('revealing');
+    expect(revealed.score).toBe(0);
+    expect(lastResult(revealed)!.correct).toBe(false);
+    expect(lastResult(revealed)!.points).toBe(0);
+
+    // The point of the change: a miss is not a reset.
+    const next = blindReducer(revealed, { type: 'next' });
     expect(next.status).toBe('playing');
     expect(next.level).toBe(1);
     expect(currentLevel(next)).toBe('medium');
   });
 
-  it('ends the run on a wrong call', () => {
-    const start = run();
-    const wrong: Side = currentBlindGame(start)!.winner === 'blue' ? 'red' : 'blue';
-    const next = blindReducer(start, { type: 'answer', prediction: wrong });
-    expect(next.status).toBe('lost');
-    expect(next.lastCall).toBe(wrong);
-    expect(rungsCleared(next)).toBe(0);
-  });
-
-  it('is won by clearing every rung', () => {
+  it('plays all four levels however they go', () => {
     let state = run();
     for (let i = 0; i < BLIND_LEVELS.length; i += 1) {
-      state = blindReducer(state, { type: 'answer', prediction: currentBlindGame(state)!.winner });
+      state = blindReducer(i % 2 === 0 ? right(state) : wrong(state), { type: 'next' });
     }
-    expect(state.status).toBe('won');
-    expect(rungsCleared(state)).toBe(BLIND_LEVELS.length);
+    expect(state.status).toBe('finished');
+    expect(state.results).toHaveLength(BLIND_LEVELS.length);
+    expect(rungsCleared(state)).toBe(2);
+    expect(state.score).toBe(LEVEL_POINTS.easy + LEVEL_POINTS.hard);
   });
 
-  it('ignores answers once the run is over', () => {
+  it('pays more for the harder rungs', () => {
+    const perfect = () => {
+      let state = run();
+      for (let i = 0; i < BLIND_LEVELS.length; i += 1) {
+        state = blindReducer(right(state), { type: 'next' });
+      }
+      return state;
+    };
+    expect(perfect().score).toBe(MAX_BLIND_SCORE);
+    // Each rung is worth strictly more than the one below it.
+    const values = BLIND_LEVELS.map((level) => LEVEL_POINTS[level]);
+    expect(values).toEqual([...values].sort((a, b) => a - b));
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it('cannot answer twice on one level', () => {
+    const revealed = right(run());
+    expect(blindReducer(revealed, { type: 'answer', prediction: 'blue' })).toBe(revealed);
+  });
+
+  it('ignores next outside the reveal', () => {
     const start = run();
-    const wrong: Side = currentBlindGame(start)!.winner === 'blue' ? 'red' : 'blue';
-    const lost = blindReducer(start, { type: 'answer', prediction: wrong });
-    expect(blindReducer(lost, { type: 'answer', prediction: 'blue' })).toBe(lost);
+    expect(blindReducer(start, { type: 'next' })).toBe(start);
   });
 
   it('takes hints in order and stops at three', () => {
@@ -235,16 +270,38 @@ describe('blindReducer', () => {
       state = blindReducer(state, { type: 'hint' });
       expect(state.hints).toBe(i + 1);
     }
-    const capped = blindReducer(state, { type: 'hint' });
-    expect(capped).toBe(state);
-    expect(capped.hints).toBe(BLIND_HINTS.length);
+    expect(blindReducer(state, { type: 'hint' })).toBe(state);
   });
 
-  it('resets hints on the next rung but remembers the total', () => {
+  it('charges each hint against the level it was spent on', () => {
     let state = run();
     state = blindReducer(state, { type: 'hint' });
     state = blindReducer(state, { type: 'hint' });
-    state = blindReducer(state, { type: 'answer', prediction: currentBlindGame(state)!.winner });
+    const revealed = right(state);
+    expect(revealed.score).toBe(awardFor('easy', 2));
+    expect(revealed.score).toBeLessThan(LEVEL_POINTS.easy);
+    expect(lastResult(revealed)!.hints).toBe(2);
+  });
+
+  it('never pays a negative amount, however many hints are spent', () => {
+    for (const level of BLIND_LEVELS) {
+      for (let hints = 0; hints <= 6; hints += 1) {
+        expect(awardFor(level, hints)).toBeGreaterThanOrEqual(0);
+      }
+      expect(awardFor(level, 0)).toBe(LEVEL_POINTS[level]);
+    }
+  });
+
+  it('cannot take a hint during the reveal', () => {
+    const revealed = right(run());
+    expect(blindReducer(revealed, { type: 'hint' })).toBe(revealed);
+  });
+
+  it('resets hints on the next level but remembers the total', () => {
+    let state = run();
+    state = blindReducer(state, { type: 'hint' });
+    state = blindReducer(state, { type: 'hint' });
+    state = blindReducer(right(state), { type: 'next' });
     expect(state.hints).toBe(0);
     expect(state.hintsTotal).toBe(2);
   });
@@ -252,13 +309,11 @@ describe('blindReducer', () => {
   it('starts clean on restart', () => {
     let state = run();
     state = blindReducer(state, { type: 'hint' });
-    const wrong: Side = currentBlindGame(state)!.winner === 'blue' ? 'red' : 'blue';
-    state = blindReducer(state, { type: 'answer', prediction: wrong });
+    state = blindReducer(wrong(state), { type: 'next' });
     const fresh = blindReducer(state, { type: 'restart', games: ladder() });
-    expect(fresh.status).toBe('playing');
-    expect(fresh.level).toBe(0);
-    expect(fresh.hints).toBe(0);
-    expect(fresh.hintsTotal).toBe(0);
+    expect(fresh).toEqual(createBlindRun(fresh.games));
+    expect(fresh.score).toBe(0);
+    expect(fresh.results).toEqual([]);
   });
 });
 
