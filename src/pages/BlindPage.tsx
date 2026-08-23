@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { DraftBoard } from '../components/draft/DraftBoard.tsx';
 import { GameContextBar } from '../components/GameContextBar.tsx';
 import { PatchMetaPanel } from '../components/meta/PatchMetaPanel.tsx';
+import { Countdown } from '../components/quiz/Countdown.tsx';
 import { PredictionBar } from '../components/quiz/PredictionBar.tsx';
 import { toPrompt, type Game, type Side } from '../domain/types.ts';
 import {
-  awardFor,
   BLIND_HINTS,
+  BLIND_TIME_MS,
   BLIND_LEVELS,
   BlindLadderError,
   blindReducer,
@@ -24,10 +25,12 @@ import {
   LEVEL_POINTS,
   MAX_BLIND_SCORE,
   rateGames,
+  SPEED_SHARE,
   rungsCleared,
   type BlindRun,
 } from '../quiz/blind.ts';
 import { blindBoardRepository, clearedLabel, entryFromRun } from '../leaderboard/blindBoard.ts';
+import { formatSeconds } from '../lib/format.ts';
 import { useDataset } from '../state/DatasetContext.tsx';
 import { usePlayerName } from '../state/usePlayerName.ts';
 
@@ -79,12 +82,23 @@ export function BlindPage() {
   const finished = run.status === 'finished';
   const result = lastResult(run);
 
+  /*
+   * The clock's start has to be decided in the render that switches level, not
+   * in an effect: the countdown remounts with each level, and an effect would
+   * leave it holding the previous level's start time for one commit — already
+   * expired, firing an instant timeout.
+   */
+  const [timing, setTiming] = useState(() => ({ level: 0, startedAt: performance.now() }));
+  if (run.status === 'playing' && timing.level !== run.level) {
+    setTiming({ level: run.level, startedAt: performance.now() });
+  }
+
   const call = useCallback(
     (prediction: Side | null) => {
-      if (prediction === null || run.status !== 'playing') return;
-      dispatch({ type: 'answer', prediction });
+      if (run.status !== 'playing') return;
+      dispatch({ type: 'answer', prediction, elapsedMs: performance.now() - timing.startedAt });
     },
-    [run.status],
+    [run.status, timing.startedAt],
   );
 
   /*
@@ -184,6 +198,15 @@ export function BlindPage() {
             <span className="stat-label">Hints</span>
             <span className="stat-value">{run.hintsTotal}</span>
           </div>
+          {!finished && (
+            <Countdown
+              key={timing.startedAt}
+              startedAt={timing.startedAt}
+              durationMs={BLIND_TIME_MS}
+              frozen={revealing}
+              onExpire={() => call(null)}
+            />
+          )}
         </div>
       </header>
 
@@ -194,12 +217,11 @@ export function BlindPage() {
             <span className="dim"> · {LEVEL_BLURB[level]}</span>
           </h1>
           <p className="dim">
-            Worth <strong>{awardFor(level, run.hints)}</strong> points
-            {run.hints > 0 && ` after ${run.hints} hint${run.hints === 1 ? '' : 's'}`}
-            {run.hints === 0 &&
-              `, less ${Math.round(HINT_COST * 100)}% for each hint you spend.`}
-            {run.hints > 0 && ` (of ${LEVEL_POINTS[level]}).`} A wrong call costs this level
-            only — the run carries on either way.
+            <strong>{LEVEL_POINTS[level]}</strong> for the read, plus up to{' '}
+            <strong>{Math.round(LEVEL_POINTS[level] * SPEED_SHARE)}</strong> for answering
+            early — then {Math.round(HINT_COST * 100)}% off for each hint you spend
+            {run.hints > 0 && ` (${run.hints} so far)`}. A wrong call or a timeout costs this
+            level only; the run carries on either way.
           </p>
         </div>
       )}
@@ -239,11 +261,17 @@ export function BlindPage() {
         >
           <div className="blind-reveal-main">
             <span className="blind-reveal-label">
-              {result.correct ? 'Read it right' : 'Wrong call'}
+              {result.correct
+                ? 'Read it right'
+                : result.call === null
+                  ? 'Out of time'
+                  : 'Wrong call'}
             </span>
             <span className="dim">
-              {game[game.winner].teamName} won.
-              {!result.correct && ' No points this level — the run continues.'}
+              {game[game.winner].teamName} won in {formatSeconds(result.elapsedMs)} of your clock.
+              {result.correct
+                ? result.speedBonus > 0 && ` ${result.speedBonus} of that was speed.`
+                : ' No points this level — the run continues.'}
             </span>
           </div>
           <span className="blind-reveal-points num">+{result.points}</span>
@@ -279,7 +307,7 @@ export function BlindPage() {
                       disabled={!nextUp}
                       onClick={() => dispatch({ type: 'hint' })}
                     >
-                      −{LEVEL_POINTS[level] - awardFor(level, index + 1)} pts
+                      −{Math.round(LEVEL_POINTS[level] * HINT_COST * (index + 1))} pts
                     </button>
                   )}
                 </li>
@@ -298,8 +326,8 @@ export function BlindPage() {
             {run.results.some((r) => r.correct) && ` (${clearedLabel(
               run.results.filter((r) => r.correct).map((r) => r.level),
             )})`}
-            , {run.hintsTotal} hint{run.hintsTotal === 1 ? '' : 's'} spent. Out of{' '}
-            {MAX_BLIND_SCORE}.
+            , {run.hintsTotal} hint{run.hintsTotal === 1 ? '' : 's'} spent,{' '}
+            {formatSeconds(run.timeMs)} on the clock. Out of {MAX_BLIND_SCORE}.
           </p>
 
           <ol className="blind-recap">
@@ -308,7 +336,8 @@ export function BlindPage() {
                 <span className="blind-recap-mark">{entry.correct ? '✓' : '✗'}</span>
                 <span className="blind-recap-level">{LEVEL_LABEL[entry.level]}</span>
                 <span className="dim">
-                  {entry.hints > 0 ? `${entry.hints} hint${entry.hints === 1 ? '' : 's'}` : 'no hints'}
+                  {formatSeconds(entry.elapsedMs)}
+                  {entry.hints > 0 && ` · ${entry.hints} hint${entry.hints === 1 ? '' : 's'}`}
                 </span>
                 <span className="blind-recap-pts num">+{entry.points}</span>
               </li>

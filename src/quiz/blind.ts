@@ -82,12 +82,6 @@ export const LEVEL_POINTS: Record<BlindLevel, number> = {
   impossible: 550,
 };
 
-/** The most a flawless, hint-free run can score. */
-export const MAX_BLIND_SCORE = BLIND_LEVELS.reduce(
-  (total, level) => total + LEVEL_POINTS[level],
-  0,
-);
-
 /**
  * What one hint costs, as a share of the level it is spent on.
  *
@@ -97,10 +91,63 @@ export const MAX_BLIND_SCORE = BLIND_LEVELS.reduce(
  */
 export const HINT_COST = 0.25;
 
-/** Points a level pays, after the hints spent on it. */
-export function awardFor(level: BlindLevel, hints: number): number {
-  const kept = Math.max(0, 1 - HINT_COST * hints);
-  return Math.round(LEVEL_POINTS[level] * kept);
+/**
+ * Time budget per level, and what answering fast is worth.
+ *
+ * Longer than the timed quiz's 30 seconds because the question is harder: with
+ * the teams stripped out there is no "T1 are better than this" shortcut, only
+ * ten champions and five bans to actually read.
+ *
+ * The bonus tops out at half the level's face value, so speed can meaningfully
+ * separate two players who both read a draft correctly without ever paying more
+ * than the read itself. It falls off linearly with the clock rather than in
+ * steps, so there is no cliff to game.
+ */
+export const BLIND_TIME_MS = 45_000;
+export const SPEED_SHARE = 0.5;
+
+/** The most a flawless, hint-free, instantly-answered run can score. */
+export const MAX_BLIND_SCORE = BLIND_LEVELS.reduce(
+  (total, level) => total + Math.round(LEVEL_POINTS[level] * (1 + SPEED_SHARE)),
+  0,
+);
+
+/** Share of the clock still unspent, 0–1. */
+export function speedFactor(elapsedMs: number, limitMs: number = BLIND_TIME_MS): number {
+  if (limitMs <= 0) return 0;
+  return Math.min(1, Math.max(0, 1 - elapsedMs / limitMs));
+}
+
+export interface BlindAward {
+  base: number;
+  speedBonus: number;
+  /** What the hints spent on this level left, 0–1. */
+  hintMultiplier: number;
+  total: number;
+}
+
+/**
+ * What a level pays for a correct call.
+ *
+ * Base plus speed, then the hint discount over the pair. Discounting the bonus
+ * too is deliberate: without it three hints and a snap answer would still bank
+ * most of the speed award, which is not a read worth rewarding.
+ */
+export function awardFor(
+  level: BlindLevel,
+  hints: number,
+  elapsedMs = 0,
+  limitMs: number = BLIND_TIME_MS,
+): BlindAward {
+  const base = LEVEL_POINTS[level];
+  const speedBonus = base * SPEED_SHARE * speedFactor(elapsedMs, limitMs);
+  const hintMultiplier = Math.max(0, 1 - HINT_COST * hints);
+  return {
+    base,
+    speedBonus: Math.round(speedBonus),
+    hintMultiplier,
+    total: Math.round((base + speedBonus) * hintMultiplier),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -256,10 +303,14 @@ export interface BlindResult {
   correct: boolean;
   /** Hints spent on this rung. */
   hints: number;
-  /** Points banked, after the hint cost. Zero for a wrong call. */
+  /** Points banked, after speed and the hint cost. Zero for a wrong call. */
   points: number;
-  /** What the player called, for the recap. */
-  call: Side;
+  /** The speed half of `points`, for the recap. */
+  speedBonus: number;
+  /** Milliseconds from the level going live to the call. */
+  elapsedMs: number;
+  /** `null` when the clock ran out with no call. */
+  call: Side | null;
 }
 
 export interface BlindRun {
@@ -274,16 +325,28 @@ export interface BlindRun {
   /** One entry per rung played, in order. */
   results: BlindResult[];
   score: number;
+  /** Time spent across every rung answered, for the board's tie-break. */
+  timeMs: number;
   status: BlindStatus;
 }
 
 export function createBlindRun(games: Game[]): BlindRun {
-  return { games, level: 0, hints: 0, hintsTotal: 0, results: [], score: 0, status: 'playing' };
+  return {
+    games,
+    level: 0,
+    hints: 0,
+    hintsTotal: 0,
+    results: [],
+    score: 0,
+    timeMs: 0,
+    status: 'playing',
+  };
 }
 
 export type BlindAction =
+  /** `prediction: null` is the clock running out, which scores like a miss. */
+  | { type: 'answer'; prediction: Side | null; elapsedMs: number }
   | { type: 'hint' }
-  | { type: 'answer'; prediction: Side }
   | { type: 'next' }
   | { type: 'restart'; games: Game[] };
 
@@ -303,18 +366,30 @@ export function blindReducer(run: BlindRun, action: BlindAction): BlindRun {
       if (!game) return run;
 
       const level = BLIND_LEVELS[run.level]!;
-      const correct = action.prediction === game.winner;
+      const elapsedMs = Math.max(0, action.elapsedMs);
+      const correct = action.prediction !== null && action.prediction === game.winner;
       // A wrong call costs this rung's points and nothing more: the run
       // continues, which is the difference between a mistake and a reset.
-      const points = correct ? awardFor(level, run.hints) : 0;
+      const award = correct
+        ? awardFor(level, run.hints, elapsedMs)
+        : { base: 0, speedBonus: 0, hintMultiplier: 1, total: 0 };
 
       return {
         ...run,
         status: 'revealing',
-        score: run.score + points,
+        score: run.score + award.total,
+        timeMs: run.timeMs + elapsedMs,
         results: [
           ...run.results,
-          { level, correct, hints: run.hints, points, call: action.prediction },
+          {
+            level,
+            correct,
+            hints: run.hints,
+            points: award.total,
+            speedBonus: award.speedBonus,
+            elapsedMs,
+            call: action.prediction,
+          },
         ],
       };
     }

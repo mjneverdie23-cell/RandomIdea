@@ -22,6 +22,11 @@ export interface BlindBoardEntry {
   cleared: number;
   /** Hints spent across the run. */
   hints: number;
+  /**
+   * Total time on the clock across the four levels, in milliseconds.
+   * Absent on runs recorded before blind mode had a clock.
+   */
+  timeMs?: number;
   /** Which rungs were read correctly, for the recap column. */
   levelsCleared: BlindLevel[];
   /** ISO timestamp of when the run finished. */
@@ -112,16 +117,20 @@ export const blindBoardRepository: BlindBoardRepository = new LocalBlindBoardRep
 /* ------------------------------------------------------------------ */
 
 /**
- * Score first, then the run that needed fewer hints.
+ * Score first, then the run that needed fewer hints, then the faster one.
  *
  * Two runs can bank the same points very differently — four clean rungs against
  * three hinted ones — and the unhinted read is the better one, so hints break
- * the tie before anything else does.
+ * the tie before anything else does. Time comes after that: speed is already
+ * priced into the score, so it settles what is left rather than counting twice.
  */
 export function compareBlindEntries(a: BlindBoardEntry, b: BlindBoardEntry): number {
   if (b.score !== a.score) return b.score - a.score;
   if (a.hints !== b.hints) return a.hints - b.hints;
   if (b.cleared !== a.cleared) return b.cleared - a.cleared;
+  const aTime = a.timeMs ?? Number.POSITIVE_INFINITY;
+  const bTime = b.timeMs ?? Number.POSITIVE_INFINITY;
+  if (aTime !== bTime) return aTime - bTime;
   return Date.parse(b.date) - Date.parse(a.date);
 }
 
@@ -148,6 +157,7 @@ export function entryFromRun(
     score: run.score,
     cleared: run.results.filter((result) => result.correct).length,
     hints: run.hintsTotal,
+    timeMs: run.timeMs,
     levelsCleared: run.results.filter((r) => r.correct).map((r) => r.level),
     date: new Date().toISOString(),
     demoData,

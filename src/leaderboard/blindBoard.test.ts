@@ -16,6 +16,7 @@ const entry = (over: Partial<BlindBoardEntry> = {}): BlindBoardEntry => ({
   score: 500,
   cleared: 2,
   hints: 0,
+  timeMs: 20_000,
   levelsCleared: ['easy', 'medium'],
   date: '2026-08-01T00:00:00.000Z',
   demoData: false,
@@ -35,6 +36,26 @@ describe('compareBlindEntries', () => {
       entry({ score: 500, hints: 0, username: 'Clean' }),
     ]);
     expect(ranked.map((e) => e.username)).toEqual(['Clean', 'Hinted']);
+  });
+
+  it('then prefers the faster run', () => {
+    // Speed is already priced into the score, so time settles what is left
+    // rather than counting twice.
+    const ranked = rankBlindEntries([
+      entry({ score: 550, hints: 1, cleared: 2, timeMs: 60_000, username: 'Slow' }),
+      entry({ score: 550, hints: 1, cleared: 2, timeMs: 20_000, username: 'Fast' }),
+    ]);
+    expect(ranked.map((e) => e.username)).toEqual(['Fast', 'Slow']);
+  });
+
+  it('ranks a run recorded before the clock existed last among its ties', () => {
+    const legacy = entry({ score: 550, hints: 0, cleared: 2, username: 'Legacy' });
+    delete (legacy as { timeMs?: number }).timeMs;
+    const ranked = rankBlindEntries([
+      legacy,
+      entry({ score: 550, hints: 0, cleared: 2, timeMs: 90_000, username: 'Timed' }),
+    ]);
+    expect(ranked.map((e) => e.username)).toEqual(['Timed', 'Legacy']);
   });
 
   it('then prefers the run that read more levels', () => {
@@ -61,12 +82,13 @@ describe('entryFromRun', () => {
     hints: 0,
     hintsTotal: 3,
     score: 650,
+    timeMs: 42_000,
     status: 'finished',
     results: [
-      { level: 'easy', correct: true, hints: 0, points: 100, call: 'blue' },
-      { level: 'medium', correct: false, hints: 2, points: 0, call: 'red' },
-      { level: 'hard', correct: true, hints: 1, points: 263, call: 'blue' },
-      { level: 'impossible', correct: false, hints: 0, points: 0, call: 'red' },
+      { level: 'easy', correct: true, hints: 0, points: 100, speedBonus: 0, elapsedMs: 9_000, call: 'blue' },
+      { level: 'medium', correct: false, hints: 2, points: 0, speedBonus: 0, elapsedMs: 12_000, call: 'red' },
+      { level: 'hard', correct: true, hints: 1, points: 263, speedBonus: 40, elapsedMs: 11_000, call: 'blue' },
+      { level: 'impossible', correct: false, hints: 0, points: 0, speedBonus: 0, elapsedMs: 10_000, call: null },
     ],
     ...over,
   });
@@ -76,6 +98,7 @@ describe('entryFromRun', () => {
     expect(made.score).toBe(650);
     expect(made.cleared).toBe(2);
     expect(made.hints).toBe(3);
+    expect(made.timeMs).toBe(42_000);
     expect(made.levelsCleared).toEqual(['easy', 'hard']);
     expect(made.username).toBe('Faker');
     expect(Number.isFinite(Date.parse(made.date))).toBe(true);

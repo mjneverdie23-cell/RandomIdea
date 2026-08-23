@@ -361,7 +361,7 @@ function BlindBoard({
       <div className="panel-header">
         <h2>Blind mode</h2>
         <span className="dim">
-          Four levels, {MAX_BLIND_SCORE} points if you read them all with no hints
+          Four levels, {MAX_BLIND_SCORE} points for reading them all fast and unaided
         </span>
         {ranked.length > 0 && (
           <button type="button" className="btn btn-sm btn-ghost" onClick={onClear}>
@@ -404,6 +404,9 @@ function BlindBoard({
                   <th scope="col" className="board-num">
                     Hints
                   </th>
+                  <th scope="col" className="board-num">
+                    Time
+                  </th>
                   <th scope="col">When</th>
                 </tr>
               </thead>
@@ -428,6 +431,9 @@ function BlindBoard({
                       <span className="badge">{clearedLabel(entry.levelsCleared)}</span>
                     </td>
                     <td className="board-num num">{entry.hints}</td>
+                    <td className="board-num num">
+                      {entry.timeMs === undefined ? '—' : formatSeconds(entry.timeMs)}
+                    </td>
                     <td className="dim">{formatRelative(entry.date)}</td>
                   </tr>
                 ))}

@@ -10,11 +10,14 @@ import {
   currentLevel,
   hintUnlocked,
   awardFor,
+  BLIND_TIME_MS,
   lastResult,
   levelForGap,
   LEVEL_POINTS,
   MAX_BLIND_SCORE,
   MIN_RATED_GAMES,
+  speedFactor,
+  SPEED_SHARE,
   rateGames,
   rungsCleared,
 } from './blind.ts';
@@ -195,33 +198,124 @@ describe('buildLadder', () => {
   });
 });
 
+describe('awardFor', () => {
+  it('pays the face value for an instant, hint-free correct call, plus speed', () => {
+    const award = awardFor('easy', 0, 0);
+    expect(award.base).toBe(LEVEL_POINTS.easy);
+    expect(award.speedBonus).toBe(Math.round(LEVEL_POINTS.easy * SPEED_SHARE));
+    expect(award.total).toBe(LEVEL_POINTS.easy + award.speedBonus);
+  });
+
+  it('falls to the base alone once the clock is spent', () => {
+    expect(awardFor('hard', 0, BLIND_TIME_MS).total).toBe(LEVEL_POINTS.hard);
+    // And never below it, however late the call.
+    expect(awardFor('hard', 0, BLIND_TIME_MS * 3).total).toBe(LEVEL_POINTS.hard);
+  });
+
+  it('scales the bonus linearly with the clock', () => {
+    const half = awardFor('impossible', 0, BLIND_TIME_MS / 2);
+    expect(half.speedBonus).toBe(Math.round(LEVEL_POINTS.impossible * SPEED_SHARE * 0.5));
+    const quarter = awardFor('impossible', 0, BLIND_TIME_MS * 0.75);
+    expect(quarter.speedBonus).toBeLessThan(half.speedBonus);
+  });
+
+  it('is worth more the harder the level, at the same speed', () => {
+    const totals = BLIND_LEVELS.map((level) => awardFor(level, 0, 1000).total);
+    expect(totals).toEqual([...totals].sort((a, b) => a - b));
+  });
+
+  it('discounts the speed bonus too, so hints cannot be spent for free', () => {
+    const clean = awardFor('impossible', 0, 0);
+    const hinted = awardFor('impossible', 3, 0);
+    expect(hinted.hintMultiplier).toBeCloseTo(0.25, 10);
+    expect(hinted.total).toBe(Math.round(clean.total * 0.25));
+    // Three hints and a snap answer must not beat a slow, unaided read.
+    expect(hinted.total).toBeLessThan(awardFor('impossible', 0, BLIND_TIME_MS).total);
+  });
+
+  it('never pays a negative amount', () => {
+    for (const level of BLIND_LEVELS) {
+      for (let hints = 0; hints <= 6; hints += 1) {
+        expect(awardFor(level, hints, BLIND_TIME_MS).total).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});
+
+describe('speedFactor', () => {
+  it('runs from a full share to none, and clamps outside the clock', () => {
+    expect(speedFactor(0)).toBe(1);
+    expect(speedFactor(BLIND_TIME_MS / 4)).toBeCloseTo(0.75, 10);
+    expect(speedFactor(BLIND_TIME_MS)).toBe(0);
+    expect(speedFactor(BLIND_TIME_MS * 2)).toBe(0);
+    expect(speedFactor(-500)).toBe(1);
+  });
+
+  it('is zero when there is no clock to race', () => {
+    expect(speedFactor(0, 0)).toBe(0);
+  });
+});
+
 describe('blindReducer', () => {
   const ladder = () => buildLadder(rateGames(pool()), 'seed');
   const run = () => createBlindRun(ladder());
-  const right = (state: ReturnType<typeof run>) =>
-    blindReducer(state, { type: 'answer', prediction: currentBlindGame(state)!.winner });
-  const wrong = (state: ReturnType<typeof run>) =>
+  const right = (state: ReturnType<typeof run>, elapsedMs = 0) =>
+    blindReducer(state, {
+      type: 'answer',
+      prediction: currentBlindGame(state)!.winner,
+      elapsedMs,
+    });
+  const wrong = (state: ReturnType<typeof run>, elapsedMs = 0) =>
     blindReducer(state, {
       type: 'answer',
       prediction: currentBlindGame(state)!.winner === 'blue' ? 'red' : 'blue',
+      elapsedMs,
     });
 
-  it('banks the level points for a correct call', () => {
-    const revealed = right(run());
+  it('banks the level points plus speed for a correct call', () => {
+    const revealed = right(run(), 0);
     expect(revealed.status).toBe('revealing');
-    expect(revealed.score).toBe(LEVEL_POINTS.easy);
+    expect(revealed.score).toBe(awardFor('easy', 0, 0).total);
     expect(lastResult(revealed)!.correct).toBe(true);
-    expect(lastResult(revealed)!.points).toBe(LEVEL_POINTS.easy);
+    expect(lastResult(revealed)!.speedBonus).toBeGreaterThan(0);
+  });
+
+  it('pays less for the same correct call made later', () => {
+    const fast = right(run(), 1_000).score;
+    const slow = right(run(), BLIND_TIME_MS - 1_000).score;
+    expect(fast).toBeGreaterThan(slow);
+    expect(slow).toBeGreaterThanOrEqual(LEVEL_POINTS.easy);
+  });
+
+  it('records the time taken and totals it across the run', () => {
+    let state = right(run(), 5_000);
+    expect(lastResult(state)!.elapsedMs).toBe(5_000);
+    expect(state.timeMs).toBe(5_000);
+    state = blindReducer(state, { type: 'next' });
+    state = wrong(state, 3_000);
+    expect(state.timeMs).toBe(8_000);
+  });
+
+  it('treats a timeout as a miss that still costs the clock', () => {
+    const timedOut = blindReducer(run(), {
+      type: 'answer',
+      prediction: null,
+      elapsedMs: BLIND_TIME_MS,
+    });
+    const result = lastResult(timedOut)!;
+    expect(result.correct).toBe(false);
+    expect(result.call).toBeNull();
+    expect(result.points).toBe(0);
+    expect(timedOut.timeMs).toBe(BLIND_TIME_MS);
+    // And the run carries on, same as a wrong call.
+    expect(blindReducer(timedOut, { type: 'next' }).status).toBe('playing');
   });
 
   it('scores a wrong call zero and carries the run on', () => {
     const revealed = wrong(run());
-    expect(revealed.status).toBe('revealing');
     expect(revealed.score).toBe(0);
-    expect(lastResult(revealed)!.correct).toBe(false);
     expect(lastResult(revealed)!.points).toBe(0);
 
-    // The point of the change: a miss is not a reset.
     const next = blindReducer(revealed, { type: 'next' });
     expect(next.status).toBe('playing');
     expect(next.level).toBe(1);
@@ -236,27 +330,21 @@ describe('blindReducer', () => {
     expect(state.status).toBe('finished');
     expect(state.results).toHaveLength(BLIND_LEVELS.length);
     expect(rungsCleared(state)).toBe(2);
-    expect(state.score).toBe(LEVEL_POINTS.easy + LEVEL_POINTS.hard);
   });
 
-  it('pays more for the harder rungs', () => {
-    const perfect = () => {
-      let state = run();
-      for (let i = 0; i < BLIND_LEVELS.length; i += 1) {
-        state = blindReducer(right(state), { type: 'next' });
-      }
-      return state;
-    };
-    expect(perfect().score).toBe(MAX_BLIND_SCORE);
-    // Each rung is worth strictly more than the one below it.
-    const values = BLIND_LEVELS.map((level) => LEVEL_POINTS[level]);
-    expect(values).toEqual([...values].sort((a, b) => a - b));
-    expect(new Set(values).size).toBe(values.length);
+  it('tops out at the advertised maximum', () => {
+    let state = run();
+    for (let i = 0; i < BLIND_LEVELS.length; i += 1) {
+      state = blindReducer(right(state, 0), { type: 'next' });
+    }
+    expect(state.score).toBe(MAX_BLIND_SCORE);
   });
 
   it('cannot answer twice on one level', () => {
     const revealed = right(run());
-    expect(blindReducer(revealed, { type: 'answer', prediction: 'blue' })).toBe(revealed);
+    expect(blindReducer(revealed, { type: 'answer', prediction: 'blue', elapsedMs: 0 })).toBe(
+      revealed,
+    );
   });
 
   it('ignores next outside the reveal', () => {
@@ -277,19 +365,10 @@ describe('blindReducer', () => {
     let state = run();
     state = blindReducer(state, { type: 'hint' });
     state = blindReducer(state, { type: 'hint' });
-    const revealed = right(state);
-    expect(revealed.score).toBe(awardFor('easy', 2));
-    expect(revealed.score).toBeLessThan(LEVEL_POINTS.easy);
+    const revealed = right(state, 2_000);
+    expect(revealed.score).toBe(awardFor('easy', 2, 2_000).total);
+    expect(revealed.score).toBeLessThan(awardFor('easy', 0, 2_000).total);
     expect(lastResult(revealed)!.hints).toBe(2);
-  });
-
-  it('never pays a negative amount, however many hints are spent', () => {
-    for (const level of BLIND_LEVELS) {
-      for (let hints = 0; hints <= 6; hints += 1) {
-        expect(awardFor(level, hints)).toBeGreaterThanOrEqual(0);
-      }
-      expect(awardFor(level, 0)).toBe(LEVEL_POINTS[level]);
-    }
   });
 
   it('cannot take a hint during the reveal', () => {
@@ -309,11 +388,11 @@ describe('blindReducer', () => {
   it('starts clean on restart', () => {
     let state = run();
     state = blindReducer(state, { type: 'hint' });
-    state = blindReducer(wrong(state), { type: 'next' });
+    state = blindReducer(wrong(state, 4_000), { type: 'next' });
     const fresh = blindReducer(state, { type: 'restart', games: ladder() });
     expect(fresh).toEqual(createBlindRun(fresh.games));
     expect(fresh.score).toBe(0);
-    expect(fresh.results).toEqual([]);
+    expect(fresh.timeMs).toBe(0);
   });
 });
 

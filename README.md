@@ -204,15 +204,23 @@ you that rung's points and nothing else — you play all four either way, becaus
 ending a run on one bad guess at a coin flip is a punishment out of proportion
 to the mistake.
 
-Harder rungs pay more, and the progression is steeper than the rung numbers:
+Harder rungs pay more, and the progression is steeper than the rung numbers.
+Each rung also carries a **45-second clock**, and answering early is worth up to
+half the rung's face value on top — longer than the timed quiz's 30 seconds
+because the question is harder: with the teams stripped out there is no "T1 are
+better than this" shortcut, only ten champions and five bans to read.
 
-| rung | points |
-| --- | --- |
-| Easy | 100 |
-| Medium | 200 |
-| Hard | 350 |
-| Impossible | 550 |
-| **a flawless, hint-free run** | **1200** |
+| rung | for the read | speed bonus | fastest possible |
+| --- | --- | --- | --- |
+| Easy | 100 | up to 50 | 150 |
+| Medium | 200 | up to 100 | 300 |
+| Hard | 350 | up to 175 | 525 |
+| Impossible | 550 | up to 275 | 825 |
+| **a flawless, instant, hint-free run** | 1200 | 600 | **1800** |
+
+The bonus falls off linearly with the clock rather than in steps, so there is no
+cliff to game. Running the clock out scores like a wrong call: nothing for that
+rung, and the run carries on.
 
 With the teams hidden every rung sits closer to a coin flip than its measured
 hit rate suggests, and the top one genuinely is one — so clearing Impossible is
@@ -226,18 +234,23 @@ question.
 2. Reveal the patch and its meta
 3. Reveal the tournament and date
 
-Each costs **25%** of the rung it is spent on, so a fully-hinted rung is worth a
-quarter of face value — still worth answering, never worth defaulting to. Hints
-have to cost something, or every run takes all three and the board measures
-nothing.
+Each costs **25%** of the rung it is spent on — applied to the speed bonus as
+well as the base, because otherwise three hints and a snap answer would still
+bank most of the speed award, which is not a read worth rewarding. A fully
+hinted rung is worth a quarter of face value: still worth answering, never worth
+defaulting to. And the clock keeps running while you read them, so a hint costs
+time as well as points.
 
 #### The blind board
 
 Blind runs get their own leaderboard rather than another category on the quiz
 board: the two modes score different things, and a run of four fixed questions
-has no length, no clock and no streak to rank by. Score ranks first, then the
-run that needed **fewer hints** — two runs can bank the same points very
-differently, and the unhinted read is the better one.
+has no length and no streak to rank by. Score ranks first, then the run that
+needed **fewer hints** — two runs can bank the same points very differently, and
+the unhinted read is the better one — then the faster run. Time settles what is
+left rather than counting twice, since speed is already priced into the score.
+Runs recorded before blind mode had a clock show a dash and sort last among
+their ties.
 
 #### How a level's difficulty is decided
 
