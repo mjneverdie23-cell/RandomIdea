@@ -320,7 +320,7 @@ higher total is the predicted winner.
 | Line item | What it adds |
 | --- | --- |
 | Win-rate base | The five champions' win rates for **the player starting that lane** — current split and career averaged — capped at 1.00 per lane. An off-meta champion they have no record on counts as 1.00 |
-| Meta champions | +1 per champion clearing the pick-rate bar on the newest patches (5% of games in that role, and at least 4 actual picks) |
+| Meta champions | +1 per champion clearing the presence bar on the newest patches — **picks plus bans** in that role, 5% of games and at least 4 appearances |
 | Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
 | Form edge | Up to +1 for the better current-season series record |
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive. **Stated by you** — see below |
@@ -350,6 +350,54 @@ right. The direction is the opposite of the intuition: across July and August
 A team is behind because it has been losing, and that keeps being true — so the
 lead is credited rather than the pressure.
 
+#### Meta is presence, and presence includes bans
+
+The meta test asks "is this champion contested right now", and for most of this
+project's life it answered by counting picks. That reads the champions teams
+respect most exactly backwards. On patch 16.15 **Poppy was picked 8 times and
+banned 113** across 149 games — the single most contested champion in the game —
+and came out *off-meta*, so a team that finally got her through was credited a
+pocket-pick surprise bonus for taking the champion everyone else had removed.
+Cassiopeia (32 picks / 90 bans) and Nocturne (28 / 81) were the same shape, and
+Qiyana (4 / 5) was the case that surfaced it.
+
+A champion nobody is allowed to play is not a surprise. It is the definition of
+the meta. So presence is **picks plus bans**, counted per side — a champion
+contested by both teams counts twice, because being fought over on both sides is
+the strongest signal there is. Bans carry no role in Oracle's Elixir, so each is
+filed under the role that champion is actually played in, taken over the whole
+scoped history rather than the two-patch window because a champion's role is
+stable and the wider sample makes the attribution steadier.
+
+The rate bar and `META_MIN_PICKS` are unchanged, so a champion still needs four
+real appearances behind the percentage. In the 16.16 + 16.15 window this moves
+Qiyana from 2.6% to 5.8% and into the meta, Poppy from 3.2% to 76.9%, Cassiopeia
+to 75.6% and Nocturne to 69.9%, and grows the pool to 67 champions across the
+five roles.
+
+**It does not fix Renata Glasc**, which was the other champion reported. She is
+6 picks and 0 bans in that window — 13th of 23 supports, genuinely below the bar
+on this data. Nothing here is being bent to reach her.
+
+The per-lane detail now shows the presence rate, with the pick/ban split on
+hover, so an "off-meta" verdict can be checked against the bar rather than taken
+on trust.
+
+Backtested over the same 1,317 games (16 March onward), the fix leaves accuracy
+where it was and improves the **calibration**:
+
+| | accuracy | record | Brier | game-one drafts credited a pocket bonus |
+| --- | --- | --- | --- | --- |
+| Picks only | 64.8% | 852-463 | 0.2339 | 277 |
+| Picks + bans | 64.8% | 852-462 | **0.2299** | **227** |
+
+Fifty game-one drafts stop being paid a surprise bonus for taking a champion
+everyone else was banning, and the probabilities get better while the win/loss
+calls stay the same — which is what a calibration bug looks like when it is
+fixed. By league it is mixed rather than uniform: LPL 59.4% → 60.3%, First Stand
+68.9% → 73.3%, MSI 63.4% → 64.8%, against LCK 66.9% → 65.2% and EWC 65.7% →
+65.1%.
+
 #### The dark-horse list, and what measuring it showed
 
 `DARK_HORSE` in `src/predictor/engine.ts` is a hand-maintained set of champions
@@ -372,9 +420,11 @@ collecting a full meta point — they are staples, not surprises, and the extra
 partly double-counts. Worse, **Nocturne loses**: 45.4% over a 262-game sample,
 so crediting it a bonus points the wrong way outright.
 
-The term has now been backtested over four windows and has never helped: one
-game lost over 374, zero over 1,272, zero over 1,592, one gained over 1,317 —
-every one of them inside noise, with the Brier score unmoved throughout. A
+The term has now been backtested over five windows and has never helped: one
+game lost over 374, zero over 1,272, zero over 1,592, one gained over 1,317, and
+on the re-run of that last window after the ban fix, **two games gained** —
+852-462 with the term against 850-464 without, Brier 0.2299 against 0.2301.
+Every one of them is inside noise, with the Brier score unmoved throughout. A
 *negative* bonus once scored the same as a positive one, which is what a term
 made of noise looks like.
 
@@ -430,6 +480,24 @@ other intends to play and an off-meta pick says far less about a plan than the
 same pick in game three. Worth knowing: because an off-meta pick still forfeits
 its full meta point while earning only half a pocket bonus, a game-one pocket
 pick nets −0.25 against an all-meta draft, and +0.5 from game two on.
+
+The halving has been measured three ways over 1,317 games (522 of them game
+ones, 227 with a non-zero pocket term):
+
+| game one | all 1,317 | Brier | game ones only | the 227 that fire |
+| --- | --- | --- | --- | --- |
+| Halved (shipped) | 64.8% | 0.2299 | 65.4% | 64.3% |
+| Full weight | **65.1%** | 0.2299 | **66.0%** | **65.6%** |
+| Dropped entirely | 64.7% | 0.2323 | 65.1% | 63.7% |
+
+Two things come out of that. **The term belongs in game one** — dropping it is
+worst on every measure, including the only one with any margin in it: Brier on
+the games it actually touches goes 0.2251 at full weight to 0.2393 dropped. But
+**the halving costs almost nothing**: three games in 1,317, and a Brier that is
+flat to four decimal places. Three games out of 1,317 is 0.23 points, well
+inside the run-to-run noise of this model, so the halving stays — the argument
+for it is about what game one can tell you, and the measurement gives no reason
+to overturn it.
 
 A pocket pick is priced above a meta pick on purpose. An off-meta champion
 earns no meta bonus, so while the two were equal they cancelled exactly: four

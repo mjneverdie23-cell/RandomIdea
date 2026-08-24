@@ -45,7 +45,7 @@ export const META_PATCH_COUNT = 2;
 /** Share of games a champion must be picked in to count as meta. */
 export const META_PICK_RATE = 0.05;
 /**
- * Picks a champion needs before a rate is allowed to mean anything.
+ * Appearances — picks or bans — a champion needs before a rate means anything.
  *
  * A percentage is not evidence on its own. The window is the two newest
  * patches, and on the day a patch ships that can be very few games: measured
@@ -183,19 +183,68 @@ function buildChampionRecords(
 /* ------------------------------------------------------------------ */
 
 /**
- * Meta = picked often enough on the newest patches, computed per role.
+ * The role a champion is actually played in, across everything scoped.
  *
- * This is pick-frequency meta, not win-rate meta: the question the score asks
- * is "did they draft what everyone is drafting", and a champion can be
- * contested constantly while sitting at a 48% win rate.
+ * Bans arrive as a flat list with no role attached, so to count them per role
+ * they have to be attributed to one. Taken over the whole scoped window rather
+ * than the meta window, because a champion's role is stable and the wider
+ * sample makes the attribution steadier.
+ */
+function mainRoles(games: readonly Game[]): Map<string, Role> {
+  const tally = new Map<string, Map<Role, number>>();
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      for (const player of side.players) {
+        const perRole = tally.get(player.champion.id) ?? new Map<Role, number>();
+        perRole.set(player.role, (perRole.get(player.role) ?? 0) + 1);
+        tally.set(player.champion.id, perRole);
+      }
+    }
+  }
+
+  const main = new Map<string, Role>();
+  for (const [championId, perRole] of tally) {
+    let best: Role | null = null;
+    let count = -1;
+    for (const [role, n] of perRole) {
+      if (n > count) {
+        best = role;
+        count = n;
+      }
+    }
+    if (best) main.set(championId, best);
+  }
+  return main;
+}
+
+/**
+ * Meta = contested often enough on the newest patches, computed per role.
+ *
+ * This is presence meta, not win-rate meta: the question the score asks is "did
+ * they draft what everyone is fighting over", and a champion can be contested
+ * constantly while sitting at a 48% win rate.
+ *
+ * **Presence is picks plus bans.** Counting picks alone got this exactly
+ * backwards for the champions teams respect most: on patch 16.15 Poppy was
+ * picked 8 times and banned 113 — the single most contested champion in the
+ * game — and read as *off-meta*, so a team that managed to get her through was
+ * credited a pocket-pick surprise bonus for taking her. A champion nobody is
+ * allowed to play is not a surprise, it is the definition of the meta. Qiyana
+ * was the same shape at 4 picks and 5 bans.
+ *
+ * Bans carry no role in the data, so each is attributed to the role that
+ * champion is actually played in.
  *
  * The window is the two newest patches, which is what keeps the read current,
  * and a champion needs both a high enough rate and `META_MIN_PICKS` actual
- * picks — a percentage over a handful of games is not evidence.
+ * appearances — a percentage over a handful of games is not evidence.
  */
 export function deriveMeta(games: readonly Game[]): {
   metaByRole: Map<Role, Set<string>>;
+  /** Pick rate alone, reported so the split between picks and bans is visible. */
   pickRateByRole: Map<Role, Map<string, number>>;
+  /** Picks plus bans over window games — the number the meta test uses. */
+  presenceRateByRole: Map<Role, Map<string, number>>;
   patches: string[];
   windowGames: number;
 } {
@@ -207,36 +256,66 @@ export function deriveMeta(games: readonly Game[]): {
 
   const recent = wanted.size ? games.filter((g) => g.patch && wanted.has(g.patch)) : games;
 
-  const counts = new Map<Role, Map<string, number>>();
-  for (const role of ROLES) counts.set(role, new Map());
+  const role = mainRoles(games);
+  const picks = new Map<Role, Map<string, number>>();
+  const presence = new Map<Role, Map<string, number>>();
+  for (const r of ROLES) {
+    picks.set(r, new Map());
+    presence.set(r, new Map());
+  }
+
+  const bump = (map: Map<Role, Map<string, number>>, r: Role, championId: string) => {
+    const perRole = map.get(r)!;
+    perRole.set(championId, (perRole.get(championId) ?? 0) + 1);
+  };
 
   for (const game of recent) {
     for (const side of [game.blue, game.red] as const) {
+      // Counted per side, so a champion contested by both teams counts twice —
+      // being fought over on both sides is the strongest meta signal there is.
       for (const player of side.players) {
-        const perRole = counts.get(player.role)!;
-        perRole.set(player.champion.id, (perRole.get(player.champion.id) ?? 0) + 1);
+        bump(picks, player.role, player.champion.id);
+        bump(presence, player.role, player.champion.id);
+      }
+      for (const ban of side.bans) {
+        // A ban only lands somewhere if the champion was actually played in
+        // the window; one nobody picked at all has no role to file it under.
+        const banRole = role.get(ban.id);
+        if (banRole) bump(presence, banRole, ban.id);
       }
     }
   }
 
   const metaByRole = new Map<Role, Set<string>>();
   const pickRateByRole = new Map<Role, Map<string, number>>();
-  for (const role of ROLES) {
+  const presenceRateByRole = new Map<Role, Map<string, number>>();
+  for (const r of ROLES) {
     const keep = new Set<string>();
-    const rates = new Map<string, number>();
-    // Presence per game, so a champion picked by both teams counts twice —
-    // being contested on both sides is the strongest meta signal there is.
-    for (const [championId, picks] of counts.get(role)!) {
-      if (recent.length === 0) continue;
-      const rate = picks / recent.length;
-      rates.set(championId, rate);
-      if (rate >= META_PICK_RATE && picks >= META_MIN_PICKS) keep.add(championId);
+    const pickRates = new Map<string, number>();
+    const presenceRates = new Map<string, number>();
+
+    for (const [championId, count] of picks.get(r)!) {
+      if (recent.length > 0) pickRates.set(championId, count / recent.length);
     }
-    metaByRole.set(role, keep);
-    pickRateByRole.set(role, rates);
+    for (const [championId, count] of presence.get(r)!) {
+      if (recent.length === 0) continue;
+      const rate = count / recent.length;
+      presenceRates.set(championId, rate);
+      if (rate >= META_PICK_RATE && count >= META_MIN_PICKS) keep.add(championId);
+    }
+
+    metaByRole.set(r, keep);
+    pickRateByRole.set(r, pickRates);
+    presenceRateByRole.set(r, presenceRates);
   }
 
-  return { metaByRole, pickRateByRole, patches: recentPatches, windowGames: recent.length };
+  return {
+    metaByRole,
+    pickRateByRole,
+    presenceRateByRole,
+    patches: recentPatches,
+    windowGames: recent.length,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -750,7 +829,7 @@ export function buildPredictorModel(
 ): PredictorModel {
   const splits = currentSplits(games);
   const records = buildChampionRecords(games, splits);
-  const { metaByRole, pickRateByRole, patches, windowGames } = deriveMeta(games);
+  const { metaByRole, pickRateByRole, presenceRateByRole, patches, windowGames } = deriveMeta(games);
 
   const formSeason = latestSeason(games);
   const formGames = formSeason ? games.filter((game) => game.season === formSeason) : games;
@@ -767,6 +846,7 @@ export function buildPredictorModel(
     currentSplitOf: splits,
     metaByRole,
     pickRateByRole,
+    presenceRateByRole,
     metaPatches: patches,
     metaWindowGames: windowGames,
     metaPickRateThreshold: META_PICK_RATE,
@@ -788,10 +868,12 @@ export function buildPredictorModel(
 export function emptyPredictorModel(): PredictorModel {
   const metaByRole = new Map<Role, Set<string>>();
   const pickRateByRole = new Map<Role, Map<string, number>>();
+  const presenceRateByRole = new Map<Role, Map<string, number>>();
   const championsByRole = new Map<Role, Champion[]>();
   for (const role of ROLES) {
     metaByRole.set(role, new Set());
     pickRateByRole.set(role, new Map());
+    presenceRateByRole.set(role, new Map());
     championsByRole.set(role, []);
   }
   return {
@@ -802,6 +884,7 @@ export function emptyPredictorModel(): PredictorModel {
     currentSplitOf: new Map(),
     metaByRole,
     pickRateByRole,
+    presenceRateByRole,
     metaPatches: [],
     metaWindowGames: 0,
     metaPickRateThreshold: META_PICK_RATE,

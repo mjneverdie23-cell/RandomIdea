@@ -262,6 +262,21 @@ function TendencyColumn({ side, team, lines }: { side: Side; team: string; lines
   );
 }
 
+/**
+ * The presence rate broken back into its two halves.
+ *
+ * Presence is what decides meta or off-meta, and a champion can reach the bar
+ * on either half: Poppy was 3% picked and 74% banned on patch 16.15. Splitting
+ * it out is the difference between "everyone plays this" and "nobody is allowed
+ * to", which the single number cannot tell you.
+ */
+function presenceSplit(pick: PickLine): string | undefined {
+  if (pick.presenceRate === null || pick.pickRate === null) return undefined;
+  const picked = pick.pickRate * 100;
+  const banned = Math.max(0, pick.presenceRate * 100 - picked);
+  return `${picked.toFixed(1)}% picked, ${banned.toFixed(1)}% banned`;
+}
+
 function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
   if (score.picks.length === 0) {
     return (
@@ -286,11 +301,13 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
               <strong>{pick.champion.name}</strong>
               <span className={`lane-meta${pick.meta ? ' is-meta' : ''}`}>
                 {pick.meta ? 'meta' : 'off-meta'}
-                {pick.pickRate !== null && (
-                  // The pick rate that produced the verdict, so a surprising
-                  // "off-meta" can be checked against the bar rather than
-                  // taken on trust.
-                  <span className="lane-rate">{(pick.pickRate * 100).toFixed(1)}%</span>
+                {pick.presenceRate !== null && (
+                  // The number that produced the verdict — picks plus bans, so
+                  // a surprising "off-meta" can be checked against the bar
+                  // rather than taken on trust.
+                  <span className="lane-rate" title={presenceSplit(pick)}>
+                    {(pick.presenceRate * 100).toFixed(1)}%
+                  </span>
                 )}
               </span>
             </div>

@@ -139,6 +139,8 @@ export interface PredictorModel {
   metaByRole: Map<Role, Set<string>>;
   /** Per-role pick rate over the meta window, for every champion seen in it. */
   pickRateByRole: Map<Role, Map<string, number>>;
+  /** Picks plus bans over window games — the number the meta test uses. */
+  presenceRateByRole: Map<Role, Map<string, number>>;
   metaPatches: string[];
   /** Games the meta window covers, so a thin read can be spotted. */
   metaWindowGames: number;
@@ -206,6 +208,8 @@ export interface PickLine {
   splitLabel: string | null;
   /** Share of meta-window games this champion was picked in this role. */
   pickRate: number | null;
+  /** The same counting bans, which is what decided meta or off-meta. */
+  presenceRate: number | null;
   meta: boolean;
   counters: Champion[];
   counteredBy: Champion[];

@@ -32,6 +32,8 @@ interface GameSpec {
   seriesFormat?: Game['seriesFormat'];
   blueDraft?: string[];
   redDraft?: string[];
+  blueBans?: string[];
+  redBans?: string[];
   blueGold?: GoldDiffTrack | null;
   /** Blue-side gold diff at 10/15/20/25; null entries mean "never reached". */
   blueCheckpoints?: (number | null)[];
@@ -49,6 +51,7 @@ function makeGame(spec: GameSpec): Game {
     draft: string[],
     gold: GoldDiffTrack | null,
     names: string[] | undefined,
+    bans: string[] | undefined,
   ) => ({
     side,
     teamName,
@@ -60,7 +63,7 @@ function makeGame(spec: GameSpec): Game {
       playerId: null,
       champion: makeChampion(draft[index]!)!,
     })),
-    bans: [],
+    bans: (bans ?? []).map((name) => makeChampion(name)!),
     goldDiff: gold,
   });
 
@@ -95,8 +98,15 @@ function makeGame(spec: GameSpec): Game {
     seriesFormat: spec.seriesFormat ?? 'BO3',
     seriesFormatInferred: true,
     gameNumber: spec.gameNumber ?? 1,
-    blue: build('blue', spec.blue, spec.blueDraft ?? DEFAULT_BLUE, blueGold, spec.bluePlayers),
-    red: build('red', spec.red, spec.redDraft ?? DEFAULT_RED, redGold, spec.redPlayers),
+    blue: build(
+      'blue',
+      spec.blue,
+      spec.blueDraft ?? DEFAULT_BLUE,
+      blueGold,
+      spec.bluePlayers,
+      spec.blueBans,
+    ),
+    red: build('red', spec.red, spec.redDraft ?? DEFAULT_RED, redGold, spec.redPlayers, spec.redBans),
     winner: spec.winner,
     durationSeconds: 1800,
     demo: false,
@@ -222,6 +232,99 @@ describe('deriveMeta', () => {
     const { metaByRole, patches } = deriveMeta(games);
     expect(patches).toEqual(['16.02', '16.01']);
     expect(metaByRole.get('top')!.has(makeChampion('Aatrox')!.id)).toBe(true);
+    expect(metaByRole.get('top')!.has(makeChampion('Rumble')!.id)).toBe(false);
+  });
+
+  it('counts a permabanned champion as meta, not as a pocket pick', () => {
+    // Rumble is picked once in twenty games and banned in nineteen of them —
+    // the Poppy shape. Picks alone read that as off-meta, which credited a
+    // surprise bonus to whoever finally got him through.
+    const games = [
+      makeGame({
+        id: 'through',
+        blue: 'A',
+        red: 'B',
+        winner: 'blue',
+        day: 0,
+        patch: '16.02',
+        blueDraft: ['Rumble', 'Viego', 'Azir', 'Jinx', 'Thresh'],
+      }),
+      ...Array.from({ length: 19 }, (_, i) =>
+        makeGame({
+          id: `banned-${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'blue',
+          day: i + 1,
+          patch: '16.02',
+          redBans: ['Rumble'],
+        }),
+      ),
+    ];
+
+    const { metaByRole, pickRateByRole, presenceRateByRole } = deriveMeta(games);
+    const rumble = makeChampion('Rumble')!.id;
+    expect(pickRateByRole.get('top')!.get(rumble)).toBeCloseTo(0.05, 10);
+    expect(presenceRateByRole.get('top')!.get(rumble)).toBeCloseTo(1.0, 10);
+    expect(metaByRole.get('top')!.has(rumble)).toBe(true);
+  });
+
+  it('files a ban under the role that champion is actually played in', () => {
+    // Bans carry no role in the source data, so the only way to place one is
+    // by where the champion shows up on the board.
+    const games = [
+      ...Array.from({ length: 10 }, (_, i) =>
+        makeGame({
+          id: `pick-${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'blue',
+          day: i,
+          patch: '16.02',
+          blueDraft: ['Aatrox', 'Viego', 'Azir', 'Jinx', 'Rumble'],
+        }),
+      ),
+      ...Array.from({ length: 10 }, (_, i) =>
+        makeGame({
+          id: `ban-${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'blue',
+          day: 10 + i,
+          patch: '16.02',
+          blueBans: ['Rumble'],
+        }),
+      ),
+    ];
+
+    const { presenceRateByRole } = deriveMeta(games);
+    const rumble = makeChampion('Rumble')!.id;
+    // Ten support picks plus ten bans over twenty games, all on support.
+    expect(presenceRateByRole.get('support')!.get(rumble)).toBeCloseTo(1.0, 10);
+    expect(presenceRateByRole.get('top')!.get(rumble)).toBeUndefined();
+  });
+
+  it('still needs the appearances, however lopsided the bans', () => {
+    // Three appearances in sixty games clears the rate bar in no role, and
+    // META_MIN_PICKS is what stops a rounding artefact becoming a meta read.
+    const games = [
+      ...Array.from({ length: 60 }, (_, i) =>
+        makeGame({ id: `plain-${i}`, blue: 'A', red: 'B', winner: 'blue', day: i, patch: '16.02' }),
+      ),
+      ...Array.from({ length: META_MIN_PICKS - 1 }, (_, i) =>
+        makeGame({
+          id: `rare-${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'blue',
+          day: 100 + i,
+          patch: '16.02',
+          blueDraft: ['Rumble', 'Viego', 'Azir', 'Jinx', 'Thresh'],
+        }),
+      ),
+    ];
+
+    const { metaByRole } = deriveMeta(games);
     expect(metaByRole.get('top')!.has(makeChampion('Rumble')!.id)).toBe(false);
   });
 });

@@ -6,7 +6,7 @@
  *
  *   win-rate base   the 5 starters' win rates on those champions, split and
  *                   career averaged; an off-meta pick with no record scores 1.0
- *   meta bonus      +1 per meta champion (meta = pick frequency, computed live)
+ *   meta bonus      +1 per meta champion (meta = picks + bans, computed live)
  *   pocket picks    1-2 off-meta picks -> +1.5 each ; more than 2 -> -2
  *                   (halved in game one, where the read is least informative)
  *   form edge       up to +1 for the better current-season series record
@@ -540,6 +540,7 @@ function scoreSide(
       careerRecord: read.careerRecord,
       splitLabel: read.splitLabel,
       pickRate: model.pickRateByRole.get(role)?.get(champion.id) ?? null,
+      presenceRate: model.presenceRateByRole.get(role)?.get(champion.id) ?? null,
       meta,
       ...edges,
     });
