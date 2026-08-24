@@ -45,6 +45,9 @@ COMPETITIONS: dict[str, tuple[str, ...]] = {
     "LEC": ("LEC",),
     "LCS": ("LCS", "NA LCS", "LTA N", "LTA S", "LTA"),
     "LPL": ("LPL",),
+    # PCS is intentionally absent: since the 2025 merger it is the tier-two
+    # league below LCP, not LCP's old name. See competitions.ts.
+    "LCP": ("LCP",),
     "WORLDS": ("WLDS", "WORLDS", "WCS"),
     "MSI": ("MSI",),
     "FIRST_STAND": ("FST", "FIRST STAND"),

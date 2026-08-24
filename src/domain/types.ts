@@ -90,6 +90,7 @@ export type CompetitionId =
   | 'LEC'
   | 'LCS'
   | 'LPL'
+  | 'LCP'
   | 'WORLDS'
   | 'MSI'
   | 'FIRST_STAND'

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { assetStats } from '../assets/manifest.ts';
-import { COMPETITIONS } from '../domain/competitions.ts';
+import { COMPETITIONS, COMPETITION_IDS } from '../domain/competitions.ts';
 import { CsvParseError } from '../data/parseCsv.ts';
 import { IngestError } from '../data/ingest.ts';
 import { formatCount, formatDate, formatDateTime } from '../lib/format.ts';
@@ -68,8 +68,8 @@ export function DataPage() {
           <h1>Oracle’s Elixir import</h1>
           <p className="page-sub">
             Drop yearly match-data CSVs straight in — 2022 through the current partial season.
-            Each import is filtered to the eight configured competitions and merged into its own
-            season, so files add up instead of replacing each other.
+            Each import is filtered to the {COMPETITION_IDS.length} configured competitions and
+            merged into its own season, so files add up instead of replacing each other.
           </p>
         </div>
       </header>

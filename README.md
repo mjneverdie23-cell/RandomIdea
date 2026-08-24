@@ -17,8 +17,8 @@ scouting notes — computed from the same imported games, with no fitted weights
 and nothing hidden.
 
 Games come from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)
-match-data CSVs, filtered to eight competitions: **LCK, LEC, LCS, LPL, Worlds,
-First Stand, MSI, EWC**.
+match-data CSVs, filtered to nine competitions: **LCK, LEC, LCS, LPL, LCP,
+Worlds, First Stand, MSI, EWC**.
 
 ---
 
@@ -52,7 +52,7 @@ Riot's CDN until you download it locally with `npm run assets`.
    its own season. Nothing is uploaded anywhere.
 
 The import report tells you exactly what happened: rows read, games kept, how
-many were dropped for being outside the eight competitions, how many had
+many were dropped for being outside the nine competitions, how many had
 incomplete drafts, and which seasons the file contributed to.
 
 ### Seasons
@@ -112,6 +112,16 @@ Matching is done on a normalized league string, so `WLDs`, `Worlds`,
 `worlds 2024` and `World Championship` all resolve to the same competition.
 Adding or removing a competition is a one-file change — no UI component
 hardcodes a league name.
+
+**PCS is deliberately not an alias for LCP.** LCP was formed in 2025 out of the
+PCS and LCO regions, so treating PCS as an old name would match how `EU LCS` and
+`NA LCS` are handled — but PCS did not stop existing, it became the tier-two
+league *below* LCP. In the 2026 export the LCP entries are CTBC Flying Oyster,
+GAM Esports and DetonatioN FocusMe, while the PCS entries are Ground Zero
+Academy, CTBC Flying Oyster Academy and SillySilly Gaming. Aliasing it would
+pull 66 games of academy play into the model, which is the exact thing the
+exclusion list exists to prevent. Anyone who wants pre-merger PCS games can add
+the alias in `competitions.ts`, at the cost of also taking the current feeder.
 
 ---
 
@@ -878,7 +888,7 @@ initials for the rest of the run, which reads as art randomly failing.
 ## Demo data
 
 With no CSV imported, the app generates a synthetic dataset (~1,100 games across
-all eight competitions, ten patches, a full season calendar). **The games are
+all nine competitions, ten patches, a full season calendar). **The games are
 invented.** Team names are real organizations and player names are drawn from
 real regional player pools so the draft reads naturally, but the rosters are
 illustrative and none of the results happened. Every such game is flagged

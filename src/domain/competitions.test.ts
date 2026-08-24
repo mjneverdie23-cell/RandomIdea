@@ -47,10 +47,24 @@ describe('resolveCompetition', () => {
     expect(resolveCompetition('LPL Challengers')).toBeNull();
   });
 
-  it('rejects competitions outside the configured set', () => {
-    expect(resolveCompetition('LCP')).toBeNull();
-    expect(resolveCompetition('LTA North')).toBeNull();
+  it('resolves LCP, including its long name and season noise', () => {
+    expect(resolveCompetition('LCP')).toBe('LCP');
+    expect(resolveCompetition('lcp')).toBe('LCP');
+    expect(resolveCompetition('LCP 2026 Season')).toBe('LCP');
+    expect(resolveCompetition('LCP 2025 Playoffs')).toBe('LCP');
+    expect(resolveCompetition('League of Legends Championship Pacific')).toBe('LCP');
+  });
+
+  it('keeps PCS out, because it is now the feeder below LCP', () => {
+    // PCS ran as the top Pacific league before the 2025 merger, but in current
+    // exports it is tier two: its 2026 entries are Ground Zero Academy and
+    // CTBC Flying Oyster Academy while the LCP entries are the senior sides.
     expect(resolveCompetition('PCS')).toBeNull();
+    expect(resolveCompetition('LCO')).toBeNull();
+  });
+
+  it('rejects competitions outside the configured set', () => {
+    expect(resolveCompetition('LTA North')).toBeNull();
     expect(resolveCompetition('VCS')).toBeNull();
     expect(resolveCompetition('CBLOL')).toBeNull();
     expect(resolveCompetition('Demacia Cup')).toBeNull();

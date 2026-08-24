@@ -52,6 +52,12 @@ const TABLES: Partial<Record<CompetitionId, StageTable>> = {
     regular: { series: 'BO3', bracket: 'round_robin' },
     playoffs: { series: 'BO5', bracket: 'double_elim' },
   },
+  // Read off the 2026 export: 43 of 58 series ran to at most three games and
+  // 15 went to four or five, which is a Bo3 regular season and a Bo5 playoff.
+  LCP: {
+    regular: { series: 'BO3', bracket: 'round_robin' },
+    playoffs: { series: 'BO5', bracket: 'double_elim' },
+  },
   WORLDS: {
     group: { series: 'BO1', bracket: 'swiss' },
     playin: { series: 'BO5', bracket: 'double_elim' },

@@ -1,7 +1,8 @@
 /**
  * Single source of truth for which competitions are eligible.
  *
- * The quiz only ever uses LCK, LEC, LCS, LPL, Worlds, First Stand, MSI and EWC.
+ * The quiz only ever uses LCK, LEC, LCS, LPL, LCP, Worlds, First Stand, MSI and
+ * EWC.
  * Nothing else in the app hardcodes a league string: UI filters, quiz
  * generation and the import report all read this registry, so adding or
  * removing a competition is a one-file change.
@@ -95,6 +96,24 @@ export const COMPETITIONS: CompetitionDefinition[] = [
     aliases: ['LPL', 'LPL CHINA', 'TENCENT LPL', 'LEAGUE OF LEGENDS PRO LEAGUE'],
   },
   {
+    id: 'LCP',
+    label: 'LCP',
+    short: 'LCP',
+    scope: 'regional',
+    accent: '#ff6ec7',
+    // The Pacific league, formed in 2025 out of the PCS and LCO regions.
+    //
+    // PCS is deliberately NOT an alias. It still appears in current exports,
+    // but as the tier-two league *below* LCP rather than as its old name: in
+    // the 2026 file the LCP teams are CTBC Flying Oyster, GAM Esports and
+    // DetonatioN FocusMe, while the PCS entries are Ground Zero Academy,
+    // CTBC Flying Oyster Academy and SillySilly Gaming. Aliasing it would pull
+    // 66 games of academy play into the model — the exact thing the exclusion
+    // list exists to prevent. Anyone wanting pre-merger PCS games can add the
+    // alias here, at the cost of also taking the current feeder league.
+    aliases: ['LCP', 'CHAMPIONSHIP PACIFIC', 'LEAGUE OF LEGENDS CHAMPIONSHIP PACIFIC', 'LOL CHAMPIONSHIP PACIFIC'],
+  },
+  {
     id: 'WORLDS',
     label: 'World Championship',
     short: 'Worlds',
@@ -169,7 +188,7 @@ for (const comp of COMPETITIONS) {
 
 /**
  * Map a raw league/tournament string onto an eligible competition.
- * Returns `null` for anything outside the eight configured competitions.
+ * Returns `null` for anything outside the configured competitions.
  */
 export function resolveCompetition(rawLeague: string | null | undefined): CompetitionId | null {
   if (!rawLeague) return null;

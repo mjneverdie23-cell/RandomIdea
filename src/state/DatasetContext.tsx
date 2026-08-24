@@ -18,6 +18,8 @@ import {
   splitGamesByYear,
 } from '../data/years.ts';
 import { refreshDataDragonVersion } from '../domain/champions.ts';
+import { COMPETITION_IDS, competitionShort } from '../domain/competitions.ts';
+import type { CompetitionId } from '../domain/types.ts';
 import { MetaIndex } from '../meta/patchMeta.ts';
 import { computeAvailability, type Availability } from '../quiz/generator.ts';
 import {
@@ -80,18 +82,14 @@ export interface DatasetContextValue {
 
 const DatasetContext = createContext<DatasetContextValue | null>(null);
 
+// Built from the registry rather than listed, so adding a competition stays
+// the one-file change `competitions.ts` promises.
 const EMPTY_AVAILABILITY: Availability = {
   total: 0,
-  perCompetition: {
-    LCK: 0,
-    LEC: 0,
-    LCS: 0,
-    LPL: 0,
-    WORLDS: 0,
-    MSI: 0,
-    FIRST_STAND: 0,
-    EWC: 0,
-  },
+  perCompetition: Object.fromEntries(COMPETITION_IDS.map((id) => [id, 0])) as Record<
+    CompetitionId,
+    number
+  >,
 };
 
 export function DatasetProvider({ children }: { children: ReactNode }) {
@@ -162,7 +160,7 @@ export function DatasetProvider({ children }: { children: ReactNode }) {
         throw new IngestError(
           'No usable games found in this file.',
           stats.rejectedByCompetition > 0
-            ? `${stats.rejectedByCompetition} games were outside the eight configured competitions (LCK, LEC, LCS, LPL, Worlds, First Stand, MSI, EWC), and ${stats.rejectedIncomplete} had incomplete drafts.`
+            ? `${stats.rejectedByCompetition} games were outside the ${COMPETITION_IDS.length} configured competitions (${COMPETITION_IDS.map(competitionShort).join(', ')}), and ${stats.rejectedIncomplete} had incomplete drafts.`
             : `${stats.rejectedIncomplete} games had incomplete drafts or no recorded winner.`,
         );
       }

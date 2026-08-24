@@ -7,6 +7,7 @@ import {
   generateQuiz,
   QuizGenerationError,
 } from './generator.ts';
+import { COMPETITION_IDS } from '../domain/competitions.ts';
 import { MIXED_SOURCE } from './config.ts';
 import { createRng, hashSeed } from './rng.ts';
 import type { Game } from '../domain/types.ts';
@@ -19,9 +20,10 @@ describe('demo dataset', () => {
     for (const count of Object.values(dataset.stats.perCompetition)) {
       expect(count).toBeGreaterThan(0);
     }
-    expect(Object.keys(dataset.stats.perCompetition).sort()).toEqual(
-      ['EWC', 'FIRST_STAND', 'LCK', 'LCS', 'LEC', 'LPL', 'MSI', 'WORLDS'].sort(),
-    );
+    // Read from the registry rather than listed, so a competition added to
+    // `competitions.ts` without demo games fails here instead of silently
+    // producing an empty filter.
+    expect(Object.keys(dataset.stats.perCompetition).sort()).toEqual([...COMPETITION_IDS].sort());
   });
 
   it('marks every game as demo data', () => {

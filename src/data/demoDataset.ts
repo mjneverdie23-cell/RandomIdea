@@ -71,6 +71,20 @@ const LCS_TEAMS: RosterTemplate[] = [
   { team: 'Shopify Rebellion', players: ['Fudge', 'Bugi', 'Insanity', 'Bvoy', 'Zeyzal'] },
 ];
 
+const LCP_TEAMS: RosterTemplate[] = [
+  { team: 'CTBC Flying Oyster', players: ['Rest', 'Shad0w', 'Pout', 'Doggo', 'Kino'] },
+  { team: 'GAM Esports', players: ['Kiaya', 'Draktharr', 'Aress', 'Artemis', 'Taki'] },
+  { team: 'Team Secret Whales', players: ['Pun', 'Hizto', 'Dire', 'Eddie', 'Bie'] },
+  { team: 'DetonatioN FocusMe', players: ['Momo', 'Citrus', 'Fisher', 'Kakkun', 'Woody'] },
+  {
+    team: 'Fukuoka SoftBank HAWKS gaming',
+    players: ['Evi', 'Van1', 'Aria', 'Marble', 'Vsta'],
+  },
+  { team: 'Deep Cross Gaming', players: ['Flauren', 'Pop9', 'HongSuo', 'Feng', 'ShiauC'] },
+  { team: 'MVK Esports', players: ['Kratos', 'Gury', 'Chika', 'Harky', 'SiuLoong'] },
+  { team: 'Ground Zero Gaming', players: ['1Jiang', 'Husha', 'JimieN', 'Shunn', 'Orca'] },
+];
+
 const CHAMPION_POOL: Record<string, string[]> = {
   top: [
     'Aatrox', 'Camille', 'Cho’Gath', 'Gnar', 'Gragas', 'Jax', 'Jayce', 'K’Sante', 'Malphite',
@@ -157,11 +171,15 @@ function buildPlans(): EventPlan[] {
     ],
   });
 
+  // Appended rather than interleaved: the smaller events slice off the front of
+  // this list, so putting the Pacific seeds last gives them Worlds without
+  // reshuffling what the other tournaments have always generated.
   const internationalPool = (): RosterTemplate[] => [
     ...LCK_TEAMS.slice(0, 4),
     ...LPL_TEAMS.slice(0, 4),
     ...LEC_TEAMS.slice(0, 3),
     ...LCS_TEAMS.slice(0, 3),
+    ...LCP_TEAMS.slice(0, 2),
   ];
 
   return [
@@ -169,6 +187,7 @@ function buildPlans(): EventPlan[] {
     regional('LPL', LPL_TEAMS),
     regional('LEC', LEC_TEAMS),
     regional('LCS', LCS_TEAMS),
+    regional('LCP', LCP_TEAMS),
     {
       league: 'FST',
       year: 2025,
