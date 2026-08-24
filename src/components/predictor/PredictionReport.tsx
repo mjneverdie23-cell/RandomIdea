@@ -1,6 +1,14 @@
 import { ChampionArt } from '../ChampionArt.tsx';
 import { ROLE_SHORT, type Side } from '../../domain/types.ts';
-import type { Notice, PickLine, Prediction, SideScore, WinLoss } from '../../predictor/types.ts';
+import type {
+  ChampionScaling,
+  Notice,
+  PickLine,
+  Prediction,
+  ScalingRead,
+  SideScore,
+  WinLoss,
+} from '../../predictor/types.ts';
 
 /**
  * Percentage that never claims a certainty it doesn't have.
@@ -277,6 +285,22 @@ function presenceSplit(pick: PickLine): string | undefined {
   return `${picked.toFixed(1)}% picked, ${banned.toFixed(1)}% banned`;
 }
 
+const SCALING_LABEL: Record<ChampionScaling, string> = {
+  late: 'late game',
+  balanced: 'balanced',
+  early: 'early game',
+};
+
+/** The two win rates behind a scaling label, so the reader can judge it. */
+function scalingDetail(read: ScalingRead): string {
+  const pct = (value: number) => `${(value * 100).toFixed(0)}%`;
+  return (
+    `${pct(read.shortRate)} in short games (${read.shortGames}), ` +
+    `${pct(read.longRate)} in long ones (${read.longGames}) — ` +
+    `${read.delta >= 0 ? '+' : ''}${(read.delta * 100).toFixed(0)} points`
+  );
+}
+
 function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
   if (score.picks.length === 0) {
     return (
@@ -310,6 +334,17 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
                   </span>
                 )}
               </span>
+              {pick.scaling && (
+                // How the champion trends with game length. Reported only —
+                // it scores nothing, and the title carries the two win rates
+                // so a surprising label can be weighed rather than believed.
+                <span
+                  className={`lane-scaling is-${pick.scaling.type}`}
+                  title={scalingDetail(pick.scaling)}
+                >
+                  {SCALING_LABEL[pick.scaling.type]}
+                </span>
+              )}
             </div>
             <div className="lane-stat">
               <span className="lane-wr">{(pick.winRate * 100).toFixed(0)}%</span>

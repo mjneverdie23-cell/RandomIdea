@@ -829,6 +829,29 @@
   color: var(--gold);
 }
 
+/* Reported, never scored — so it reads as a quiet tag, not a verdict. */
+.lane-scaling {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  color: var(--text-faint);
+  opacity: 0.85;
+  cursor: help;
+}
+
+/* Green grows into the game, amber burns out of it. Neither is gold, which
+   already means meta one chip to the left. */
+.lane-scaling.is-late {
+  color: var(--green);
+}
+
+.lane-scaling.is-early {
+  color: var(--amber);
+}
+
 .lane-stat {
   display: flex;
   align-items: baseline;

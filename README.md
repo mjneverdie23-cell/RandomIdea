@@ -398,6 +398,58 @@ fixed. By league it is mixed rather than uniform: LPL 59.4% → 60.3%, First Sta
 68.9% → 73.3%, MSI 63.4% → 64.8%, against LCK 66.9% → 65.2% and EWC 65.7% →
 65.1%.
 
+#### Champion scaling: late game, balanced, early game
+
+Every pick carries a second chip next to meta / off-meta saying whether the
+champion gets better or worse the longer the game runs. Like the meta read it is
+**computed from the loaded data, not hand-listed**: split every game with a
+recorded duration at the 30th and 70th percentiles of *this* dataset's game
+lengths, then compare each champion's win rate across the two buckets. Win more
+when the game goes long and the champion reads late game; win more when it ends
+early and it reads early game. A champion needs 12 games in *each* bucket before
+it is labelled at all, which covers about 89% of lanes.
+
+Using the dataset's own quantiles rather than a fixed "30 minutes" matters,
+because average game length moves with the patch — the 2026 file runs a
+32-minute median and cuts at 29.7 and 34.8 minutes.
+
+It lines up with intuition more often than not: Azir, Kalista, Aphelios, Corki,
+Yorick and Ornn come out late; LeBlanc, Qiyana, Olaf, Naafiri and Caitlyn come
+out early. Hover the chip for the two win rates behind it.
+
+**It scores nothing, and the measurement is why.** Backtested over 1,317 games,
+a bonus per late-game champion makes the model monotonically worse:
+
+| bonus per late-game pick | accuracy | record | vs shipped |
+| --- | --- | --- | --- |
+| none (shipped) | 64.8% | 852-462 | — |
+| +0.10 | 64.5% | 848-467 | −4 games |
+| +0.20 | 63.9% | 840-475 | −12 games |
+| +0.50 | 62.1% | 817-498 | −35 games |
+| +1.00 | 60.4% | 795-521 | −57 games |
+
+That is not noise, and the reason is visible in the signal on its own: across
+the 961 games where the two sides differ in late-game count, **the side with
+more late-game champions won 44.8%** (431-530) — better than three standard
+errors below a coin flip. A *negative* bonus gains games (+7 at −0.10, +10 at
+−0.30). Grading by the raw win-rate gap instead of the label does not rescue it,
+and neither does penalising early-game picks symmetrically.
+
+The mechanism is that this measure conflates "scales into the late game" with
+"is weak early", and in pro play the second half dominates:
+
+| label | n | short-game WR | long-game WR | **overall WR** |
+| --- | --- | --- | --- | --- |
+| late | 22 | 42.1% | 55.8% | **49.0%** |
+| balanced | 38 | 50.0% | 49.8% | 49.9% |
+| early | 20 | 57.2% | 47.9% | **52.4%** |
+
+Late-game champions really do win when the game goes long — 55.8%. The trouble
+is that you do not get to choose whether it goes long, and they lose 58% of the
+games that end early. Net, they are 3.4 points worse than early-game picks, and
+a term rewarding them is rewarding the weaker side of the draft. So the label is
+shown to the reader and moves nothing, exactly like the fraud rating.
+
 #### The dark-horse list, and what measuring it showed
 
 `DARK_HORSE` in `src/predictor/engine.ts` is a hand-maintained set of champions

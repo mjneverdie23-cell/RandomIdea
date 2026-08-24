@@ -5,6 +5,7 @@ import {
   MIN_TEMPO_SAMPLE,
   buildPredictorModel,
   deriveMeta,
+  deriveScaling,
   latestSeason,
   streakOf,
 } from './derive.ts';
@@ -34,6 +35,8 @@ interface GameSpec {
   redDraft?: string[];
   blueBans?: string[];
   redBans?: string[];
+  /** Game length; `null` means the export carried none. */
+  durationSeconds?: number | null;
   blueGold?: GoldDiffTrack | null;
   /** Blue-side gold diff at 10/15/20/25; null entries mean "never reached". */
   blueCheckpoints?: (number | null)[];
@@ -108,7 +111,7 @@ function makeGame(spec: GameSpec): Game {
     ),
     red: build('red', spec.red, spec.redDraft ?? DEFAULT_RED, redGold, spec.redPlayers, spec.redBans),
     winner: spec.winner,
-    durationSeconds: 1800,
+    durationSeconds: spec.durationSeconds === undefined ? 1800 : spec.durationSeconds,
     demo: false,
   };
 }
@@ -326,6 +329,119 @@ describe('deriveMeta', () => {
 
     const { metaByRole } = deriveMeta(games);
     expect(metaByRole.get('top')!.has(makeChampion('Rumble')!.id)).toBe(false);
+  });
+});
+
+describe('deriveScaling', () => {
+  const SHORT = 20 * 60;
+  const LONG = 45 * 60;
+
+  /**
+   * `wins` games won and `losses` lost at one length, with `champion` top for
+   * blue. Enough of both lengths that the 30/70 cut lands between them.
+   */
+  function bucket(
+    tag: string,
+    champion: string,
+    seconds: number,
+    wins: number,
+    losses: number,
+  ): Game[] {
+    const draft = [champion, 'Viego', 'Azir', 'Jinx', 'Thresh'];
+    return [
+      ...Array.from({ length: wins }, (_, i) =>
+        makeGame({
+          id: `${tag}-w${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'blue',
+          day: i,
+          durationSeconds: seconds,
+          blueDraft: draft,
+        }),
+      ),
+      ...Array.from({ length: losses }, (_, i) =>
+        makeGame({
+          id: `${tag}-l${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'red',
+          day: 200 + i,
+          durationSeconds: seconds,
+          blueDraft: draft,
+        }),
+      ),
+    ];
+  }
+
+  it('calls a champion late game when it wins more in long games', () => {
+    // 25% over 20 short games, 75% over 20 long ones.
+    const games = [
+      ...bucket('short', 'Rumble', SHORT, 5, 15),
+      ...bucket('long', 'Rumble', LONG, 15, 5),
+    ];
+    const { scalingByChampion } = deriveScaling(games);
+    const read = scalingByChampion.get(makeChampion('Rumble')!.id)!;
+    expect(read.type).toBe('late');
+    expect(read.shortRate).toBeCloseTo(0.25, 10);
+    expect(read.longRate).toBeCloseTo(0.75, 10);
+    expect(read.delta).toBeCloseTo(0.5, 10);
+  });
+
+  it('calls it early game when the gap runs the other way', () => {
+    const games = [
+      ...bucket('short', 'Rumble', SHORT, 15, 5),
+      ...bucket('long', 'Rumble', LONG, 5, 15),
+    ];
+    const read = deriveScaling(games).scalingByChampion.get(makeChampion('Rumble')!.id)!;
+    expect(read.type).toBe('early');
+    expect(read.delta).toBeCloseTo(-0.5, 10);
+  });
+
+  it('calls it balanced when the two ends agree', () => {
+    const games = [
+      ...bucket('short', 'Rumble', SHORT, 10, 10),
+      ...bucket('long', 'Rumble', LONG, 10, 10),
+    ];
+    const read = deriveScaling(games).scalingByChampion.get(makeChampion('Rumble')!.id)!;
+    expect(read.type).toBe('balanced');
+  });
+
+  it('leaves a champion unlabelled when either bucket is too thin', () => {
+    // Plenty of long games, but under SCALING_MIN_BUCKET short ones.
+    const games = [
+      ...bucket('short', 'Rumble', SHORT, 2, 2),
+      ...bucket('long', 'Rumble', LONG, 20, 5),
+      // Filler so the quantile cut still has a spread to work with.
+      ...bucket('filler-s', 'Gnar', SHORT, 10, 10),
+      ...bucket('filler-l', 'Gnar', LONG, 10, 10),
+    ];
+    const { scalingByChampion } = deriveScaling(games);
+    expect(scalingByChampion.has(makeChampion('Rumble')!.id)).toBe(false);
+    expect(scalingByChampion.has(makeChampion('Gnar')!.id)).toBe(true);
+  });
+
+  it('reads nothing at all from an export with no game lengths', () => {
+    const games = [
+      ...bucket('short', 'Rumble', SHORT, 15, 5),
+      ...bucket('long', 'Rumble', LONG, 5, 15),
+    ].map((game) => ({ ...game, durationSeconds: null }));
+    const { scalingByChampion, shortCutSeconds } = deriveScaling(games);
+    expect(scalingByChampion.size).toBe(0);
+    expect(shortCutSeconds).toBeNull();
+  });
+
+  it('cuts the buckets from the data rather than a fixed clock', () => {
+    // Every game here is long by any absolute standard; the split still lands
+    // inside this dataset's own spread.
+    const games = [
+      ...bucket('short', 'Rumble', 40 * 60, 5, 15),
+      ...bucket('long', 'Rumble', 55 * 60, 15, 5),
+    ];
+    const { scalingByChampion, shortCutSeconds, longCutSeconds } = deriveScaling(games);
+    expect(shortCutSeconds).toBeGreaterThanOrEqual(40 * 60);
+    expect(longCutSeconds).toBeGreaterThan(shortCutSeconds!);
+    expect(scalingByChampion.get(makeChampion('Rumble')!.id)!.type).toBe('late');
   });
 });
 

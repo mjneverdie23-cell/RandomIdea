@@ -33,7 +33,9 @@ import {
 import { anywhereKey, splitSubject } from './engine.ts';
 import type {
   GoldTempo,
+  ChampionScaling,
   PredictorModel,
+  ScalingRead,
   StandingRow,
   TeamBehavior,
   TeamRating,
@@ -316,6 +318,124 @@ export function deriveMeta(games: readonly Game[]): {
     patches: recentPatches,
     windowGames: recent.length,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Champion scaling                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Games a champion needs in *each* length bucket before it is classified. */
+export const SCALING_MIN_BUCKET = 12;
+/**
+ * Win-rate gap between long and short games that earns a label.
+ *
+ * Five points is roughly the quartile of the observed spread, so this labels
+ * the tails and leaves the middle alone. It is deliberately not a claim that
+ * every champion either side of the line is meaningfully different from even —
+ * see the caveat on `deriveScaling`.
+ */
+export const SCALING_DELTA = 0.05;
+/** Where the short and long buckets are cut, as quantiles of game length. */
+export const SCALING_SHORT_QUANTILE = 0.3;
+export const SCALING_LONG_QUANTILE = 0.7;
+
+/**
+ * Does a champion get better or worse the longer the game runs?
+ *
+ * Computed, not hand-listed: split every game with a recorded duration into a
+ * short bucket and a long bucket at the 30th and 70th percentiles of *this*
+ * dataset, and compare each champion's win rate across the two. A champion that
+ * wins more when the game goes long is scored as late-game.
+ *
+ * Using the dataset's own quantiles rather than a fixed "30 minutes" matters,
+ * because average game length moves with the patch — the 2026 file runs a
+ * 32-minute median, and a hardcoded cut would drift with it.
+ *
+ * **This is a noisy measure and the label should be read as descriptive.** The
+ * median champion's gap is −0.1 points and the quartiles sit at ±5, so the cut
+ * is labelling the tails of a spread that is mostly binomial noise: at 12-40
+ * games per bucket a 5-point gap is well inside what chance produces. It lines
+ * up with intuition often enough to be worth showing — Azir, Kalista, Aphelios,
+ * Corki and Yorick come out late; LeBlanc, Qiyana, Olaf and Caitlyn come out
+ * early — but a single champion's label is not evidence about that champion.
+ * It is reported to the reader and, deliberately, scores nothing.
+ */
+export function deriveScaling(games: readonly Game[]): {
+  scalingByChampion: Map<string, ScalingRead>;
+  shortCutSeconds: number | null;
+  longCutSeconds: number | null;
+} {
+  const timed = games.filter((game) => game.durationSeconds !== null);
+  if (timed.length < SCALING_MIN_BUCKET * 2) {
+    return { scalingByChampion: new Map(), shortCutSeconds: null, longCutSeconds: null };
+  }
+
+  const lengths = timed.map((game) => game.durationSeconds!).sort((a, b) => a - b);
+  const at = (q: number) => lengths[Math.floor(q * (lengths.length - 1))]!;
+  const shortCut = at(SCALING_SHORT_QUANTILE);
+  const longCut = at(SCALING_LONG_QUANTILE);
+
+  interface Bucket {
+    shortWins: number;
+    shortGames: number;
+    longWins: number;
+    longGames: number;
+  }
+  const tally = new Map<string, Bucket>();
+
+  // No spread to split — every game the same length tells us nothing.
+  if (shortCut >= longCut) {
+    return { scalingByChampion: new Map(), shortCutSeconds: shortCut, longCutSeconds: longCut };
+  }
+
+  for (const game of timed) {
+    const seconds = game.durationSeconds!;
+    // Inclusive on both ends: game lengths cluster on whole seconds, and an
+    // exclusive test drops every game sitting exactly on a cut — which for a
+    // coarse distribution can be all of them.
+    const long = seconds >= longCut;
+    if (!long && seconds > shortCut) continue;
+
+    for (const side of [game.blue, game.red] as const) {
+      const won = game.winner === side.side;
+      for (const player of side.players) {
+        const bucket = tally.get(player.champion.id) ?? {
+          shortWins: 0,
+          shortGames: 0,
+          longWins: 0,
+          longGames: 0,
+        };
+        if (long) {
+          bucket.longGames += 1;
+          if (won) bucket.longWins += 1;
+        } else {
+          bucket.shortGames += 1;
+          if (won) bucket.shortWins += 1;
+        }
+        tally.set(player.champion.id, bucket);
+      }
+    }
+  }
+
+  const scalingByChampion = new Map<string, ScalingRead>();
+  for (const [championId, bucket] of tally) {
+    if (bucket.shortGames < SCALING_MIN_BUCKET || bucket.longGames < SCALING_MIN_BUCKET) continue;
+    const shortRate = bucket.shortWins / bucket.shortGames;
+    const longRate = bucket.longWins / bucket.longGames;
+    const delta = longRate - shortRate;
+    const type: ChampionScaling =
+      delta >= SCALING_DELTA ? 'late' : delta <= -SCALING_DELTA ? 'early' : 'balanced';
+    scalingByChampion.set(championId, {
+      type,
+      delta,
+      shortRate,
+      longRate,
+      shortGames: bucket.shortGames,
+      longGames: bucket.longGames,
+    });
+  }
+
+  return { scalingByChampion, shortCutSeconds: shortCut, longCutSeconds: longCut };
 }
 
 /* ------------------------------------------------------------------ */
@@ -830,6 +950,7 @@ export function buildPredictorModel(
   const splits = currentSplits(games);
   const records = buildChampionRecords(games, splits);
   const { metaByRole, pickRateByRole, presenceRateByRole, patches, windowGames } = deriveMeta(games);
+  const { scalingByChampion, shortCutSeconds, longCutSeconds } = deriveScaling(games);
 
   const formSeason = latestSeason(games);
   const formGames = formSeason ? games.filter((game) => game.season === formSeason) : games;
@@ -850,6 +971,9 @@ export function buildPredictorModel(
     metaPatches: patches,
     metaWindowGames: windowGames,
     metaPickRateThreshold: META_PICK_RATE,
+    scalingByChampion,
+    scalingShortSeconds: shortCutSeconds,
+    scalingLongSeconds: longCutSeconds,
     behavior: deriveBehavior(formGames, runs),
     goldTempo: deriveGoldTempo(formGames),
     standingsByCompetition,
@@ -888,6 +1012,9 @@ export function emptyPredictorModel(): PredictorModel {
     metaPatches: [],
     metaWindowGames: 0,
     metaPickRateThreshold: META_PICK_RATE,
+    scalingByChampion: new Map(),
+    scalingShortSeconds: null,
+    scalingLongSeconds: null,
     behavior: new Map(),
     goldTempo: new Map(),
     standingsByCompetition: new Map(),

@@ -19,6 +19,20 @@ import type {
 /** Best-of length the series is played to. */
 export type SeriesLength = 'BO1' | 'BO3' | 'BO5';
 
+/** Whether a champion gets better or worse the longer the game runs. */
+export type ChampionScaling = 'late' | 'balanced' | 'early';
+
+/** A champion's win rate split across short and long games. */
+export interface ScalingRead {
+  type: ChampionScaling;
+  /** Win rate in long games minus win rate in short ones. */
+  delta: number;
+  shortRate: number;
+  longRate: number;
+  shortGames: number;
+  longGames: number;
+}
+
 /** Games a team must still win to take the series. */
 export const SERIES_TARGET: Record<SeriesLength, number> = { BO1: 1, BO3: 2, BO5: 3 };
 
@@ -145,6 +159,11 @@ export interface PredictorModel {
   /** Games the meta window covers, so a thin read can be spotted. */
   metaWindowGames: number;
   metaPickRateThreshold: number;
+  /** Whether each champion gets better or worse as the game runs long. */
+  scalingByChampion: Map<string, ScalingRead>;
+  /** The game lengths the short and long buckets were cut at. */
+  scalingShortSeconds: number | null;
+  scalingLongSeconds: number | null;
   behavior: Map<string, TeamBehavior>;
   /** Gold difference by minute mark, per team. */
   goldTempo: Map<string, GoldTempo>;
@@ -211,6 +230,8 @@ export interface PickLine {
   /** The same counting bans, which is what decided meta or off-meta. */
   presenceRate: number | null;
   meta: boolean;
+  /** How the champion trends with game length; `null` when too few games. */
+  scaling: ScalingRead | null;
   counters: Champion[];
   counteredBy: Champion[];
   synergy: Champion[];

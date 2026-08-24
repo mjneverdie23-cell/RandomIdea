@@ -21,9 +21,11 @@
  *
  * The point margin becomes a per-game probability through a logistic curve,
  * and the series/sweep probabilities follow from that by counting the ways a
- * best-of can still be won. Behaviour (throws, comebacks, deciders) and
- * early-game gold tempo are reported as plain language and deliberately do not
- * move the score — they are context for the reader, not fitted terms.
+ * best-of can still be won. Behaviour (throws, comebacks, deciders), early-game
+ * gold tempo and each champion's late/early scaling are reported as plain
+ * language and deliberately do not move the score — they are context for the
+ * reader, not fitted terms. Scaling in particular was measured as a scoring
+ * term and runs backwards: see the README.
  *
  * Pure: no I/O, no React, no dates. Everything it knows arrives in the model.
  */
@@ -542,6 +544,7 @@ function scoreSide(
       pickRate: model.pickRateByRole.get(role)?.get(champion.id) ?? null,
       presenceRate: model.presenceRateByRole.get(role)?.get(champion.id) ?? null,
       meta,
+      scaling: model.scalingByChampion.get(champion.id) ?? null,
       ...edges,
     });
   });
