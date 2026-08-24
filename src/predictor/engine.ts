@@ -176,16 +176,24 @@ export const SERIES_LEAD_CAP = 0.6;
  * measures that, so it is stated rather than computed. Edit the set to change
  * which champions qualify.
  *
- * Priced deliberately low, and here is the honest reason. Measured over the
- * 2026 season both are staples rather than surprises — Lee Sin appears in 12.6%
- * of games and Akali in 10.2%, so both clear the meta pick-rate bar and already
- * collect a full meta point. Their win rates are 53.9% and 55.1%: real, but
- * slight, and largely already priced in. Backtested over 374 games the bonus
- * did not help at any value tried, costing a game at +0.1 and three at +0.5,
- * with the Brier score flat throughout. It is kept small so that it colours a
- * close call without overriding anything the data actually supports.
+ * Priced deliberately low, and here is the honest reason: measured over the 2026
+ * season, none of the three is a surprise and one of them loses.
+ *
+ *   Lee Sin    230 picks, 12.6% of games, 53.9% win rate  (jungle)
+ *   Akali      185 picks, 10.2% of games, 55.1% win rate  (mid)
+ *   Nocturne   262 picks, 14.4% of games, 45.4% win rate  (jungle)
+ *
+ * All three clear the meta pick-rate bar comfortably, so they already collect a
+ * full meta point — the extra partly double-counts a staple rather than
+ * rewarding a surprise. And Nocturne is a **losing** pick over a 262-game
+ * sample, so crediting it a bonus points the wrong way outright.
+ *
+ * Backtested four times now and it has never helped: one game lost over 374,
+ * zero over 1,272, zero over 1,592, one gained over 1,317 — all inside noise,
+ * with the Brier score unmoved every time. It is kept small enough to colour a
+ * close call without overriding anything the data supports.
  */
-export const DARK_HORSE = new Set<string>(['LeeSin', 'Akali']);
+export const DARK_HORSE = new Set<string>(['LeeSin', 'Akali', 'Nocturne']);
 export const DARK_HORSE_POINT = 0.1;
 
 /** How many of a side's picks are on the dark-horse list. */
