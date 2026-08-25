@@ -200,10 +200,14 @@ select:disabled { opacity: .5; }
 
 .market-rows, .score-list, .component-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .market-rows li, .score-list li, .component-list li {
-  display: grid; grid-template-columns: minmax(88px, 1.25fr) 2fr auto;
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1.6fr) auto;
   align-items: center; gap: 10px; font-size: 13px;
 }
-.market-label, .component-name { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Long market names ("Both teams score (1H)") wrap rather than truncate:
+   a clipped label makes the row unreadable. */
+.market-label, .component-name {
+  color: var(--text-dim); overflow-wrap: anywhere; line-height: 1.35;
+}
 .market-track { height: 7px; background: #0d1322; border-radius: 4px; overflow: hidden; }
 .market-fill {
   display: block; height: 100%; border-radius: 4px;

@@ -422,10 +422,13 @@ def run_fold(
 
     # ---- scoring ----------------------------------------------------------
     truth = test
-    result.metrics["naive"] = multiclass_report(
-        naive_baseline(train["target_result"]) [:len(truth)], truth["target_result"]
-    )
-    result.metrics["naive"]["n"] = len(truth)
+    # The floor every model has to clear: the base rates of the three outcomes
+    # as they stood in the training data, quoted for every test fixture.
+    base_rates = naive_baseline(train["target_result"])[0]
+    naive = np.tile(base_rates, (len(truth), 1))
+    result.metrics["naive"] = {
+        **multiclass_report(naive, truth["target_result"]), "n": len(truth)
+    }
 
     for name, probs in test_members.items():
         report = multiclass_report(probs, truth["target_result"])

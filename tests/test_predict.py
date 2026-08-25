@@ -150,6 +150,34 @@ def test_half_markets_are_present_and_not_a_halved_full_time(engine):
     assert halves["first_half"]["hub"]["draw"] > out["hub"]["draw"]
 
 
+def test_the_two_halves_add_up_to_the_full_match(engine):
+    """A panel showing 1.26 + 1.47 next to a total of 2.96 would be a bug.
+
+    The half models supply the split between the periods; the full-time
+    distribution supplies the level. Their expected goals must reconcile.
+    """
+    out = engine.predict(competition="TEST_L", home_team="Team A",
+                         away_team="Team F", date="2024-08-01", season="2024/25")
+    halves = out["halves"]
+    assert halves["available"] is True
+    first = halves["first_half"]["expected_goals"]
+    second = halves["second_half"]["expected_goals"]
+    assert first["total"] + second["total"] == pytest.approx(
+        out["expected_goals"]["total"], abs=0.01
+    )
+    # And per side, not just in aggregate.
+    assert first["home"] + second["home"] == pytest.approx(
+        out["expected_goals"]["home"], abs=0.01
+    )
+    assert first["away"] + second["away"] == pytest.approx(
+        out["expected_goals"]["away"], abs=0.01
+    )
+    shares = halves["goal_split"]
+    assert shares["first_half_share"] + shares["second_half_share"] == pytest.approx(1.0)
+    # The split is the half models' own, not an assumed 50/50.
+    assert shares["first_half_share"] != pytest.approx(0.5, abs=1e-6)
+
+
 def test_a_past_date_is_replayed_rather_than_fitted_in_hindsight(engine):
     out = engine.predict(competition="TEST_L", home_team="Team A",
                          away_team="Team D", date="2023-01-15", season="2022/23")
@@ -208,6 +236,34 @@ def test_confidence_and_quality_respond_to_evidence():
     assert rich.score > thin.score
     assert thin.notes
 
+
+def test_a_close_fixture_is_not_reported_as_high_confidence():
+    """Good data plus an undecided forecast is Moderate, not High.
+
+    Evidence and sharpness are different things. A model can be perfectly well
+    grounded and still be telling you the match is a coin flip, and labelling
+    that "High" would say the opposite of what is true.
+    """
+    members = [np.array([[0.29, 0.26, 0.45]]), np.array([[0.27, 0.27, 0.46]])]
+    close = assess_confidence(np.array([0.28, 0.26, 0.46]), members,
+                              home_history=60, away_history=60, calibration_ece=0.01)
+    decisive = assess_confidence(np.array([0.78, 0.14, 0.08]), members,
+                                 home_history=60, away_history=60, calibration_ece=0.01)
+    assert close.label == "Moderate"
+    assert decisive.label == "High"
+    assert close.components["evidence"] > 0.9        # the evidence is fine
+    assert close.components["sharpness"] < 0.15      # the forecast is not
+
+
+def test_thin_history_caps_confidence_even_for_a_clear_favourite():
+    decisive_thin = assess_confidence(np.array([0.80, 0.13, 0.07]),
+                                      home_history=3, away_history=5)
+    decisive_rich = assess_confidence(np.array([0.80, 0.13, 0.07]),
+                                      home_history=60, away_history=60)
+    assert decisive_thin.label != "High"
+    assert decisive_rich.label == "High"
+    assert decisive_thin.notes
+
     good = assess_data_quality(home_history=50, away_history=50,
                                has_half_time_model=True, has_xg=True, has_shots=True,
                                teams_known_to_goal_model=True, competition_matches=5000)
@@ -216,3 +272,28 @@ def test_confidence_and_quality_respond_to_evidence():
                                teams_known_to_goal_model=False, competition_matches=20)
     assert good.score > poor.score
     assert poor.warnings
+
+
+def test_the_bundle_survives_a_save_and_reload(trained, tmp_path):
+    """Training that cannot be saved is training that cannot be served.
+
+    A defaultdict built with a lambda pickles fine in-process and fails at
+    joblib.dump, so this has to exercise the real round trip.
+    """
+    import joblib
+
+    path = tmp_path / "bundle.joblib"
+    joblib.dump(trained, path, compress=3)
+    reloaded = joblib.load(path)
+
+    assert reloaded.trained_through == trained.trained_through
+    assert reloaded.feature_names == trained.feature_names
+    assert set(reloaded.ml_members) == set(trained.ml_members)
+    assert reloaded.dixon_coles.rho == pytest.approx(trained.dixon_coles.rho)
+
+    # The rebuilt state must still behave: default factories included.
+    row = reloaded.builder.features_for_fixture(
+        date=pd.Timestamp("2030-01-01"), competition="TEST_L", season="2029/30",
+        home_team="Team A", away_team="Team B",
+    )
+    assert np.isfinite(row["elo_diff"])

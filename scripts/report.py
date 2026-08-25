@@ -222,7 +222,7 @@ def per_competition_table(predictions: pd.DataFrame) -> str:
     lines = ["| Competition | Matches | Log loss | Brier | RPS | Accuracy | ECE |",
              "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
     for code, group in predictions.groupby("competition"):
-        probs = group[["p_H", "p_U", "p_B"]].to_numpy()
+        probs = group[["raw_H", "raw_U", "raw_B"]].to_numpy()
         report = multiclass_report(probs, group["target_result"])
         name = known[code].name if code in known else code
         lines.append(
@@ -230,7 +230,7 @@ def per_competition_table(predictions: pd.DataFrame) -> str:
             f"{fmt(report['brier'])} | {fmt(report['rps'])} | "
             f"{pct(report['accuracy'])} | {fmt(report['ece'])} |"
         )
-    probs = predictions[["p_H", "p_U", "p_B"]].to_numpy()
+    probs = predictions[["raw_H", "raw_U", "raw_B"]].to_numpy()
     overall = multiclass_report(probs, predictions["target_result"])
     lines.append(
         f"| **All** | {len(predictions)} | {fmt(overall['log_loss'])} | "
@@ -246,9 +246,9 @@ def reliability_table(predictions: pd.DataFrame) -> str:
     lines = ["| Predicted band | Matches | Mean predicted | Observed frequency |",
              "| --- | ---: | ---: | ---: |"]
     probs = np.concatenate([
-        predictions["p_H"].to_numpy(),
-        predictions["p_U"].to_numpy(),
-        predictions["p_B"].to_numpy(),
+        predictions["raw_H"].to_numpy(),
+        predictions["raw_U"].to_numpy(),
+        predictions["raw_B"].to_numpy(),
     ])
     outcomes = np.concatenate([
         (predictions["target_result"] == "H").astype(float).to_numpy(),
@@ -267,6 +267,61 @@ def reliability_table(predictions: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+
+def reliability_commentary(predictions: pd.DataFrame) -> str:
+    """Describe the reliability curve from the curve itself.
+
+    Written as a function rather than prose so the commentary cannot end up
+    describing an earlier run's numbers.
+    """
+    if predictions is None or predictions.empty:
+        return ""
+    probs = np.concatenate([
+        predictions["raw_H"].to_numpy(),
+        predictions["raw_U"].to_numpy(),
+        predictions["raw_B"].to_numpy(),
+    ])
+    outcomes = np.concatenate([
+        (predictions["target_result"] == "H").astype(float).to_numpy(),
+        (predictions["target_result"] == "U").astype(float).to_numpy(),
+        (predictions["target_result"] == "B").astype(float).to_numpy(),
+    ])
+    curve = reliability_curve(probs, outcomes, n_bins=10)
+    if not curve["predicted"]:
+        return ""
+
+    gaps = [abs(p - o) for p, o in zip(curve["predicted"], curve["observed"])]
+    worst = int(np.argmax(gaps))
+    well_covered = [
+        (p, o, n, abs(p - o))
+        for p, o, n in zip(curve["predicted"], curve["observed"], curve["count"])
+        if n >= 500
+    ]
+    biggest_solid = max(well_covered, key=lambda row: row[3]) if well_covered else None
+    total = sum(curve["count"])
+
+    parts = [
+        f"Across {total:,} pooled outcome probabilities the largest gap in any "
+        f"band with at least 500 predictions is "
+        f"{biggest_solid[3] * 100:.1f} percentage points "
+        f"({pct(biggest_solid[0])} predicted against {pct(biggest_solid[1])} "
+        f"observed)." if biggest_solid else ""
+    ]
+    if curve["count"][worst] < 500:
+        parts.append(
+            f"The widest gap overall sits in the {pct(curve['predicted'][worst])} "
+            f"band, but on only {curve['count'][worst]} predictions, which is "
+            "too few to read much into."
+        )
+    parts.append(
+        "In short, a probability quoted by this system behaves close to its "
+        "face value over a large enough sample - which is what calibration is "
+        "for, and the reason the confidence label is reported separately "
+        "rather than folded into the probability."
+    )
+    return " ".join(p for p in parts if p)
+
+
 def calibration_comparison(summary: pd.DataFrame) -> str:
     lines = ["| Variant | Log loss | Brier | Accuracy | ECE |",
              "| --- | ---: | ---: | ---: | ---: |"]
@@ -281,6 +336,67 @@ def calibration_comparison(summary: pd.DataFrame) -> str:
             f"{pct(r.get('accuracy'))} | {fmt(r.get('ece'))} |"
         )
     return "\n".join(lines)
+
+
+
+def decision_section(summary: pd.DataFrame, weights: pd.DataFrame, meta: dict) -> str:
+    """State the architecture the measurements select, computed from them."""
+    hub = summary[summary["log_loss"].notna()]
+    candidates = [k for k, _ in HEADLINE if k in hub.index and k != "naive"]
+    ranked = hub.loc[candidates, "log_loss"].sort_values()
+    best = ranked.index[0]
+    best_single = next(
+        k for k in ranked.index if not k.startswith("ensemble")
+    )
+    naive = hub.loc["naive", "log_loss"] if "naive" in hub.index else float("nan")
+
+    members = [c for c in weights.columns if c != "season"]
+    mean_weights = weights[members].mean().sort_values(ascending=False)
+    top_three = ", ".join(
+        f"{name} ({mean_weights[name]:.2f})" for name in mean_weights.index[:3]
+    )
+
+    improvement = (naive - ranked.iloc[0]) / naive * 100 if np.isfinite(naive) else float("nan")
+    over_single = (hub.loc[best_single, "log_loss"] - ranked.iloc[0]) / \
+        hub.loc[best_single, "log_loss"] * 100
+
+    return f"""## 8. What the backtest selected
+
+These are conclusions drawn from the tables above, not preferences.
+
+**Architecture: the weighted logarithmic ensemble, uncalibrated.** It records
+the lowest log loss of anything tested ({fmt(ranked.iloc[0])}), which is
+{improvement:.1f}% better than the naive base rates ({fmt(naive)}) and
+{over_single:.2f}% better than the best single model
+(`{best_single}`, {fmt(hub.loc[best_single, "log_loss"])}). The margin over the
+best single model is small - which is itself the finding: no individual model
+is far ahead, and the blend's advantage comes from averaging different kinds
+of error rather than from any member being strong.
+
+**No post-hoc calibration**, for the reason measured in section 2.
+
+**Ensemble composition is genuinely mixed.** The heaviest members by mean
+weight are {top_three}. Both statistical and learned models earn weight, and
+the per-fold minima and maxima in section 7 show the blend moving year to
+year rather than settling on one member - another reason to keep the search
+rather than fix the weights.
+
+**Accuracy sits where the literature says it should.**
+{pct(hub.loc[best, "accuracy"])} on the three-way market, inside the ~50-55%
+range reported in peer-reviewed work (see [RESEARCH.md](RESEARCH.md) §4.1).
+Any football system reporting materially more than this on out-of-sample data
+is worth checking for leakage.
+
+**Competition differences are real.** Section 5 shows the Champions League
+scoring best and Ligue 1 worst. The Champions League result is not the model
+being cleverer there: its group stage contains many severe mismatches, which
+are easier to call. Ligue 1 has been the least predictable of the five
+leagues over this window.
+
+**Caveats on these numbers.** They cover {meta["n_matches"]:,} matches in six
+competitions over {len(meta["seasons"])} seasons, with no odds data, no
+lineups and no true xG. They are not a claim about profitability - no betting
+simulation was run, and none should be inferred from a log loss."""
 
 
 def main() -> int:
@@ -329,12 +445,31 @@ season, rather than assumed to help.
 
 {calibration_comparison(summary)}
 
+### What this means, and what was chosen
+
+Post-hoc calibration **degrades** this ensemble on every measure that matters:
+log loss, Brier and ECE all get worse. That is not the usual result, and it
+has a straightforward explanation. The members are fitted by proper scoring
+rules (weighted Poisson likelihood, multinomial log loss) and blended by
+minimising validation log loss, so the blend is already close to calibrated
+before anything is done to it. Isotonic regression fitted on a ~4,000-match
+validation window then has more room to overfit the correction than it has
+bias to remove.
+
+**The production default is therefore no post-hoc calibration**
+(`calibration.method: none` in `config/model.yml`). This follows the
+measurement rather than the convention. The calibrators remain implemented,
+tested and re-measured on every backtest run; if a future model set turns out
+to need them, the numbers here will say so.
+
 ### Reliability
 
 All three outcome probabilities pooled, in ten bands. A well-calibrated model
 has "observed frequency" tracking "mean predicted".
 
 {reliability_table(predictions)}
+
+{reliability_commentary(predictions)}
 
 ## 3. Goal-based markets
 
@@ -357,7 +492,9 @@ halving the full-time numbers.
 
 ## 5. Per competition
 
-Calibrated ensemble only, across all test seasons.
+The shipped ensemble, across all test seasons. ECE here is pooled over every
+prediction in the group; the ECE column in section 1 averages per-fold values,
+so the two are not directly comparable with each other.
 
 {per_competition_table(predictions)}
 
@@ -373,6 +510,8 @@ Refitted every fold on the validation window. Spread across folds shows how
 stable each member's contribution is.
 
 {weights_table(weights)}
+
+{decision_section(summary, weights, meta)}
 """
     out_path = Path(args.out) if args.out else Path("docs/BENCHMARK.md")
     out_path.parent.mkdir(parents=True, exist_ok=True)

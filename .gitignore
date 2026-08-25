@@ -5,13 +5,18 @@ __pycache__/
 venv/
 .env
 
-# Cached downloads and derived data: rebuild with scripts/build_dataset.py
-data/raw/
-data/interim/
-data/processed/
+# Cached downloads and derived data: rebuild with scripts/build_dataset.py.
+# The directories are kept (via .gitkeep) so a fresh clone has somewhere to write.
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
 
 # Trained artefacts: rebuild with scripts/train.py
-models/*.joblib
+models/*
+!models/.gitkeep
 
 frontend/node_modules/
 frontend/dist/

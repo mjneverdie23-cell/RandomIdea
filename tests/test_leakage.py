@@ -181,3 +181,45 @@ def test_targets_are_never_offered_as_features(synthetic_matches):
     # And no post-match statistic leaked in under its raw name.
     for name in ("home_goals", "away_goals", "home_shots", "ht_home_goals"):
         assert name not in columns
+
+
+def test_snapshot_replay_reproduces_a_full_rebuild(synthetic_matches):
+    """The serving-time rewind must land on exactly the state a full pass gives.
+
+    Replaying from a season snapshot is an optimisation. If it double-counted
+    or skipped a match, historical predictions would quietly differ from what
+    the model would have said at the time.
+    """
+    import copy
+
+    df = synthetic_matches
+    ordered = df.sort_values(["date", "competition", "home_team"], kind="mergesort")
+    as_of = pd.Timestamp(ordered["date"].quantile(0.75))
+
+    # Full rebuild: observe every match before the cutoff.
+    full = FeatureBuilder()
+    for _, row in ordered[ordered["date"] < as_of].iterrows():
+        full._observe(row)
+
+    # Snapshot rebuild: stop at a season boundary, then resume by position.
+    snapshot_season, snapshot, position = None, None, 0
+    streaming = FeatureBuilder()
+    current = None
+    for index, (_, row) in enumerate(ordered.iterrows()):
+        if str(row["season"]) != current:
+            current = str(row["season"])
+            if pd.Timestamp(row["date"]) < as_of:
+                snapshot_season, snapshot, position = current, copy.deepcopy(streaming), index
+        streaming._observe(row)
+
+    assert snapshot is not None, "fixture produced no usable snapshot"
+    resumed = ordered.iloc[position:]
+    for _, row in resumed[resumed["date"] < as_of].iterrows():
+        snapshot._observe(row)
+
+    assert snapshot.elo.snapshot() == pytest.approx(full.elo.snapshot())
+    assert {t: s.n_matches for t, s in snapshot.teams.items()} == \
+           {t: s.n_matches for t, s in full.teams.items()}
+    for team, state in full.teams.items():
+        assert snapshot.teams[team].season_points == state.season_points
+        assert snapshot.teams[team].attack.mean() == pytest.approx(state.attack.mean())

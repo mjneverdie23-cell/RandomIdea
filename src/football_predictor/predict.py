@@ -136,19 +136,24 @@ class PredictionEngine:
 
         season = season_from_date(as_of)
         snapshot = self.bundle.builder_snapshots.get(season)
+        ordered = matches.sort_values(
+            ["date", "competition", "home_team"], kind="mergesort"
+        )
         if snapshot is None:
             # No snapshot this far back: rebuild from scratch. Slow but correct.
             log.info("no snapshot for %s, rebuilding state from scratch", season)
             builder = FeatureBuilder()
-            replay = history
+            replay = ordered[ordered["date"] < as_of]
         else:
             builder = copy.deepcopy(snapshot)
-            season_start = matches[matches["season"] == season]["date"].min()
-            replay = history[history["date"] >= season_start]
+            # Resume from the row position the snapshot was taken at. Using a
+            # date here would be wrong when two competitions share a
+            # season-boundary date: those matches would be replayed twice.
+            position = self.bundle.snapshot_positions.get(season, 0)
+            resumed = ordered.iloc[position:]
+            replay = resumed[resumed["date"] < as_of]
 
-        for _, row in replay.sort_values(
-            ["date", "competition", "home_team"], kind="mergesort"
-        ).iterrows():
+        for _, row in replay.iterrows():
             if not pd.isna(row["home_goals"]):
                 builder._observe(row)
 
@@ -211,11 +216,8 @@ class PredictionEngine:
         first_half = second_half = None
         if state.halves is not None:
             try:
-                first_half = state.halves.first_half_matrix(
-                    home_team, away_team, neutral=neutral
-                )
-                second_half = state.halves.second_half_matrix(
-                    home_team, away_team, neutral=neutral
+                first_half, second_half = _halves_matched_to_full_time(
+                    state.halves, reconciled, home_team, away_team, neutral=neutral
                 )
             except Exception:
                 log.exception("half-time model failed")
@@ -391,6 +393,44 @@ class PredictionEngine:
                 log.exception("ML goal model failed")
 
         return ScoreMatrix(blend_matrices(matrices, weights))
+
+
+
+def _halves_matched_to_full_time(
+    halves, full_time: ScoreMatrix, home_team: str, away_team: str,
+    *, neutral: bool = False,
+) -> tuple[ScoreMatrix, ScoreMatrix]:
+    """First- and second-half distributions that add up to the full-time one.
+
+    Two models disagree slightly by construction. The half models estimate how
+    a match's goals divide between the periods; the full-time distribution has
+    been reconciled to the ensemble, which knows things the half models do not.
+    Left alone, the panel would show a first half of 1.26 and a second of 1.47
+    beside a match total of 2.96, and a reader would be right to call that a
+    bug.
+
+    So each side's *split* comes from the half models - which is the thing they
+    are good at, and which is not 50/50 - while the *level* comes from the
+    full-time distribution the rest of the page is built on.
+    """
+    first = halves.first_half.rates(home_team, away_team, neutral=neutral)
+    second = halves.second_half.rates(home_team, away_team, neutral=neutral)
+    full = (full_time.expected_home_goals, full_time.expected_away_goals)
+
+    scaled_first, scaled_second = [], []
+    for i in range(2):
+        total = first[i] + second[i]
+        share = first[i] / total if total > 1e-9 else 0.44
+        scaled_first.append(max(full[i] * share, 1e-4))
+        scaled_second.append(max(full[i] * (1.0 - share), 1e-4))
+
+    max_goals = halves.max_goals
+    return (
+        ScoreMatrix.from_rates(scaled_first[0], scaled_first[1],
+                               rho=halves.first_half.rho, max_goals=max_goals),
+        ScoreMatrix.from_rates(scaled_second[0], scaled_second[1],
+                               rho=halves.second_half.rho, max_goals=max_goals),
+    )
 
 
 # -- helpers -----------------------------------------------------------------

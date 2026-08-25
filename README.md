@@ -11,17 +11,21 @@ football result accuracy is roughly 50-55%, and results here sit inside that
 range. A 70% forecast from this system is meant to be wrong about three times
 in ten.
 
+A real response from the running service, not an illustration:
+
 ```
-Liverpool vs Arsenal · Premier League · 2025/26
+Manchester City vs Everton · Premier League · 2026-09-19
 
-Expected goals    1.72 - 1.31          Total 3.03
+Expected goals    2.16 - 0.80          Total 2.96
 
-HUB      Home 47%    Draw 25%    Away 28%
-BTTS     Yes 60%     No 40%
-Over 2.5 58%
-Liverpool over 0.5   82%
-Arsenal over 0.5     73%
-Most likely scores   1-1, 2-1, 1-0
+HUB      Home 70%    Draw 18%    Away 12%
+BTTS     Yes 49%     No 51%
+Over 2.5 57%
+Manchester City   over 0.5  89%   clean sheet  45%
+Everton           over 0.5  55%   clean sheet  11%
+Half-time HUB     Home 50%   Draw 37%   Away 13%
+Most likely scores   2-0, 1-0, 2-1
+Confidence  High (0.81)       Data quality  Good
 ```
 
 ## What "HUB" means
@@ -93,8 +97,38 @@ Details: [docs/DATA.md](docs/DATA.md).
 | Calibration | isotonic / Platt, fitted out of sample and **measured** |
 
 Which architecture wins was decided by walk-forward validation, not by
-preference. Real numbers: [docs/BENCHMARK.md](docs/BENCHMARK.md). Why each
-approach was adopted or rejected: [docs/RESEARCH.md](docs/RESEARCH.md).
+preference.
+
+### Measured results
+
+Walk-forward over 11 seasons, **21,260 test matches**, each predicted by models
+that never saw it. HUB market:
+
+| Model | Log loss | Brier | RPS | Accuracy |
+|---|---:|---:|---:|---:|
+| Naive base rates | 1.0739 | 0.6495 | 0.2315 | 44.3% |
+| Elo | 0.9854 | 0.5871 | 0.2013 | 52.7% |
+| Poisson | 0.9826 | 0.5849 | 0.2004 | 52.9% |
+| Dixon-Coles | 0.9822 | 0.5847 | 0.2004 | 52.8% |
+| Random forest | 0.9778 | 0.5817 | 0.1990 | 53.2% |
+| XGBoost | 0.9832 | 0.5848 | 0.1999 | 53.1% |
+| CatBoost | 0.9773 | 0.5812 | 0.1988 | 53.3% |
+| **Ensemble** | **0.9753** | **0.5802** | **0.1983** | **53.2%** |
+
+53.2% accuracy sits inside the ~50-55% ceiling reported in peer-reviewed work.
+Anything claiming much more out of sample is worth checking for leakage.
+
+**Calibration was measured, not assumed** — and it turned out that post-hoc
+correction *hurts* this ensemble (ECE 0.0230 uncalibrated, 0.0281 with Platt,
+0.0290 with isotonic). The blend is already well calibrated because its members
+are fitted by proper scoring rules. Production therefore applies none, which is
+what the measurement says rather than what the convention says. Pooled over
+63,780 outcome probabilities, the largest gap between predicted and observed
+frequency in any well-populated band is **0.9 percentage points**.
+
+Full tables including per-competition, per-season, half-time markets and
+ensemble weights: [docs/BENCHMARK.md](docs/BENCHMARK.md). Why each approach was
+adopted or rejected: [docs/RESEARCH.md](docs/RESEARCH.md).
 
 ## Data leakage
 
@@ -208,6 +242,7 @@ derivation, model fitting, the prediction engine and the HTTP API.
 | [DATA.md](docs/DATA.md) | sources, canonical schema, normalisation, cleaning, coverage |
 | [LEAKAGE.md](docs/LEAKAGE.md) | how leakage is prevented and how that is proved |
 | [MARKETS.md](docs/MARKETS.md) | every market and how its probability is computed |
+| [CONFIDENCE.md](docs/CONFIDENCE.md) | how the confidence label and data-quality report are computed |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | module layout and design decisions |
 | [ADDING_COMPETITIONS.md](docs/ADDING_COMPETITIONS.md) | extending to new leagues and sources |
 

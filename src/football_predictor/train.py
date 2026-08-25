@@ -30,7 +30,9 @@ from .config import load_model_config, model_dir
 from .evaluation.backtest import GOAL_ML_ID, BacktestConfig
 from .features.builder import FeatureBuilder, feature_columns
 from .models.base import MarketPredictions
-from .models.calibration import BinaryCalibrator, MulticlassCalibrator
+from .models.calibration import (
+    BinaryCalibrator, MulticlassCalibrator, expected_calibration_error,
+)
 from .models.dixon_coles import DixonColesModel, GoalModelConfig, PoissonModel
 from .models.elo_model import EloOutcomeModel
 from .models.ensemble import BinaryEnsemble, ProbabilityEnsemble
@@ -61,6 +63,11 @@ class TrainedBundle:
 
     builder: FeatureBuilder | None = None
     builder_snapshots: dict[str, FeatureBuilder] = field(default_factory=dict)
+    #: Row position, in the canonically sorted match table, that each snapshot
+    #: was taken at. Replaying from a position rather than a date is exact:
+    #: two competitions can share a season-boundary date, and a date-based
+    #: rewind would replay such a match twice.
+    snapshot_positions: dict[str, int] = field(default_factory=dict)
 
     dixon_coles: DixonColesModel | None = None
     poisson: PoissonModel | None = None
@@ -113,13 +120,15 @@ def train(
     log.info("building features and snapshots")
     builder = FeatureBuilder()
     snapshots: dict[str, FeatureBuilder] = {}
+    positions: dict[str, int] = {}
     feature_rows: list[dict] = []
     ordered = matches.sort_values(["date", "competition", "home_team"], kind="mergesort")
     current_season = None
-    for _, row in ordered.iterrows():
+    for position, (_, row) in enumerate(ordered.iterrows()):
         season = str(row["season"])
         if season != current_season:
             snapshots[season] = copy.deepcopy(builder)
+            positions[season] = position
             current_season = season
         feature_rows.append(builder._row_features(row))
         if not pd.isna(row["home_goals"]):
@@ -129,6 +138,7 @@ def train(
     # Only recent snapshots are kept: replaying a 1990s fixture is not a use
     # case worth carrying 30 deep-copied states for.
     bundle.builder_snapshots = {s: snapshots[s] for s in seasons[-8:] if s in snapshots}
+    bundle.snapshot_positions = {s: positions[s] for s in bundle.builder_snapshots}
 
     features = features[features["target_result"].notna()].copy()
     columns = feature_columns(features)
@@ -215,8 +225,18 @@ def train(
             bundle.ou_ensemble.predict(ou_members), ou_truth
         )
 
+    # The confidence layer discounts a model measured as poorly calibrated, so
+    # it needs a real number rather than an assumption. This is the ensemble's
+    # calibration error on the validation window - out of sample, and computed
+    # here rather than left for the serving layer to guess at.
+    ensemble_ece = float(np.nanmean([
+        expected_calibration_error(ensemble_validation[:, i], (labels == cls).astype(float))
+        for i, cls in enumerate(("H", "U", "B"))
+    ]))
+
     bundle.matches = matches
     bundle.metadata = {
+        "ensemble_ece": round(ensemble_ece, 5),
         "n_matches": int(len(matches)),
         "validation_seasons": validation_labels,
         "ensemble_weights": bundle.ensemble.weight_table(),

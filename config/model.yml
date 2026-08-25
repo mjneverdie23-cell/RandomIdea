@@ -70,7 +70,20 @@ ensemble:
   n_weight_samples: 4000
 
 calibration:
-  method: isotonic               # isotonic | platt | none
+  # Measured, not assumed. Walk-forward over 21,260 matches, both post-hoc
+  # methods carried through every fold (docs/BENCHMARK.md section 2):
+  #
+  #   uncalibrated ensemble   log loss 0.9753   ECE 0.0230
+  #   Platt scaling           log loss 0.9768   ECE 0.0281
+  #   isotonic regression     log loss 0.9845   ECE 0.0290
+  #
+  # The blend is already better calibrated than either correction makes it -
+  # its members are fitted by proper scoring rules, and isotonic on a
+  # ~4,000-match validation window adds more noise than it removes bias. So
+  # production applies no post-hoc correction. The machinery stays wired and
+  # is re-measured on every backtest run; set this to isotonic or platt if a
+  # future model set needs it.
+  method: none                   # isotonic | platt | none
   min_samples: 800
 
 backtest:

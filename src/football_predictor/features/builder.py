@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,9 @@ from .elo import EloConfig, EloRatings
 from .form import MatchRecord, TeamState
 
 log = logging.getLogger(__name__)
+
+#: Meetings kept per pairing for head-to-head features.
+H2H_HISTORY = 10
 
 #: Columns the models predict. Never fed back in as inputs.
 TARGET_COLUMNS: tuple[str, ...] = (
@@ -120,12 +124,15 @@ class FeatureBuilder:
         self.halflife = float(cfg.get("time_decay_halflife_days", 180))
         self.min_history = int(cfg.get("min_history_matches", 6))
         self.elo = EloRatings(elo_config)
+        # The default factories are partials rather than lambdas so that a
+        # fitted builder can be pickled into the model bundle - a lambda
+        # defined in __init__ has no importable name and breaks joblib.dump.
         self.teams: dict[str, TeamState] = defaultdict(
-            lambda: TeamState(halflife_days=self.halflife)
+            partial(TeamState, halflife_days=self.halflife)
         )
         self.competitions: dict[str, _CompetitionState] = defaultdict(_CompetitionState)
         self.head_to_head: dict[tuple[str, str], deque] = defaultdict(
-            lambda: deque(maxlen=10)
+            partial(deque, maxlen=H2H_HISTORY)
         )
 
     # -- main pass ---------------------------------------------------------

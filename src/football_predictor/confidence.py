@@ -21,6 +21,11 @@ import numpy as np
 #: Reference distribution of the three outcomes across the training data.
 BASE_RATES = np.array([0.46, 0.26, 0.28])
 
+HIGH_THRESHOLD = 0.65
+MODERATE_THRESHOLD = 0.45
+#: Matches of history a side needs before any forecast about it can be "High".
+MIN_HISTORY_FOR_HIGH = 10
+
 
 @dataclass
 class Confidence:
@@ -64,7 +69,8 @@ def assess_confidence(
     probs = np.asarray(probabilities, dtype=float).ravel()
     notes: list[str] = []
 
-    # Sharpness: how much more decided than the league base rate.
+    # Sharpness: how much more decided than the league base rate. A fixture
+    # the model calls 46/26/28 is barely more informative than knowing nothing.
     top = float(probs.max())
     sharpness = float(np.clip((top - BASE_RATES.max()) / (1.0 - BASE_RATES.max()), 0, 1))
 
@@ -83,12 +89,38 @@ def assess_confidence(
     # Calibration: a model measured as poorly calibrated earns less confidence.
     calibration = 1.0
     if calibration_ece is not None and np.isfinite(calibration_ece):
-        calibration = float(np.clip(1.0 - calibration_ece * 4.0, 0.3, 1.0))
+        calibration = float(np.clip(1.0 - calibration_ece * 8.0, 0.3, 1.0))
 
-    score = float(
-        0.30 * sharpness + 0.30 * agreement + 0.25 * sample + 0.15 * calibration
+    # Two distinct things, deliberately kept apart and then combined.
+    #
+    #   evidence  - how much the model has to go on for this fixture
+    #   sharpness - how decided the forecast actually is
+    #
+    # Both have to be present for a high label. Well-grounded models can still
+    # produce a near coin-flip, and calling that "High" would tell the user
+    # the wrong thing: the estimate is trustworthy, the outcome is not
+    # predictable. Weighting sharpness this heavily is what stops almost every
+    # fixture with complete data from reading as confident.
+    evidence = 0.40 * agreement + 0.35 * sample + 0.25 * calibration
+    score = float(0.55 * evidence + 0.45 * sharpness)
+
+    # A hard floor on history rather than a weighted term. A side with a
+    # handful of matches behind it has no meaningful form, and a decisive
+    # forecast built on that is decisive about very little - the weighting
+    # alone let such a fixture climb back into "High" on sharpness.
+    if history < MIN_HISTORY_FOR_HIGH:
+        score = min(score, HIGH_THRESHOLD - 0.01)
+
+    if sharpness < 0.15 and score >= 0.62:
+        notes.append(
+            "the three outcomes are close to evenly matched, so the forecast "
+            "is well grounded but not decisive"
+        )
+
+    label = (
+        "High" if score >= HIGH_THRESHOLD
+        else ("Moderate" if score >= MODERATE_THRESHOLD else "Low")
     )
-    label = "High" if score >= 0.62 else ("Moderate" if score >= 0.42 else "Low")
     return Confidence(
         label=label,
         score=round(score, 4),
@@ -97,6 +129,7 @@ def assess_confidence(
             "model_agreement": round(agreement, 4),
             "sample_size": round(sample, 4),
             "calibration": round(calibration, 4),
+            "evidence": round(evidence, 4),
         },
         notes=notes,
     )

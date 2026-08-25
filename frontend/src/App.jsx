@@ -148,8 +148,8 @@ export default function App() {
       </main>
 
       <footer>
-        Probabilities from a calibrated ensemble of Dixon-Coles, Poisson, Elo and
-        gradient-boosting models, validated walk-forward. Forecasts, not guarantees.
+        Probabilities from a walk-forward validated ensemble of Dixon-Coles, Poisson,
+        Elo and gradient-boosting models. Forecasts, not guarantees.
       </footer>
     </div>
   )

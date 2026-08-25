@@ -97,6 +97,14 @@ Convolving the two halves gives an independent estimate of the full-time
 distribution. The backtest compares that against the directly fitted full-time
 model as a consistency check — see [BENCHMARK.md](BENCHMARK.md).
 
+**Levels are reconciled with the full-time distribution.** The half models and
+the reconciled full-time matrix would otherwise disagree slightly, and the
+panel would show a first half of 1.26 and a second of 1.47 beside a match
+total of 2.96. So each side's *split* between the periods comes from the half
+models — the thing they are good at, and which varies by fixture — while the
+*level* comes from the full-time distribution the rest of the page is built
+on. Pinned by `test_the_two_halves_add_up_to_the_full_match`.
+
 Half markets are only offered where the source supplied half-time scores.
 Where it did not, the panel says so instead of guessing.
 
