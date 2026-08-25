@@ -102,18 +102,18 @@ preference.
 ### Measured results
 
 Walk-forward over 11 seasons, **21,260 test matches**, each predicted by models
-that never saw it. HUB market:
+that never saw it. BTTS and over/under need a goal distribution to sum over,
+which Elo and the direct classifiers do not have:
 
-| Model | Log loss | Brier | RPS | Accuracy |
-|---|---:|---:|---:|---:|
-| Naive base rates | 1.0739 | 0.6495 | 0.2315 | 44.3% |
-| Elo | 0.9854 | 0.5871 | 0.2013 | 52.7% |
-| Poisson | 0.9826 | 0.5849 | 0.2004 | 52.9% |
-| Dixon-Coles | 0.9822 | 0.5847 | 0.2004 | 52.8% |
-| Random forest | 0.9778 | 0.5817 | 0.1990 | 53.2% |
-| XGBoost | 0.9832 | 0.5848 | 0.1999 | 53.1% |
-| CatBoost | 0.9773 | 0.5812 | 0.1988 | 53.3% |
-| **Ensemble** | **0.9753** | **0.5802** | **0.1983** | **53.2%** |
+| Model | Log Loss | Brier | Accuracy | BTTS | O/U 2.5 | Calibration (ECE) |
+| ------------- | -------: | ----: | -------: | ---: | --: | ----------: |
+| Elo | 0.9854 | 0.5871 | 52.7% | &mdash; | &mdash; | 0.0305 |
+| Poisson | 0.9826 | 0.5849 | 52.9% | 54.2% | 56.7% | 0.0241 |
+| Dixon-Coles | 0.9822 | 0.5847 | 52.8% | 54.2% | 56.8% | 0.0215 |
+| Random Forest | 0.9778 | 0.5817 | 53.2% | &mdash; | &mdash; | 0.0233 |
+| XGBoost | 0.9832 | 0.5848 | 53.1% | &mdash; | &mdash; | 0.0283 |
+| LightGBM (goal model) | 0.9791 | 0.5827 | 53.3% | 53.9% | 56.8% | 0.0231 |
+| Ensemble | 0.9753 | 0.5802 | 53.2% | 54.4% | 57.2% | 0.0230 |
 
 53.2% accuracy sits inside the ~50-55% ceiling reported in peer-reviewed work.
 Anything claiming much more out of sample is worth checking for leakage.
@@ -157,7 +157,7 @@ python scripts/build_dataset.py
 # 3. build the feature matrix (~50s)
 python scripts/build_features.py
 
-# 4. train the production models (~5 min)
+# 4. train the production models (~4 min)
 python scripts/train.py
 
 # 5. serve the API
@@ -200,7 +200,7 @@ rebuild, but the ML members and the ensemble weights need one.
 To re-run the full evaluation:
 
 ```bash
-python scripts/backtest.py          # ~40 min, writes data/processed/backtest/
+python scripts/backtest.py          # ~50 min, writes data/processed/backtest/
 python scripts/report.py            # regenerates docs/BENCHMARK.md
 ```
 

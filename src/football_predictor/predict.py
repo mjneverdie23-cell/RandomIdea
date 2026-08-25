@@ -8,9 +8,11 @@ matches before that date, using only the members that can be honestly
 replayed. The response says which mode was used.
 
 Market consistency is enforced in one place. The three-way HUB probabilities
-come from the calibrated ensemble; a consensus score matrix is then reconciled
-to those probabilities, and every other market - BTTS, over/under, team totals,
-exact scores - is read off that single reconciled distribution.
+come from the ensemble (with post-hoc calibration applied only if the config
+asks for it - the measured default is none, see docs/BENCHMARK.md); a
+consensus score matrix is then reconciled to those probabilities, and every
+other market - BTTS, over/under, team totals, exact scores - is read off that
+single reconciled distribution.
 """
 from __future__ import annotations
 

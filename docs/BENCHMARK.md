@@ -18,7 +18,24 @@ Run time: 51 minutes.
 
 ---
 
-## 1. Headline: the HUB market
+## 1. Model comparison
+
+The headline comparison, across every market a model is able to quote. BTTS
+and over/under need a goal distribution to sum over, which Elo and the direct
+three-way classifiers do not have - those cells are dashed rather than filled
+in from elsewhere.
+
+| Model | Log Loss | Brier | Accuracy | BTTS | O/U 2.5 | Calibration (ECE) |
+| ------------- | -------: | ----: | -------: | ---: | --: | ----------: |
+| Elo | 0.9854 | 0.5871 | 52.7% | &mdash; | &mdash; | 0.0305 |
+| Poisson | 0.9826 | 0.5849 | 52.9% | 54.2% | 56.7% | 0.0241 |
+| Dixon-Coles | 0.9822 | 0.5847 | 52.8% | 54.2% | 56.8% | 0.0215 |
+| Random Forest | 0.9778 | 0.5817 | 53.2% | &mdash; | &mdash; | 0.0233 |
+| XGBoost | 0.9832 | 0.5848 | 53.1% | &mdash; | &mdash; | 0.0283 |
+| LightGBM (goal model) | 0.9791 | 0.5827 | 53.3% | 53.9% | 56.8% | 0.0231 |
+| Ensemble | 0.9753 | 0.5802 | 53.2% | 54.4% | 57.2% | 0.0230 |
+
+## 2. The HUB market in full
 
 Log loss and Brier are proper scoring rules; RPS additionally accounts for the
 outcomes being ordered (home &gt; draw &gt; away). Lower is better for all
@@ -40,7 +57,7 @@ the least informative column here.
 | **Ensemble** | 0.9753 | 0.5802 | 0.1983 | 53.2% | 0.0230 |
 | **Ensemble (calibrated)** | 0.9845 | 0.5826 | 0.1992 | 53.2% | 0.0290 |
 
-## 2. Calibration
+## 3. Calibration
 
 Both post-hoc methods were carried through every fold and scored on the test
 season, rather than assumed to help.
@@ -88,7 +105,43 @@ has "observed frequency" tracking "mean predicted".
 
 Across 63,780 pooled outcome probabilities the largest gap in any band with at least 500 predictions is 0.9 percentage points (74.3% predicted against 75.3% observed). The widest gap overall sits in the 91.7% band, but on only 54 predictions, which is too few to read much into. In short, a probability quoted by this system behaves close to its face value over a large enough sample - which is what calibration is for, and the reason the confidence label is reported separately rather than folded into the probability.
 
-## 3. Goal-based markets
+## 4. Classification metrics
+
+Reported because they were asked for. They are less informative than the
+scoring rules above: a model can gain accuracy while getting worse at
+estimating probabilities, which is what the system is actually for.
+
+| Model | Precision (macro) | Recall (macro) | F1 (macro) |
+| --- | ---: | ---: | ---: |
+| Naive base rates | 0.148 | 0.333 | 0.205 |
+| Elo (ordered logit) | 0.354 | 0.444 | 0.384 |
+| Poisson | 0.433 | 0.454 | 0.393 |
+| Dixon-Coles | 0.435 | 0.454 | 0.395 |
+| Logistic regression | 0.459 | 0.458 | 0.412 |
+| Random forest | 0.354 | 0.451 | 0.390 |
+| XGBoost | 0.456 | 0.455 | 0.404 |
+| LightGBM | 0.447 | 0.452 | 0.412 |
+| CatBoost | 0.447 | 0.456 | 0.398 |
+| LightGBM goal model | 0.352 | 0.455 | 0.393 |
+| **Ensemble** | 0.414 | 0.455 | 0.394 |
+
+Binary markets, where ROC-AUC is meaningful:
+
+| Market | ROC-AUC | Log loss | Brier | Accuracy |
+| --- | ---: | ---: | ---: | ---: |
+| BTTS (ensemble) | 0.5559 | 0.6867 | 0.2468 | 54.4% |
+| Over/under 2.5 (ensemble) | 0.5964 | 0.6768 | 0.2420 | 57.2% |
+| BTTS (Dixon-Coles) | 0.5515 | 0.6913 | 0.2489 | 54.2% |
+
+Worth reading honestly: the BTTS ROC-AUC of around 0.55 says the model ranks
+fixtures by both-teams-to-score only slightly better than chance. Its
+probabilities are well calibrated - the log loss beats a constant base rate -
+but its ability to tell one fixture from another on this market is weak.
+Over/under 2.5 discriminates better, and the three-way result better still.
+That ordering matches how much signal the underlying goal distribution carries
+about each question.
+
+## 5. Goal-based markets
 
 | Model | BTTS log loss | BTTS acc | O/U 2.5 log loss | O/U 2.5 acc | HT HUB log loss | HT HUB acc | Exact score |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -119,7 +172,7 @@ Across 63,780 pooled outcome probabilities the largest gap in any band with at l
 | Poisson | 0.967 | 1.227 | 1.119 | 0.872 | 1.115 | 1.140 |
 | LightGBM goal model | 0.966 | 1.221 | 1.107 | 0.864 | 1.111 | 1.132 |
 
-## 4. Half-time and second-half markets
+## 6. Half-time and second-half markets
 
 Fitted as separate first-half and second-half goal models, not derived by
 halving the full-time numbers.
@@ -135,10 +188,10 @@ halving the full-time numbers.
 | Second half over 1.5 | 0.6923 | 54.9% |
 | Second half over 2.5 | 0.5091 | 79.2% |
 
-## 5. Per competition
+## 7. Per competition
 
 The shipped ensemble, across all test seasons. ECE here is pooled over every
-prediction in the group; the ECE column in section 1 averages per-fold values,
+prediction in the group; the ECE column in section 2 averages per-fold values,
 so the two are not directly comparable with each other.
 
 | Competition | Matches | Log loss | Brier | RPS | Accuracy | ECE |
@@ -151,7 +204,7 @@ so the two are not directly comparable with each other.
 | UEFA Champions League | 1497 | 0.9181 | 0.5399 | 0.1910 | 58.2% | 0.0240 |
 | **All** | 21260 | 0.9753 | 0.5802 | 0.1983 | 53.2% | 0.0073 |
 
-## 6. Per season
+## 8. Per season
 
 Log loss on the HUB market.
 
@@ -169,7 +222,7 @@ Log loss on the HUB market.
 | 2024/25 | 1.0796 | 0.9853 | 0.9785 | 0.9741 | 0.9808 |
 | 2025/26 | 1.0708 | 0.9969 | 0.9890 | 0.9848 | 0.9930 |
 
-## 7. Ensemble weights
+## 9. Ensemble weights
 
 Refitted every fold on the validation window. Spread across folds shows how
 stable each member's contribution is.
@@ -186,7 +239,7 @@ stable each member's contribution is.
 | xgboost | 0.028 | 0.002 | 0.070 |
 | lightgbm | 0.025 | 0.004 | 0.087 |
 
-## 8. What the backtest selected
+## 10. What the backtest selected
 
 These are conclusions drawn from the tables above, not preferences.
 
@@ -199,11 +252,11 @@ best single model is small - which is itself the finding: no individual model
 is far ahead, and the blend's advantage comes from averaging different kinds
 of error rather than from any member being strong.
 
-**No post-hoc calibration**, for the reason measured in section 2.
+**No post-hoc calibration**, for the reason measured in section 3.
 
 **Ensemble composition is genuinely mixed.** The heaviest members by mean
 weight are catboost (0.19), dixon_coles (0.16), random_forest (0.16). Both statistical and learned models earn weight, and
-the per-fold minima and maxima in section 7 show the blend moving year to
+the per-fold minima and maxima in section 9 show the blend moving year to
 year rather than settling on one member - another reason to keep the search
 rather than fix the weights.
 
@@ -213,7 +266,7 @@ range reported in peer-reviewed work (see [RESEARCH.md](RESEARCH.md) §4.1).
 Any football system reporting materially more than this on out-of-sample data
 is worth checking for leakage.
 
-**Competition differences are real.** Section 5 shows the Champions League
+**Competition differences are real.** Section 7 shows the Champions League
 scoring best and Ligue 1 worst. The Champions League result is not the model
 being cleverer there: its group stage contains many severe mismatches, which
 are easier to call. Ligue 1 has been the least predictable of the five

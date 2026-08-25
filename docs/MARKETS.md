@@ -29,8 +29,10 @@ names rather than computed twice.
 H = sum over h > a          U = sum over h == a          B = sum over h < a
 ```
 
-The three-way probabilities come from the calibrated ensemble, which includes
-direct classifiers that never see a score distribution. The consensus score
+The three-way probabilities come from the ensemble, which includes direct
+classifiers that never see a score distribution. Post-hoc calibration is
+applied only if the config asks for it; the measured default is none, for the
+reason set out in [BENCHMARK.md](BENCHMARK.md) section 3. The consensus score
 matrix is then **reconciled** to them: each of the three outcome regions is
 scaled by a single factor to hit the ensemble's numbers. That leaves the shape
 *within* each region untouched — the relative likelihood of 2-0 against 3-1 is

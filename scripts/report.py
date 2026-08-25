@@ -81,6 +81,87 @@ def headline_table(summary: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+
+def requested_benchmark_table(summary: pd.DataFrame) -> str:
+    """The comparison table in the shape it was asked for.
+
+    BTTS and over/under are only quotable by models that produce a goal
+    distribution. Elo and the direct three-way classifiers have no scoreline
+    to sum over, so those cells are dashed rather than filled with a number
+    borrowed from somewhere else.
+    """
+    rows = [
+        ("elo", None, "Elo"),
+        ("poisson", "poisson_markets", "Poisson"),
+        ("dixon_coles", "dixon_coles_markets", "Dixon-Coles"),
+        ("random_forest", None, "Random Forest"),
+        ("xgboost", None, "XGBoost"),
+        ("lightgbm_goals", "lightgbm_goals_markets", "LightGBM (goal model)"),
+        ("ensemble", None, "Ensemble"),
+    ]
+    lines = [
+        "| Model | Log Loss | Brier | Accuracy | BTTS | O/U 2.5 | Calibration (ECE) |",
+        "| ------------- | -------: | ----: | -------: | ---: | --: | ----------: |",
+    ]
+    for key, market_key, label in rows:
+        if key not in summary.index:
+            continue
+        r = summary.loc[key]
+        btts = ou = "&mdash;"
+        if market_key and market_key in summary.index:
+            m = summary.loc[market_key]
+            btts = pct(m.get("btts_accuracy"))
+            ou = pct(m.get("ou2.5_accuracy"))
+        elif key == "ensemble":
+            if "btts_ensemble" in summary.index:
+                btts = pct(summary.loc["btts_ensemble"].get("accuracy"))
+            if "ou2.5_ensemble" in summary.index:
+                ou = pct(summary.loc["ou2.5_ensemble"].get("accuracy"))
+        lines.append(
+            f"| {label} | {fmt(r.get('log_loss'))} | {fmt(r.get('brier'))} | "
+            f"{pct(r.get('accuracy'))} | {btts} | {ou} | {fmt(r.get('ece'))} |"
+        )
+    return "\n".join(lines)
+
+
+def classification_table(summary: pd.DataFrame) -> str:
+    """Precision, recall and F1 on the three-way market; ROC-AUC on binaries."""
+    lines = ["| Model | Precision (macro) | Recall (macro) | F1 (macro) |",
+             "| --- | ---: | ---: | ---: |"]
+    for key, label in HEADLINE:
+        if key not in summary.index or key.endswith("_calibrated"):
+            continue
+        r = summary.loc[key]
+        if not np.isfinite(r.get("f1_macro", np.nan)):
+            continue
+        lines.append(
+            f"| {label} | {fmt(r.get('precision_macro'), 3)} | "
+            f"{fmt(r.get('recall_macro'), 3)} | {fmt(r.get('f1_macro'), 3)} |"
+        )
+    lines.append("")
+    lines.append("Binary markets, where ROC-AUC is meaningful:")
+    lines.append("")
+    lines.append("| Market | ROC-AUC | Log loss | Brier | Accuracy |")
+    lines.append("| --- | ---: | ---: | ---: | ---: |")
+    for key, label in (("btts_ensemble", "BTTS (ensemble)"),
+                       ("ou2.5_ensemble", "Over/under 2.5 (ensemble)")):
+        if key not in summary.index:
+            continue
+        r = summary.loc[key]
+        lines.append(
+            f"| {label} | {fmt(r.get('roc_auc'))} | {fmt(r.get('log_loss'))} | "
+            f"{fmt(r.get('brier'))} | {pct(r.get('accuracy'))} |"
+        )
+    if "dixon_coles_markets" in summary.index:
+        r = summary.loc["dixon_coles_markets"]
+        lines.append(
+            f"| BTTS (Dixon-Coles) | {fmt(r.get('btts_roc_auc'))} | "
+            f"{fmt(r.get('btts_log_loss'))} | {fmt(r.get('btts_brier'))} | "
+            f"{pct(r.get('btts_accuracy'))} |"
+        )
+    return "\n".join(lines)
+
+
 def market_table(summary: pd.DataFrame) -> str:
     """BTTS / over-under / half markets from the models that quote them."""
     rows = [
@@ -360,7 +441,7 @@ def decision_section(summary: pd.DataFrame, weights: pd.DataFrame, meta: dict) -
     over_single = (hub.loc[best_single, "log_loss"] - ranked.iloc[0]) / \
         hub.loc[best_single, "log_loss"] * 100
 
-    return f"""## 8. What the backtest selected
+    return f"""## 10. What the backtest selected
 
 These are conclusions drawn from the tables above, not preferences.
 
@@ -373,11 +454,11 @@ best single model is small - which is itself the finding: no individual model
 is far ahead, and the blend's advantage comes from averaging different kinds
 of error rather than from any member being strong.
 
-**No post-hoc calibration**, for the reason measured in section 2.
+**No post-hoc calibration**, for the reason measured in section 3.
 
 **Ensemble composition is genuinely mixed.** The heaviest members by mean
 weight are {top_three}. Both statistical and learned models earn weight, and
-the per-fold minima and maxima in section 7 show the blend moving year to
+the per-fold minima and maxima in section 9 show the blend moving year to
 year rather than settling on one member - another reason to keep the search
 rather than fix the weights.
 
@@ -387,7 +468,7 @@ range reported in peer-reviewed work (see [RESEARCH.md](RESEARCH.md) §4.1).
 Any football system reporting materially more than this on out-of-sample data
 is worth checking for leakage.
 
-**Competition differences are real.** Section 5 shows the Champions League
+**Competition differences are real.** Section 7 shows the Champions League
 scoring best and Ligue 1 worst. The Champions League result is not the model
 being cleverer there: its group stage contains many severe mismatches, which
 are easier to call. Ligue 1 has been the least predictable of the five
@@ -429,7 +510,16 @@ Run time: {meta['runtime_seconds'] / 60:.0f} minutes.
 
 ---
 
-## 1. Headline: the HUB market
+## 1. Model comparison
+
+The headline comparison, across every market a model is able to quote. BTTS
+and over/under need a goal distribution to sum over, which Elo and the direct
+three-way classifiers do not have - those cells are dashed rather than filled
+in from elsewhere.
+
+{requested_benchmark_table(summary)}
+
+## 2. The HUB market in full
 
 Log loss and Brier are proper scoring rules; RPS additionally accounts for the
 outcomes being ordered (home &gt; draw &gt; away). Lower is better for all
@@ -438,7 +528,7 @@ the least informative column here.
 
 {headline_table(summary)}
 
-## 2. Calibration
+## 3. Calibration
 
 Both post-hoc methods were carried through every fold and scored on the test
 season, rather than assumed to help.
@@ -471,7 +561,23 @@ has "observed frequency" tracking "mean predicted".
 
 {reliability_commentary(predictions)}
 
-## 3. Goal-based markets
+## 4. Classification metrics
+
+Reported because they were asked for. They are less informative than the
+scoring rules above: a model can gain accuracy while getting worse at
+estimating probabilities, which is what the system is actually for.
+
+{classification_table(summary)}
+
+Worth reading honestly: the BTTS ROC-AUC of around 0.55 says the model ranks
+fixtures by both-teams-to-score only slightly better than chance. Its
+probabilities are well calibrated - the log loss beats a constant base rate -
+but its ability to tell one fixture from another on this market is weak.
+Over/under 2.5 discriminates better, and the three-way result better still.
+That ordering matches how much signal the underlying goal distribution carries
+about each question.
+
+## 5. Goal-based markets
 
 {market_table(summary)}
 
@@ -483,28 +589,28 @@ has "observed frequency" tracking "mean predicted".
 
 {goal_accuracy_table(summary)}
 
-## 4. Half-time and second-half markets
+## 6. Half-time and second-half markets
 
 Fitted as separate first-half and second-half goal models, not derived by
 halving the full-time numbers.
 
 {half_market_table(summary)}
 
-## 5. Per competition
+## 7. Per competition
 
 The shipped ensemble, across all test seasons. ECE here is pooled over every
-prediction in the group; the ECE column in section 1 averages per-fold values,
+prediction in the group; the ECE column in section 2 averages per-fold values,
 so the two are not directly comparable with each other.
 
 {per_competition_table(predictions)}
 
-## 6. Per season
+## 8. Per season
 
 Log loss on the HUB market.
 
 {per_season_table(per_fold)}
 
-## 7. Ensemble weights
+## 9. Ensemble weights
 
 Refitted every fold on the validation window. Spread across folds shows how
 stable each member's contribution is.
