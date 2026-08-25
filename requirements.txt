@@ -1,0 +1,27 @@
+# Core data handling
+pandas>=2.0
+numpy>=1.24
+pyarrow>=14.0            # parquet storage for the processed dataset
+
+# Statistical modelling
+scipy>=1.11              # optimiser behind the Dixon-Coles likelihood
+statsmodels>=0.14
+
+# Machine learning
+scikit-learn>=1.3
+xgboost>=2.0
+lightgbm>=4.0
+catboost>=1.2
+
+# Configuration and persistence
+PyYAML>=6.0
+joblib>=1.3
+
+# API
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.0
+
+# Tests
+pytest>=7.4
+httpx>=0.26              # FastAPI TestClient

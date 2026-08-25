@@ -1,0 +1,218 @@
+# Competition registry.
+#
+# Every competition the system knows about is declared here. Nothing about
+# competitions is hardcoded in Python: adding a league or cup means adding an
+# entry here (see docs/ADDING_COMPETITIONS.md).
+#
+# Fields
+#   code          canonical competition code used throughout the pipeline
+#   name          display name
+#   country       ISO-ish country label, or INT for international
+#   tier          1 = major (modelled by default), 2 = supported, 3 = experimental
+#   format        league | knockout | group_then_knockout
+#   source        ingestion adapter id (see config/sources.yml)
+#   source_key    adapter-specific locator
+#   neutral_venue whether home/away is nominal (finals, tournaments at one host)
+#   two_legged    whether ties are played over two legs
+#   enabled       included in default training runs
+
+defaults:
+  enabled: false
+  neutral_venue: false
+  two_legged: false
+  format: league
+  tier: 2
+
+competitions:
+
+  # ---------------------------------------------------------------- England
+  - code: ENG_PL
+    name: Premier League
+    country: England
+    tier: 1
+    source: football_data_mirror
+    source_key: premier-league
+    seasons: [1993/94, 2025/26]
+    enabled: true
+
+  - code: ENG_FAC
+    name: FA Cup
+    country: England
+    tier: 1
+    format: knockout
+    source: openfootball_txt
+    source_key: null            # no free source wired yet - see docs/DATA.md
+    enabled: false
+
+  - code: ENG_EFL
+    name: EFL Cup
+    country: England
+    tier: 1
+    format: knockout
+    source: openfootball_txt
+    source_key: null
+    enabled: false
+
+  # ------------------------------------------------------------------ Spain
+  - code: ESP_LL
+    name: La Liga
+    country: Spain
+    tier: 1
+    source: football_data_mirror
+    source_key: la-liga
+    seasons: [1993/94, 2025/26]
+    enabled: true
+
+  - code: ESP_CDR
+    name: Copa del Rey
+    country: Spain
+    tier: 1
+    format: knockout
+    source: openfootball_txt
+    source_key: null
+    enabled: false
+
+  # ---------------------------------------------------------------- Germany
+  - code: GER_BL
+    name: Bundesliga
+    country: Germany
+    tier: 1
+    source: football_data_mirror
+    source_key: bundesliga
+    seasons: [1993/94, 2025/26]
+    enabled: true
+
+  - code: GER_DFB
+    name: DFB-Pokal
+    country: Germany
+    tier: 1
+    format: knockout
+    source: openfootball_txt
+    source_key: null
+    enabled: false
+
+  # ------------------------------------------------------------------ Italy
+  - code: ITA_SA
+    name: Serie A
+    country: Italy
+    tier: 1
+    source: football_data_mirror
+    source_key: serie-a
+    seasons: [1993/94, 2025/26]
+    enabled: true
+
+  - code: ITA_CI
+    name: Coppa Italia
+    country: Italy
+    tier: 1
+    format: knockout
+    source: openfootball_txt
+    source_key: null
+    enabled: false
+
+  # ----------------------------------------------------------------- France
+  - code: FRA_L1
+    name: Ligue 1
+    country: France
+    tier: 1
+    source: football_data_mirror
+    source_key: ligue-1
+    seasons: [1993/94, 2025/26]
+    enabled: true
+
+  - code: FRA_CDF
+    name: Coupe de France
+    country: France
+    tier: 1
+    format: knockout
+    source: openfootball_txt
+    source_key: null
+    enabled: false
+
+  # ----------------------------------------------------------------- Europe
+  - code: UEFA_UCL
+    name: UEFA Champions League
+    country: INT
+    tier: 1
+    format: group_then_knockout
+    two_legged: true
+    source: openfootball_txt
+    source_key: champions-league
+    source_file: cl
+    seasons: [2011/12, 2025/26]
+    enabled: true
+
+  - code: UEFA_UEL
+    name: UEFA Europa League
+    country: INT
+    tier: 1
+    format: group_then_knockout
+    two_legged: true
+    source: openfootball_txt
+    source_key: europa-league
+    enabled: false
+
+  - code: UEFA_UECL
+    name: UEFA Conference League
+    country: INT
+    tier: 1
+    format: group_then_knockout
+    two_legged: true
+    source: openfootball_txt
+    source_key: conference-league
+    enabled: false
+
+  - code: UEFA_SC
+    name: UEFA Super Cup
+    country: INT
+    tier: 2
+    format: knockout
+    neutral_venue: true
+    source: openfootball_txt
+    source_key: null
+    enabled: false
+
+  # ---------------------------------------------------------- International
+  - code: FIFA_WC
+    name: FIFA World Cup
+    country: INT
+    tier: 1
+    format: group_then_knockout
+    neutral_venue: true
+    source: openfootball_txt
+    source_key: world-cup
+    source_file: cup
+    season_dirs: ["2014--brazil", "2018--russia", "2022--qatar"]
+    enabled: false
+
+  - code: UEFA_EURO
+    name: UEFA European Championship
+    country: INT
+    tier: 1
+    format: group_then_knockout
+    neutral_venue: true
+    source: openfootball_txt
+    source_key: euro
+    source_file: euro
+    season_dirs: ["2016--france", "2020--europe", "2024--germany"]
+    enabled: false
+
+  - code: CONMEBOL_CA
+    name: Copa America
+    country: INT
+    tier: 1
+    format: group_then_knockout
+    neutral_venue: true
+    source: openfootball_txt
+    source_key: copa-america
+    enabled: false
+
+  - code: CAF_AFCON
+    name: Africa Cup of Nations
+    country: INT
+    tier: 1
+    format: group_then_knockout
+    neutral_venue: true
+    source: openfootball_txt
+    source_key: afcon
+    enabled: false

@@ -1,0 +1,56 @@
+# Ingestion adapters.
+#
+# Each source declares how to locate raw files and which canonical fields it is
+# capable of providing. The pipeline never assumes a source has every field -
+# `provides` drives feature availability and the data-quality report.
+
+sources:
+
+  football_data_mirror:
+    adapter: football_data
+    description: >
+      Mirror of football-data.co.uk match CSVs maintained by the Frictionless
+      Data "football-datasets" repository. Big-5 European leagues, 1993/94
+      onwards, with full-time and half-time goals plus match statistics.
+    base_url: https://raw.githubusercontent.com/datasets/football-datasets/main/datasets
+    path_template: "{source_key}/season-{season_short}.csv"
+    licence: "Public data mirrored from football-data.co.uk (free for personal use)"
+    provides:
+      - ft_goals
+      - ht_goals
+      - shots
+      - shots_on_target
+      - corners
+      - fouls
+      - cards
+      - referee
+    missing:
+      - xg              # not present in this mirror; a shot-based proxy is derived
+      - possession
+      - odds
+      - lineups
+      - injuries
+
+  openfootball_txt:
+    adapter: openfootball
+    description: >
+      openfootball plain-text football datasets. Used for cup and international
+      competitions where the football-data mirror has no coverage. Carries
+      full-time scores and, for most fixtures, half-time scores in parentheses.
+    base_url: https://raw.githubusercontent.com/openfootball
+    path_template: "{source_key}/master/{season_long}/{file}.txt"
+    licence: "Public Domain (openfootball)"
+    provides:
+      - ft_goals
+      - ht_goals        # present for most but not all fixtures
+      - stage
+      - neutral_venue
+    missing:
+      - shots
+      - shots_on_target
+      - corners
+      - fouls
+      - cards
+      - xg
+      - possession
+      - odds

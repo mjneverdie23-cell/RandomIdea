@@ -1,0 +1,161 @@
+# Team-name normalisation.
+#
+# Sources name the same club differently: the football-data mirror uses short
+# names ("Man City"), openfootball uses official long names ("Manchester City
+# FC"). Unifying them matters because Elo and form ratings have to follow a
+# club across competitions - Real Madrid's league form must inform its
+# Champions League prediction.
+#
+# Fuzzy matching was evaluated and rejected: on this data it produced
+# Celtic FC -> Celta, FC Porto -> Portsmouth and PSV Eindhoven -> Swindon.
+# Mappings are therefore explicit and reviewed.
+#
+#   canonical_name:
+#     - alias as written by some source
+#
+# Names not listed here fall back to rule-based cleaning (accent folding plus
+# corporate-suffix stripping). That is safe for clubs that appear in only one
+# source; run `python scripts/check_names.py` to list unmapped names that
+# appear in more than one competition.
+
+canonical:
+
+  # ---------------------------------------------------------------- England
+  Arsenal: [Arsenal FC]
+  Aston Villa: [Aston Villa FC]
+  Chelsea: [Chelsea FC]
+  Liverpool: [Liverpool FC]
+  Man City: [Manchester City, Manchester City FC]
+  Man United: [Manchester United, Manchester United FC]
+  Newcastle: [Newcastle United, Newcastle United FC]
+  Tottenham: [Tottenham Hotspur, Tottenham Hotspur FC]
+  Leicester: [Leicester City, Leicester City FC]
+
+  # ------------------------------------------------------------------ Spain
+  Barcelona: [FC Barcelona]
+  Real Madrid: [Real Madrid CF]
+  Ath Madrid: [Atlético Madrid, Atletico Madrid, Club Atlético de Madrid, Atlético de Madrid]
+  Ath Bilbao: [Athletic Club, Athletic Bilbao, Athletic Club Bilbao]
+  Sevilla: [Sevilla FC]
+  Valencia: [Valencia CF]
+  Villarreal: [Villarreal CF]
+  Sociedad: [Real Sociedad, Real Sociedad de Fútbol, Real Sociedad de Futbol]
+  Girona: [Girona FC]
+  Malaga: [Málaga CF, Malaga CF]
+  Betis: [Real Betis, Real Betis Balompié]
+  Celta: [Celta Vigo, RC Celta de Vigo]
+
+  # ---------------------------------------------------------------- Germany
+  Bayern Munich: [Bayern München, FC Bayern München, Bayern Munchen, FC Bayern Munich]
+  Dortmund: [Borussia Dortmund, BV Borussia 09 Dortmund]
+  Leverkusen: [Bayer Leverkusen, Bayer 04 Leverkusen]
+  RB Leipzig: [RasenBallsport Leipzig]
+  Stuttgart: [VfB Stuttgart]
+  Wolfsburg: [VfL Wolfsburg]
+  Schalke 04: [FC Schalke 04, Schalke]
+  M'gladbach: [Bor. Mönchengladbach, Borussia Mönchengladbach, Borussia Monchengladbach]
+  Ein Frankfurt: [Eintracht Frankfurt]
+  Hoffenheim: [1899 Hoffenheim, TSG 1899 Hoffenheim]
+  Union Berlin: [1. FC Union Berlin]
+
+  # ------------------------------------------------------------------ Italy
+  Milan: [AC Milan, Associazione Calcio Milan]
+  Inter: [FC Internazionale Milano, Internazionale, Inter Milan]
+  Juventus: [Juventus FC]
+  Napoli: [SSC Napoli]
+  Roma: [AS Roma]
+  Lazio: [SS Lazio, Lazio Roma]
+  Atalanta: [Atalanta BC]
+  Bologna: [Bologna FC 1909]
+
+  # ----------------------------------------------------------------- France
+  Paris SG: [Paris Saint-Germain, Paris Saint-Germain FC, PSG]
+  Lyon: [Olympique Lyonnais, Olympique Lyon]
+  Marseille: [Olympique Marseille, Olympique de Marseille]
+  Monaco: [AS Monaco, AS Monaco FC]
+  Lille: [Lille OSC]
+  Lens: [Racing Club de Lens, RC Lens]
+  Montpellier: [Montpellier HSC]
+  Brest: [Stade Brestois 29, Stade Brestois]
+  Rennes: [Stade Rennais, Stade Rennais FC]
+
+  # ------------------------------------- European clubs outside the big five
+  Ajax: [AFC Ajax]
+  PSV: [PSV Eindhoven]
+  Feyenoord: [Feyenoord Rotterdam]
+  Porto: [FC Porto]
+  Benfica: [SL Benfica, Sport Lisboa e Benfica]
+  Sporting CP: [Sporting Clube de Portugal, Sporting Lisbon]
+  Braga: [Sporting Braga, Sporting Clube de Braga, SC Braga]
+  Celtic: [Celtic FC]
+  Rangers: [Rangers FC]
+  Club Brugge: [Club Brugge KV, Club Bruges]
+  Gent: [KAA Gent]
+  Genk: [KRC Genk]
+  Anderlecht: [RSC Anderlecht]
+  Antwerp: [Royal Antwerp FC, Royal Antwerp]
+  Union SG: [Royale Union Saint-Gilloise, Union Saint-Gilloise]
+  Salzburg: [FC Red Bull Salzburg, RB Salzburg, Red Bull Salzburg]
+  Sturm Graz: [SK Sturm Graz]
+  Austria Wien: [FK Austria Wien]
+  Basel: [FC Basel 1893, FC Basel]
+  Young Boys: [BSC Young Boys]
+  Sparta Praha: [AC Sparta Praha, Sparta Prague]
+  Slavia Praha: [SK Slavia Praha, Slavia Prague]
+  Viktoria Plzen: [Viktoria Plzeň, FC Viktoria Plzeň]
+  Shakhtar Donetsk: [FK Shakhtar Donetsk, Shakhtar]
+  Dynamo Kyiv: [Dinamo Kiev, Dynamo Kiev, FC Dynamo Kyiv]
+  Crvena Zvezda: [FK Crvena Zvezda, Red Star Belgrade]
+  Dinamo Zagreb: [GNK Dinamo Zagreb]
+  Galatasaray: [Galatasaray SK]
+  Besiktas: [Beşiktaş, Beşiktaş JK]
+  Trabzonspor: [Trabzonspor AS]
+  Istanbul Basaksehir: [İstanbul Başakşehir, Istanbul Basaksehir FK]
+  Olympiakos: [Olympiakos Piraeus, PAE Olympiakos SFP, Olympiacos]
+  AEK Athens: [AEK Athen, AEK Athens FC]
+  APOEL: [APOEL Nikosia, APOEL Nicosia]
+  Paphos: [Paphos FC]
+  Maccabi Haifa: [Maccabi Haifa FC]
+  Maccabi Tel Aviv: [Maccabi Tel Aviv FC]
+  Copenhagen: [FC København, FC Kobenhavn, FC Copenhagen]
+  Midtjylland: [FC Midtjylland]
+  Nordsjaelland: [FC Nordsjælland]
+  Malmo FF: [Malmö FF]
+  Bodo/Glimt: [FK Bodø/Glimt, Bodø/Glimt]
+  CSKA Moscow: [CSKA Moskva, PFC CSKA Moskva]
+  Spartak Moscow: [Spartak Moskva, FC Spartak Moskva]
+  Lokomotiv Moscow: [Lokomotiv Moskva]
+  Zenit: [Zenit St. Petersburg, Zenit Saint Petersburg]
+  Rostov: [FK Rostov]
+  Krasnodar: [FK Krasnodar]
+  BATE Borisov: [FC BATE Borisov]
+  Legia Warsaw: [Legia Warszawa]
+  Ferencvaros: [Ferencvárosi TC, Ferencvarosi TC]
+  CFR Cluj: [CFR 1907 Cluj]
+  Steaua Bucuresti: [FC Steaua Bucureşti, FCSB]
+  Otelul Galati: [Oţelul Galaţi]
+  Ludogorets: [PFC Ludogorets Razgrad, Ludogorets Razgrad]
+  Astana: [FK Astana, FC Astana]
+  Kairat: [FK Kairat, Kairat Almaty]
+  Sheriff: [FC Sheriff, Sheriff Tiraspol]
+  Maribor: [NK Maribor]
+  Slovan Bratislava: [ŠK Slovan Bratislava]
+  Qarabag: [Qarabağ FK, Qarabağ Ağdam FK, Qarabag FK]
+
+# Longer, more readable labels for the UI where the canonical short name is
+# terse. Purely cosmetic - modelling always uses the canonical name.
+display:
+  Ath Madrid: Atlético Madrid
+  Ath Bilbao: Athletic Bilbao
+  M'gladbach: Borussia Mönchengladbach
+  Ein Frankfurt: Eintracht Frankfurt
+  Sociedad: Real Sociedad
+  Paris SG: Paris Saint-Germain
+  Man United: Manchester United
+  Man City: Manchester City
+  Inter: Inter Milan
+  Betis: Real Betis
+  Celta: Celta Vigo
+  Bayern Munich: Bayern München
+  Dortmund: Borussia Dortmund
+  Leverkusen: Bayer Leverkusen

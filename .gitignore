@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+
+# Cached downloads and derived data: rebuild with scripts/build_dataset.py
+data/raw/
+data/interim/
+data/processed/
+
+# Trained artefacts: rebuild with scripts/train.py
+models/*.joblib
+
+frontend/node_modules/
+frontend/dist/
+.DS_Store
