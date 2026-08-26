@@ -166,6 +166,20 @@ def _align(predictions: MarketPredictions, index: pd.Index) -> np.ndarray:
     return index.isin(covered)
 
 
+
+def _binary_members(
+    statistical: dict[str, MarketPredictions], index: pd.Index
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """BTTS and over-2.5 arrays from the goal models that cover every row."""
+    btts: dict[str, np.ndarray] = {}
+    totals: dict[str, np.ndarray] = {}
+    for name, predictions in statistical.items():
+        if _align(predictions, index).all():
+            btts[name] = predictions.btts
+            totals[name] = predictions.totals[2.5]
+    return btts, totals
+
+
 # -- evaluation of one model on one fold -------------------------------------
 def evaluate_markets(
     predictions: MarketPredictions, truth: pd.DataFrame
@@ -247,21 +261,78 @@ class FoldResult:
     predictions: pd.DataFrame | None = None
 
 
-def _season_slices(seasons: list[str], test_season: str, config: BacktestConfig):
-    """(inner-train, validation, train) season lists for one test season."""
-    earlier = [s for s in seasons if season_start_year(s) < season_start_year(test_season)]
-    validation = earlier[-config.validation_seasons:] if config.validation_seasons else []
-    inner = [s for s in earlier if s not in validation]
-    return inner, validation, earlier
+@dataclass(frozen=True)
+class Window:
+    """One walk-forward fold, expressed as dates rather than season labels.
+
+    Season labels cannot define the folds once competitions with different
+    calendars are mixed. Eliteserien's "2015" runs March to November 2015 and
+    the Premier League's "2015/16" runs August 2015 to May 2016: they overlap,
+    so a fold built from labels would train on matches played *after* some of
+    the matches it tests. Splitting on dates removes the question - every
+    training match precedes every test match, whatever calendar it came from.
+    """
+
+    label: str
+    test_start: pd.Timestamp
+    test_end: pd.Timestamp
+    validation_start: pd.Timestamp
+
+    @property
+    def train_end(self) -> pd.Timestamp:
+        return self.test_start
+
+
+def build_windows(
+    matches: pd.DataFrame, config: BacktestConfig
+) -> list[Window]:
+    """Yearly test windows running 1 July to 30 June."""
+    first = season_start_year(config.first_test_season)
+    last = season_start_year(config.last_test_season)
+    earliest = pd.Timestamp(matches["date"].min())
+    latest = pd.Timestamp(matches["date"].max())
+
+    windows = []
+    for year in range(first, last + 1):
+        test_start = pd.Timestamp(year=year, month=7, day=1)
+        test_end = pd.Timestamp(year=year + 1, month=7, day=1)
+        if test_start > latest:
+            break
+        validation_start = pd.Timestamp(
+            year=year - config.validation_seasons, month=7, day=1
+        )
+        # Enough history before the validation window to fit anything on.
+        if validation_start - pd.DateOffset(years=config.burn_in_seasons) < earliest:
+            continue
+        windows.append(
+            Window(
+                label=f"{year}/{str(year + 1)[2:]}",
+                test_start=test_start,
+                test_end=test_end,
+                validation_start=validation_start,
+            )
+        )
+    return windows
+
+
+
+def _recent_years(frame: pd.DataFrame, years: int) -> pd.DataFrame:
+    """The last ``years`` of matches in ``frame``, by date."""
+    if frame.empty or years <= 0:
+        return frame
+    cutoff = pd.Timestamp(frame["date"].max()) - pd.DateOffset(years=years)
+    return frame[frame["date"] >= cutoff]
 
 
 def _fit_ml_members(
     train: pd.DataFrame, columns: list[str], config: BacktestConfig, rho: float
 ) -> dict[str, object]:
-    """Fit the ML members on the most recent ``ml_train_seasons`` seasons."""
-    seasons = sorted(train["season"].unique(), key=season_start_year)
-    recent = set(seasons[-config.ml_train_seasons:])
-    data = train[train["season"].isin(recent)]
+    """Fit the ML members on the most recent ``ml_train_seasons`` years.
+
+    Selected by date rather than by season label, so a calendar-year league
+    contributes the same span of history as a split-season one.
+    """
+    data = _recent_years(train, config.ml_train_seasons)
     X, y = data[columns], data["target_result"]
 
     members: dict[str, object] = {}
@@ -294,37 +365,38 @@ def _ml_hub_predictions(
 def run_fold(
     features: pd.DataFrame,
     matches: pd.DataFrame,
-    test_season: str,
+    window: Window,
     config: BacktestConfig,
     *,
     keep_predictions: bool = False,
 ) -> FoldResult | None:
-    """Train, validate and test one season."""
-    seasons = sorted(features["season"].unique(), key=season_start_year)
-    inner_seasons, validation_seasons, train_seasons = _season_slices(
-        seasons, test_season, config
-    )
-    if len(train_seasons) < config.burn_in_seasons or not validation_seasons:
-        return None
-
+    """Train, validate and test one date window."""
     columns = feature_columns(features)
-    test = features[features["season"] == test_season]
+
+    def slice_by_date(frame, start=None, end=None):
+        mask = pd.Series(True, index=frame.index)
+        if start is not None:
+            mask &= frame["date"] >= start
+        if end is not None:
+            mask &= frame["date"] < end
+        return frame[mask]
+
+    test = slice_by_date(features, window.test_start, window.test_end)
     if test.empty:
         return None
-    train = features[features["season"].isin(train_seasons)]
-    inner = features[features["season"].isin(inner_seasons)]
-    validation = features[features["season"].isin(validation_seasons)]
+    train = slice_by_date(features, None, window.test_start)
+    inner = slice_by_date(features, None, window.validation_start)
+    validation = slice_by_date(features, window.validation_start, window.test_start)
     if inner.empty or validation.empty:
         return None
 
-    matches_by_season = {s: matches[matches["season"] == s] for s in seasons}
-    match_train = pd.concat([matches_by_season[s] for s in train_seasons])
-    match_inner = pd.concat([matches_by_season[s] for s in inner_seasons])
-    match_validation = pd.concat([matches_by_season[s] for s in validation_seasons])
-    match_test = matches_by_season[test_season]
+    match_train = slice_by_date(matches, None, window.test_start)
+    match_inner = slice_by_date(matches, None, window.validation_start)
+    match_validation = slice_by_date(matches, window.validation_start, window.test_start)
+    match_test = slice_by_date(matches, window.test_start, window.test_end)
 
     started = time.time()
-    result = FoldResult(season=test_season, n_test=len(test))
+    result = FoldResult(season=window.label, n_test=len(test))
 
     # ---- stage 1: validation predictions -> blend weights + calibrators ----
     validation_members: dict[str, np.ndarray] = {}
@@ -369,12 +441,10 @@ def run_fold(
     }
 
     # BTTS and over-2.5 get their own blend of the statistical and ML routes.
-    btts_members_val: dict[str, np.ndarray] = {
-        k: v.btts for k, v in stat_validation.items()
-    }
-    ou_members_val: dict[str, np.ndarray] = {
-        k: v.totals[2.5] for k, v in stat_validation.items()
-    }
+    # Only fully-covering members may join: a goal model that could not price
+    # every validation fixture returns a shorter array, and blending it against
+    # one that could would silently compare different sets of matches.
+    btts_members_val, ou_members_val = _binary_members(stat_validation, validation.index)
     goal_model = ml_members.get(f"{GOAL_ML_ID}_goals")
     if goal_model is not None:
         matrices = goal_model.score_matrices(validation[columns])
@@ -416,7 +486,7 @@ def run_fold(
 
     missing = set(ensemble.member_names) - set(test_members)
     if missing:
-        log.warning("season %s missing members %s, refitting blend", test_season, missing)
+        log.warning("season %s missing members %s, refitting blend", window.label, missing)
         available = {k: v for k, v in validation_members.items() if k in test_members}
         ensemble = ProbabilityEnsemble.from_config().fit(available, validation_labels)
 
@@ -466,8 +536,7 @@ def run_fold(
         matrices = goal_model_full.score_matrices(test[columns])
         book = MarketPredictions.from_matrices(matrices)
         result.metrics[f"{GOAL_ML_ID}_goals_markets"] = evaluate_markets(book, truth)
-        btts_members_test = {k: v.btts for k, v in stat_test.items()}
-        ou_members_test = {k: v.totals[2.5] for k, v in stat_test.items()}
+        btts_members_test, ou_members_test = _binary_members(stat_test, test.index)
         btts_members_test[GOAL_ML_ID] = book.btts
         ou_members_test[GOAL_ML_ID] = book.totals[2.5]
 
@@ -497,7 +566,7 @@ def run_fold(
             frame[f"raw_{cls}"] = ensemble_test[:, i]
         result.predictions = frame
 
-    log.info("season %s done in %.1fs", test_season, time.time() - started)
+    log.info("season %s done in %.1fs", window.label, time.time() - started)
     return result
 
 
@@ -510,18 +579,11 @@ def run_backtest(
     progress=None,
 ) -> list[FoldResult]:
     config = config or BacktestConfig.from_config()
-    seasons = sorted(features["season"].unique(), key=season_start_year)
-    test_seasons = [
-        s for s in seasons
-        if season_start_year(config.first_test_season)
-        <= season_start_year(s)
-        <= season_start_year(config.last_test_season)
-    ]
     results = []
-    for season in test_seasons:
+    for window in build_windows(matches, config):
         if progress:
-            progress(season)
-        fold = run_fold(features, matches, season, config,
+            progress(window.label)
+        fold = run_fold(features, matches, window, config,
                         keep_predictions=keep_predictions)
         if fold is not None:
             results.append(fold)

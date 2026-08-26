@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from .config import load_model_config, model_dir
-from .evaluation.backtest import GOAL_ML_ID, BacktestConfig
+from .evaluation.backtest import GOAL_ML_ID, BacktestConfig, _recent_years
 from .features.builder import FeatureBuilder, feature_columns
 from .models.base import MarketPredictions
 from .models.calibration import (
@@ -38,12 +38,31 @@ from .models.elo_model import EloOutcomeModel
 from .models.ensemble import BinaryEnsemble, ProbabilityEnsemble
 from .models.halves import HalvesModel
 from .models.ml import MLGoalModel, MLResultModel
-from .normalize.seasons import season_start_year
 from .pipeline import load_dataset
 
 log = logging.getLogger(__name__)
 
 BUNDLE_NAME = "predictor.joblib"
+
+#: Bumped whenever the bundle's layout changes in a way older files cannot
+#: satisfy. 1.1.0 moved feature-builder snapshots from season-label keys to
+#: calendar-boundary dates, which a 1.0.0 bundle cannot be read as.
+BUNDLE_VERSION = "1.1.0"
+MIN_BUNDLE_VERSION = "1.1.0"
+
+#: Feature-builder state is captured on 1 July each year - after every European
+#: season has finished and before the next has started.
+SNAPSHOT_MONTH = 7
+SNAPSHOT_DAY = 1
+#: How many recent snapshots to carry in the bundle.
+SNAPSHOT_LIMIT = 8
+
+
+def _snapshot_boundary(date) -> pd.Timestamp:
+    """The most recent 1 July on or before ``date``."""
+    ts = pd.Timestamp(date)
+    year = ts.year if (ts.month, ts.day) >= (SNAPSHOT_MONTH, SNAPSHOT_DAY) else ts.year - 1
+    return pd.Timestamp(year=year, month=SNAPSHOT_MONTH, day=SNAPSHOT_DAY)
 
 #: Members that can be honestly replayed to any historical date, because they
 #: are refitted from scratch on data before that date at prediction time.
@@ -54,7 +73,7 @@ REPLAY_SAFE_MEMBERS = ("poisson", "dixon_coles", "elo")
 class TrainedBundle:
     """Everything inference needs."""
 
-    version: str = "1.0.0"
+    version: str = BUNDLE_VERSION
     trained_at: pd.Timestamp | None = None
     trained_through: pd.Timestamp | None = None
     seasons: list[str] = field(default_factory=list)
@@ -62,11 +81,17 @@ class TrainedBundle:
     feature_names: list[str] = field(default_factory=list)
 
     builder: FeatureBuilder | None = None
+    #: Feature-builder state captured at fixed calendar boundaries, keyed by
+    #: the boundary date. Keying on season labels does not work once a
+    #: calendar-year league (Eliteserien, season "2023") is interleaved with
+    #: split-season ones ("2023/24"): the label flips back and forth through
+    #: the chronological stream, so "the season changed" stops meaning "a new
+    #: period started".
     builder_snapshots: dict[str, FeatureBuilder] = field(default_factory=dict)
-    #: Row position, in the canonically sorted match table, that each snapshot
-    #: was taken at. Replaying from a position rather than a date is exact:
-    #: two competitions can share a season-boundary date, and a date-based
-    #: rewind would replay such a match twice.
+    #: Row position, in the canonically sorted match table, of each snapshot.
+    #: Replaying from a position rather than a date is exact: several matches
+    #: can share the boundary date, and a date comparison would replay them
+    #: twice or not at all.
     snapshot_positions: dict[str, int] = field(default_factory=dict)
 
     dixon_coles: DixonColesModel | None = None
@@ -105,9 +130,13 @@ def train(
     validation_seasons = validation_seasons or config.validation_seasons
     calibration_method = config.calibration_method
 
-    seasons = sorted(matches["season"].unique(), key=season_start_year)
-    validation_labels = seasons[-validation_seasons:]
-    inner_seasons = [s for s in seasons if s not in validation_labels]
+    # Sorted on the starting year, which both label styles begin with.
+    seasons = sorted(matches["season"].unique(), key=lambda s: (str(s)[:4], str(s)))
+    # Split on a date, not on season labels: with a calendar-year league in
+    # the mix, "the last two seasons" is not a well-defined set of rows.
+    validation_start = (
+        pd.Timestamp(matches["date"].max()) - pd.DateOffset(years=validation_seasons)
+    )
 
     bundle = TrainedBundle(
         trained_at=pd.Timestamp.now("UTC").tz_localize(None),
@@ -123,13 +152,14 @@ def train(
     positions: dict[str, int] = {}
     feature_rows: list[dict] = []
     ordered = matches.sort_values(["date", "competition", "home_team"], kind="mergesort")
-    current_season = None
+    boundary: pd.Timestamp | None = None
     for position, (_, row) in enumerate(ordered.iterrows()):
-        season = str(row["season"])
-        if season != current_season:
-            snapshots[season] = copy.deepcopy(builder)
-            positions[season] = position
-            current_season = season
+        crossed = _snapshot_boundary(row["date"])
+        if boundary is None or crossed > boundary:
+            key = crossed.strftime("%Y-%m-%d")
+            snapshots[key] = copy.deepcopy(builder)
+            positions[key] = position
+            boundary = crossed
         feature_rows.append(builder._row_features(row))
         if not pd.isna(row["home_goals"]):
             builder._observe(row)
@@ -137,17 +167,20 @@ def train(
     bundle.builder = builder
     # Only recent snapshots are kept: replaying a 1990s fixture is not a use
     # case worth carrying 30 deep-copied states for.
-    bundle.builder_snapshots = {s: snapshots[s] for s in seasons[-8:] if s in snapshots}
-    bundle.snapshot_positions = {s: positions[s] for s in bundle.builder_snapshots}
+    # Only recent snapshots are kept: replaying a 1990s fixture is not a use
+    # case worth carrying thirty deep-copied states for.
+    recent = sorted(snapshots)[-SNAPSHOT_LIMIT:]
+    bundle.builder_snapshots = {k: snapshots[k] for k in recent}
+    bundle.snapshot_positions = {k: positions[k] for k in recent}
 
     features = features[features["target_result"].notna()].copy()
     columns = feature_columns(features)
     bundle.feature_names = columns
 
-    inner = features[features["season"].isin(inner_seasons)]
-    validation = features[features["season"].isin(validation_labels)]
-    match_inner = matches[matches["season"].isin(inner_seasons)]
-    match_validation = matches[matches["season"].isin(validation_labels)]
+    inner = features[features["date"] < validation_start]
+    validation = features[features["date"] >= validation_start]
+    match_inner = matches[matches["date"] < validation_start]
+    match_validation = matches[matches["date"] >= validation_start]
 
     # ---- statistical models on the full history ---------------------------
     reference = bundle.trained_through + pd.Timedelta(days=1)
@@ -164,8 +197,7 @@ def train(
     bundle.elo_outcome = EloOutcomeModel().fit_frame(features)
 
     # ---- ML members -------------------------------------------------------
-    recent = set(seasons[-config.ml_train_seasons:])
-    ml_data = features[features["season"].isin(recent)]
+    ml_data = _recent_years(features, config.ml_train_seasons)
     log.info("fitting ML members on %d matches", len(ml_data))
     for model_id in config.ml_models:
         try:
@@ -183,7 +215,8 @@ def train(
         log.exception("could not fit ML goal model")
 
     # ---- blend weights and calibrators, fitted out of sample ---------------
-    log.info("fitting ensemble weights and calibrators on %s", validation_labels)
+    log.info("fitting ensemble weights and calibrators on %d matches from %s",
+             len(validation), validation_start.date())
     members = _validation_members(
         inner, validation, match_inner, match_validation, columns, config
     )
@@ -238,7 +271,8 @@ def train(
     bundle.metadata = {
         "ensemble_ece": round(ensemble_ece, 5),
         "n_matches": int(len(matches)),
-        "validation_seasons": validation_labels,
+        "validation_from": validation_start.strftime("%Y-%m-%d"),
+        "validation_matches": int(len(validation)),
         "ensemble_weights": bundle.ensemble.weight_table(),
         "replay_weights": (
             bundle.replay_ensemble.weight_table() if bundle.replay_ensemble else {}
@@ -274,9 +308,7 @@ def _validation_members(inner, validation, match_inner, match_validation,
 
     members["elo"] = EloOutcomeModel().fit_frame(inner).predict_frame(validation)
 
-    seasons = sorted(inner["season"].unique(), key=season_start_year)
-    recent = set(seasons[-config.ml_train_seasons:])
-    data = inner[inner["season"].isin(recent)]
+    data = _recent_years(inner, config.ml_train_seasons)
     for model_id in config.ml_models:
         try:
             model = MLResultModel(model_id).fit(data[columns], data["target_result"])
@@ -308,9 +340,7 @@ def _validation_goal_members(inner, validation, match_inner, match_validation,
             btts[kind] = predictions.btts
             totals[kind] = predictions.totals[2.5]
 
-    seasons = sorted(inner["season"].unique(), key=season_start_year)
-    recent = set(seasons[-config.ml_train_seasons:])
-    data = inner[inner["season"].isin(recent)]
+    data = _recent_years(inner, config.ml_train_seasons)
     try:
         goals = MLGoalModel(GOAL_ML_ID).fit(
             data[columns], data["target_home_goals"], data["target_away_goals"]
@@ -323,10 +353,30 @@ def _validation_goal_members(inner, validation, match_inner, match_validation,
     return btts, totals
 
 
+class StaleBundleError(RuntimeError):
+    """A saved bundle predates a change inference cannot work around."""
+
+
 def load_bundle(path: Path | None = None) -> TrainedBundle:
     path = path or (model_dir() / BUNDLE_NAME)
     if not path.exists():
         raise FileNotFoundError(
             f"{path} not found - run `python scripts/train.py` first"
         )
-    return joblib.load(path)
+    bundle = joblib.load(path)
+    version = getattr(bundle, "version", "0.0.0")
+    if _version_tuple(version) < _version_tuple(MIN_BUNDLE_VERSION):
+        raise StaleBundleError(
+            f"{path} was written by version {version}, and this build needs "
+            f"{MIN_BUNDLE_VERSION} or newer. Serving it would misread the "
+            "stored state rather than fail outright. Retrain with "
+            "`python scripts/train.py`."
+        )
+    return bundle
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in str(version).split("."))
+    except ValueError:
+        return (0,)

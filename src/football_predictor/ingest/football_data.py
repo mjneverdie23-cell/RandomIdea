@@ -51,7 +51,7 @@ class FootballDataAdapter:
         path = source.path_template.format(
             source_key=comp.source_key,
             season_short=season_utils.season_short(season),
-            season_long=season_utils.season_long(season),
+            season_long=season_utils.season_long(season, comp.season_style),
             file=comp.source_file or "",
         )
         return [f"{source.base_url.rstrip('/')}/{path}"]
@@ -71,7 +71,7 @@ class FootballDataAdapter:
                 out[dest] = raw[src_col]
 
         out["competition"] = comp.code
-        out["season"] = season_utils.canonical_season(season)
+        out["season"] = season_utils.canonical_season(season, comp.season_style)
         out["stage"] = "league" if comp.format == "league" else None
         out["neutral_venue"] = comp.neutral_venue
         # Rows without a result are unplayed fixtures in an in-progress season.

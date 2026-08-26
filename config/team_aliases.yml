@@ -142,9 +142,61 @@ canonical:
   Slovan Bratislava: [ŠK Slovan Bratislava]
   Qarabag: [Qarabağ FK, Qarabağ Ağdam FK, Qarabag FK]
 
+  # ----------------------------------------------------------------- Norway
+  # Hamarkameratene is spelled both ways inside a single season file; the two
+  # spellings together account for exactly one club's 30 matches in 2023.
+  Ham-Kam: [HamKam, Hamarkameratene]
+  Bodo/Glimt: [FK Bodø/Glimt, Bodø/Glimt, Bodo Glimt]
+  Valerenga: [Vålerenga]
+  Stromsgodset: [Strømsgodset]
+  Tromso: [Tromsø]
+  Lillestrom: [Lillestrøm]
+  Mjondalen: [Mjøndalen]
+  Honefoss: [Hønefoss]
+  Sandnes: [Sandnes Ulf]
+  Ull/Kisa: [Ullensaker/Kisa]
+  Sarpsborg 08: [Sarpsborg]
+  KFUM Oslo: [KFUM]
+
+  # ----------------------------------------------------------------- Turkey
+  # football-data.co.uk still files Başakşehir under the club's former name,
+  # İstanbul Büyükşehir Belediyespor. This is the alias that lets a Süper Lig
+  # club carry its form into its Champions League fixtures.
+  Istanbul Basaksehir: [Buyuksehyr, Basaksehir, Medipol Basaksehir]
+  # 1994/95 uses short forms throughout ("P. Ofisi", "Ad. Demirspor"); these
+  # two are the same clubs as their later full names. Verified against that
+  # season's 18-team field, which contains neither full name.
+  Antalyaspor: [Antalya]
+  Kayserispor: [Kayseri]
+  Fenerbahce: [Fenerbahçe]
+  Genclerbirligi: [Gençlerbirliği]
+  Goztep: [Goztepe, Göztepe]
+  Ad. Demirspor: [Adana Demirspor]
+  A. Sebatspor: [Akcaabat Sebatspor]
+  P. Ofisi: [Petrol Ofisi]
+  Mersin Idman Yurdu: [Mersin IY]
+  #
+  # Deliberately NOT merged, despite looking similar:
+  #   Gaziantepspor (1969-2020) vs Gaziantep FK (founded 2013) - different clubs
+  #   Malatyaspor (dissolved 2011) vs Yeni Malatyaspor (founded 2010) - likewise
+  #   Ankaragucu vs Ankaraspor - shared the 2004/05 season, so two clubs
+
 # Longer, more readable labels for the UI where the canonical short name is
 # terse. Purely cosmetic - modelling always uses the canonical name.
 display:
+  Ham-Kam: Hamarkameratene
+  Bodo/Glimt: Bodø/Glimt
+  Valerenga: Vålerenga
+  Stromsgodset: Strømsgodset
+  Tromso: Tromsø
+  Lillestrom: Lillestrøm
+  Buyuksehyr: İstanbul Başakşehir
+  Istanbul Basaksehir: İstanbul Başakşehir
+  Fenerbahce: Fenerbahçe
+  Besiktas: Beşiktaş
+  Genclerbirligi: Gençlerbirliği
+  Goztep: Göztepe
+  Ad. Demirspor: Adana Demirspor
   Ath Madrid: Atlético Madrid
   Ath Bilbao: Athletic Bilbao
   M'gladbach: Borussia Mönchengladbach

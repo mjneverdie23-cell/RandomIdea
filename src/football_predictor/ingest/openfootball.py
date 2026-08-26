@@ -55,7 +55,7 @@ class OpenFootballAdapter:
     def urls(self, comp: Competition, source: Source, season: str) -> list[str]:
         base = source.base_url.rstrip("/")
         file = comp.source_file or "cl"
-        dirs = comp.season_dirs or (season_utils.season_long(season),)
+        dirs = comp.season_dirs or (season_utils.season_long(season, comp.season_style),)
         return [
             f"{base}/{comp.source_key}/master/{d}/{file}.txt"
             for d in dirs
@@ -118,7 +118,7 @@ class OpenFootballAdapter:
 
         out = pd.DataFrame(rows)
         out["competition"] = comp.code
-        out["season"] = season_utils.canonical_season(season)
+        out["season"] = season_utils.canonical_season(season, comp.season_style)
         # A neutral venue is a property of the fixture, not just the competition:
         # a tournament played at one host is neutral throughout, while a
         # club competition is neutral only for its final.

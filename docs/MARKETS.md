@@ -107,8 +107,12 @@ models — the thing they are good at, and which varies by fixture — while the
 *level* comes from the full-time distribution the rest of the page is built
 on. Pinned by `test_the_two_halves_add_up_to_the_full_match`.
 
-Half markets are only offered where the source supplied half-time scores.
-Where it did not, the panel says so instead of guessing.
+Half markets are only offered where the half models actually know both clubs
+— which means the competition's source supplied half-time scores for them.
+Eliteserien's source records none at all, so its fixtures get no half-time
+markets. That gate matters: without it the half models would fall back to
+league-average rates borrowed from other competitions and present them as a
+prediction about a Norwegian match. The panel says why instead of guessing.
 
 ## Exact scores
 

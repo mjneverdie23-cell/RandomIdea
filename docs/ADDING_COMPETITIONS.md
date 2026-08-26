@@ -21,6 +21,25 @@ Add an entry to `config/competitions.yml`:
     enabled: true
 ```
 
+**If the league plays a calendar-year season** (the Nordics, most of the
+Americas and Asia), say so — otherwise `2021` will be read as the 2020/21
+season and the whole season gets relabelled:
+
+```yaml
+  - code: NOR_EL
+    name: Eliteserien
+    country: Norway
+    tier: 2
+    source: footballcsv_cache
+    source_key: no.1
+    season_style: calendar        # March to November, so "2023" not "2023/24"
+    seasons: ["2012", "2024"]
+    enabled: true
+```
+
+Quote the season bounds in a calendar-year config; unquoted, YAML reads them
+as integers.
+
 For a cup or tournament, describe its shape as well:
 
 ```yaml
@@ -107,6 +126,39 @@ filter_to_competitions(df, tier=2)
 one that is wired but whose data has not been reviewed yet. Several are shipped
 in that state.
 
+## Worked example: what adding Turkey and Norway actually took
+
+Both are in the repository, and between them they exercise most of what can go
+wrong.
+
+**Turkey (Süper Lig)** was the straightforward case: a split season, half-time
+scores present, five clubs shared with the Champions League. It needed a new
+source adapter — `footballcsv_cache`, because the big-five mirror carries only
+those five leagues — and a handful of aliases.
+
+**Norway (Eliteserien)** was the interesting one, and surfaced three real
+problems:
+
+1. **Calendar-year seasons.** Its season is `2023`, not `2023/24`, and `2021`
+   is ambiguous with the 2020/21 season. Adding `season_style` was not enough
+   on its own: the ingestion parsed `2021` correctly and then the *cleaning*
+   layer re-canonicalised it without the style, quietly turning a whole season
+   into `2020/21`.
+2. **Walk-forward folds built from season labels.** Eliteserien 2015 overlaps
+   the Premier League 2015/16 in time, so label-based folds would have trained
+   on matches played after some of the ones they scored. Folds are now date
+   windows.
+3. **No half-time data at all.** football-data.co.uk publishes its "extra"
+   leagues without half-time scores. Left alone, the half models would have
+   fallen back to league averages borrowed from other competitions and quoted
+   them as a prediction about a Norwegian match. Half markets are now offered
+   only where the half models actually know both clubs.
+
+None of these were visible from the config. The lesson for the next addition:
+a league with an unusual calendar or a thinner feed is where the assumptions
+show up, and it is worth checking each of the five points below rather than
+trusting that ingestion succeeding means it worked.
+
 ## What to check before enabling a competition
 
 1. **Match count.** Under ~200 matches and the goal model has little to work
@@ -118,7 +170,10 @@ in that state.
 4. **Neutral venues.** Tournaments at a single host should set
    `neutral_venue: true`; club competitions should leave it false and let the
    final be detected by stage.
-5. **Backtest it.** `python scripts/backtest.py --seasons 2024/25` and compare
+5. **Season style.** A league playing March-to-November needs
+   `season_style: calendar`. Check the ingested labels afterwards — a
+   mislabelled season looks like perfectly normal data.
+6. **Backtest it.** `python scripts/backtest.py --seasons 2024/25` and compare
    against the per-competition table in [BENCHMARK.md](BENCHMARK.md). A
    competition that scores much worse than the leagues is telling you
    something about its data.

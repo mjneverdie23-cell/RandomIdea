@@ -34,6 +34,7 @@ from .models.halves import HalvesModel
 from .models.score_matrix import (
     TEAM_LINES, TOTAL_LINES, ScoreMatrix, blend_matrices, reconcile_to_result,
 )
+from .normalize import seasons as seasons_module
 from .normalize.seasons import canonical_season, season_from_date
 from .normalize.teams import display_team
 from .train import REPLAY_SAFE_MEMBERS, TrainedBundle, load_bundle
@@ -107,7 +108,12 @@ class PredictionEngine:
         matches = self.bundle.matches
         subset = matches[matches["competition"] == competition]
         if season:
-            subset = subset[subset["season"] == canonical_season(season)]
+            known = load_competitions()
+            style = (
+                known[competition].season_style if competition in known
+                else seasons_module.SPLIT
+            )
+            subset = subset[subset["season"] == canonical_season(season, style)]
         names = sorted(set(subset["home_team"]) | set(subset["away_team"]))
         return [{"name": n, "display": display_team(n)} for n in names]
 
@@ -136,22 +142,25 @@ class PredictionEngine:
         if history.empty:
             raise ValueError(f"no match history before {key}")
 
-        season = season_from_date(as_of)
-        snapshot = self.bundle.builder_snapshots.get(season)
         ordered = matches.sort_values(
             ["date", "competition", "home_team"], kind="mergesort"
         )
-        if snapshot is None:
-            # No snapshot this far back: rebuild from scratch. Slow but correct.
-            log.info("no snapshot for %s, rebuilding state from scratch", season)
+        # Snapshots are keyed by calendar boundary, not by season label: with a
+        # calendar-year league in the mix, labels interleave and "the season
+        # changed" no longer marks a point in time.
+        usable = [k for k in sorted(self.bundle.builder_snapshots)
+                  if pd.Timestamp(k) <= as_of]
+        if not usable:
+            log.info("no snapshot before %s, rebuilding state from scratch", key)
             builder = FeatureBuilder()
             replay = ordered[ordered["date"] < as_of]
         else:
-            builder = copy.deepcopy(snapshot)
+            latest = usable[-1]
+            builder = copy.deepcopy(self.bundle.builder_snapshots[latest])
             # Resume from the row position the snapshot was taken at. Using a
-            # date here would be wrong when two competitions share a
-            # season-boundary date: those matches would be replayed twice.
-            position = self.bundle.snapshot_positions.get(season, 0)
+            # date here would be wrong when several matches share the boundary
+            # date: they would be replayed twice or skipped.
+            position = self.bundle.snapshot_positions.get(latest, 0)
             resumed = ordered.iloc[position:]
             replay = resumed[resumed["date"] < as_of]
 
@@ -198,7 +207,10 @@ class PredictionEngine:
             raise ValueError("a team cannot play itself")
 
         as_of = pd.Timestamp(date).normalize()
-        season = canonical_season(season) if season else season_from_date(as_of)
+        season = (
+            canonical_season(season, comp.season_style) if season
+            else season_from_date(as_of, comp.season_style)
+        )
         neutral = comp.neutral_venue if neutral_venue is None else bool(neutral_venue)
         state = self._state_for(as_of)
 
@@ -216,7 +228,12 @@ class PredictionEngine:
         reconciled = ScoreMatrix(reconcile_to_result(matrix.matrix, hub))
 
         first_half = second_half = None
-        if state.halves is not None:
+        # Only offer half markets when the half models actually know both
+        # sides. Eliteserien has no half-time scores in its source at all, so
+        # its clubs never enter the half models; asking anyway would return
+        # league-average rates borrowed from other competitions and present
+        # them as a prediction about this match.
+        if state.halves is not None and _halves_cover(state.halves, home_team, away_team):
             try:
                 first_half, second_half = _halves_matched_to_full_time(
                     state.halves, reconciled, home_team, away_team, neutral=neutral
@@ -398,6 +415,17 @@ class PredictionEngine:
 
 
 
+
+def _halves_cover(halves, home_team: str, away_team: str) -> bool:
+    """Whether both clubs carry fitted parameters in the half models."""
+    return bool(
+        halves.first_half is not None
+        and halves.second_half is not None
+        and halves.first_half.knows(home_team)
+        and halves.first_half.knows(away_team)
+    )
+
+
 def _halves_matched_to_full_time(
     halves, full_time: ScoreMatrix, home_team: str, away_team: str,
     *, neutral: bool = False,
@@ -468,8 +496,11 @@ def _team_block(over_lines, clean_sheet, index: int, matrix: ScoreMatrix, side: 
 
 def _halves_block(book: MarketPredictions, first_half, second_half):
     if book.ht_hub is None or first_half is None:
-        return {"available": False,
-                "reason": "no half-time data for this competition"}
+        return {
+            "available": False,
+            "reason": "this competition's source records no half-time scores, "
+                      "so half-time markets are not offered",
+        }
     out = {
         "available": True,
         "first_half": {

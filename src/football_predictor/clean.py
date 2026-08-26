@@ -12,6 +12,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from .config import load_competitions
 from .normalize import seasons as season_utils
 from .normalize.teams import TeamNormalizer
 from .schema import ValidationReport, coerce_dtypes, make_match_id
@@ -79,13 +80,26 @@ def _normalise_identity(
     out = out[~bad_date]
 
     # Trust the recorded season where present, derive it where it is not.
+    #
+    # Both steps need the competition's season style. Eliteserien's "2021" is a
+    # calendar year, and canonicalising it as a split season turns it into
+    # "2020/21" - which is how a whole season quietly ended up mislabelled the
+    # first time a calendar-year league was added.
+    styles = _season_styles(out["competition"])
     missing_season = out["season"].isna()
     if missing_season.any():
-        out.loc[missing_season, "season"] = (
-            out.loc[missing_season, "date"].map(season_utils.season_from_date)
-        )
-    out["season"] = out["season"].map(
-        lambda s: season_utils.canonical_season(s) if pd.notna(s) else s
+        out.loc[missing_season, "season"] = [
+            season_utils.season_from_date(date, style)
+            for date, style in zip(
+                out.loc[missing_season, "date"], styles[missing_season]
+            )
+        ]
+    out["season"] = pd.Series(
+        [
+            season_utils.canonical_season(value, style) if pd.notna(value) else value
+            for value, style in zip(out["season"], styles)
+        ],
+        index=out.index,
     ).astype("string")
 
     out["neutral_venue"] = out["neutral_venue"].fillna(False).astype("boolean")
@@ -99,6 +113,13 @@ def _normalise_identity(
             len(normalizer.unmapped), sorted(normalizer.unmapped),
         )
     return out
+
+
+def _season_styles(competitions: pd.Series) -> pd.Series:
+    """Season style ("split" or "calendar") for each row's competition."""
+    known = load_competitions()
+    lookup = {code: comp.season_style for code, comp in known.items()}
+    return competitions.map(lambda code: lookup.get(code, season_utils.SPLIT))
 
 
 def _drop_unusable(df: pd.DataFrame, report: ValidationReport) -> pd.DataFrame:

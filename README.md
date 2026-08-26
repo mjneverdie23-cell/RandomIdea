@@ -60,20 +60,30 @@ every first-half line. See [docs/MARKETS.md](docs/MARKETS.md).
 
 ## Data
 
-61,076 matches, 305 teams, 1993/94 to 2025/26, from two free public sources.
+73,512 matches, 389 teams, 1993/94 to 2025/26, from three free public sources.
 
-| Competition | Matches | Half-time | Shots |
-|---|---:|---:|---:|
-| Premier League | 12,704 | 92.7% | 77.8% |
-| La Liga | 12,704 | 94.0% | 62.8% |
-| Ligue 1 | 11,847 | 92.5% | 64.6% |
-| Serie A | 11,726 | 94.8% | 67.9% |
-| Bundesliga | 10,098 | 93.9% | 75.7% |
-| UEFA Champions League | 1,997 | 94.4% | 0% |
+| Competition | Matches | Seasons | Half-time | Shots |
+|---|---:|---|---:|---:|
+| Premier League | 12,704 | 1993/94–2025/26 | 92.7% | 77.8% |
+| La Liga | 12,704 | 1993/94–2025/26 | 94.0% | 62.8% |
+| Ligue 1 | 11,847 | 1993/94–2025/26 | 92.5% | 64.6% |
+| Serie A | 11,726 | 1993/94–2025/26 | 94.8% | 67.9% |
+| Bundesliga | 10,098 | 1993/94–2025/26 | 93.9% | 75.7% |
+| Süper Lig | 9,444 | 1994/95–2023/24 | 83.4% | 0% |
+| Eliteserien | 2,992 | 2012–2024 | 0% | 0% |
+| UEFA Champions League | 1,997 | 2011/12–2025/26 | 94.4% | 0% |
+
+**Eliteserien** plays a calendar-year season (`2023`, not `2023/24`), which the
+season handling takes as a per-competition setting rather than an assumption.
+Its source carries **no half-time scores at all**, so half-time markets are not
+offered for it — rather than filled in from other competitions' averages. Both
+it and the Süper Lig come from a mirror that stopped updating in mid-2024, so
+they end earlier than the big five and Norway's 2024 season is partial.
 
 Cups, the Europa League, the Conference League, the World Cup and the Euros
 are configured in `config/competitions.yml` and can be enabled once a source
-is wired — see [docs/ADDING_COMPETITIONS.md](docs/ADDING_COMPETITIONS.md).
+is wired — see [docs/ADDING_COMPETITIONS.md](docs/ADDING_COMPETITIONS.md),
+which walks through what adding Turkey and Norway actually took.
 
 No xG feed is freely available for these competitions, so a **shot-based xG
 proxy** is derived instead and labelled as such everywhere it appears. It is
@@ -101,30 +111,33 @@ preference.
 
 ### Measured results
 
-Walk-forward over 11 seasons, **21,260 test matches**, each predicted by models
+Walk-forward over 11 seasons, **26,466 test matches**, each predicted by models
 that never saw it. BTTS and over/under need a goal distribution to sum over,
 which Elo and the direct classifiers do not have:
 
 | Model | Log Loss | Brier | Accuracy | BTTS | O/U 2.5 | Calibration (ECE) |
 | ------------- | -------: | ----: | -------: | ---: | --: | ----------: |
-| Elo | 0.9854 | 0.5871 | 52.7% | &mdash; | &mdash; | 0.0305 |
-| Poisson | 0.9826 | 0.5849 | 52.9% | 54.2% | 56.7% | 0.0241 |
-| Dixon-Coles | 0.9822 | 0.5847 | 52.8% | 54.2% | 56.8% | 0.0215 |
-| Random Forest | 0.9778 | 0.5817 | 53.2% | &mdash; | &mdash; | 0.0233 |
-| XGBoost | 0.9832 | 0.5848 | 53.1% | &mdash; | &mdash; | 0.0283 |
-| LightGBM (goal model) | 0.9791 | 0.5827 | 53.3% | 53.9% | 56.8% | 0.0231 |
-| Ensemble | 0.9753 | 0.5802 | 53.2% | 54.4% | 57.2% | 0.0230 |
+| Elo | 0.9893 | 0.5899 | 52.4% | &mdash; | &mdash; | 0.0269 |
+| Poisson | 0.9888 | 0.5891 | 52.4% | 54.0% | 56.5% | 0.0219 |
+| Dixon-Coles | 0.9882 | 0.5888 | 52.4% | 54.2% | 56.6% | 0.0200 |
+| Random Forest | 0.9831 | 0.5854 | 52.8% | &mdash; | &mdash; | 0.0204 |
+| XGBoost | 0.9866 | 0.5874 | 52.7% | &mdash; | &mdash; | 0.0246 |
+| LightGBM (goal model) | 0.9840 | 0.5861 | 52.7% | 54.4% | 56.7% | 0.0215 |
+| Ensemble | 0.9810 | 0.5842 | 52.8% | 54.6% | 57.0% | 0.0199 |
 
-53.2% accuracy sits inside the ~50-55% ceiling reported in peer-reviewed work.
+52.8% accuracy sits inside the ~50-55% ceiling reported in peer-reviewed work.
 Anything claiming much more out of sample is worth checking for leakage.
 
 **Calibration was measured, not assumed** — and it turned out that post-hoc
-correction *hurts* this ensemble (ECE 0.0230 uncalibrated, 0.0281 with Platt,
-0.0290 with isotonic). The blend is already well calibrated because its members
+correction *hurts* this ensemble (ECE 0.0199 uncalibrated, 0.0238 with Platt,
+0.0253 with isotonic). The blend is already well calibrated because its members
 are fitted by proper scoring rules. Production therefore applies none, which is
-what the measurement says rather than what the convention says. Pooled over
-63,780 outcome probabilities, the largest gap between predicted and observed
-frequency in any well-populated band is **0.9 percentage points**.
+what the measurement says rather than what the convention says.
+
+Per competition, the spread is real and tracks the quality of the inputs: the
+Champions League scores best (0.9178 log loss) and Eliteserien worst (1.0070),
+with the big five in between. Every competition beats the naive baseline
+(1.0716) comfortably.
 
 Full tables including per-competition, per-season, half-time markets and
 ensemble weights: [docs/BENCHMARK.md](docs/BENCHMARK.md). Why each approach was
@@ -210,13 +223,14 @@ Usually a config change with no Python:
 
 ```yaml
 # config/competitions.yml
-  - code: NED_ED
-    name: Eredivisie
-    country: Netherlands
+  - code: NOR_EL
+    name: Eliteserien
+    country: Norway
     tier: 2
-    source: football_data_mirror
-    source_key: eredivisie
-    seasons: [2000/01, 2025/26]
+    source: footballcsv_cache
+    source_key: no.1
+    season_style: calendar        # March to November, so "2023" not "2023/24"
+    seasons: ["2012", "2024"]
     enabled: true
 ```
 
@@ -259,8 +273,12 @@ Stated plainly, because they bound what the numbers mean:
   between-season rating regression, not modelled. Early-season predictions
   after heavy squad turnover are the weakest the system produces.
 - **Motivation is not modelled** — a dead rubber scores the same as a decider.
-- **Champions League has no shot data**, so shot-derived features are absent
-  there and its predictions rest on fewer inputs.
+- **Champions League, Süper Lig and Eliteserien have no shot data**, so
+  shot-derived features are absent there and their predictions rest on fewer
+  inputs than a big-five league fixture.
+- **Eliteserien has no half-time data**, so it gets no half-time markets at all.
+- **Süper Lig and Eliteserien end in 2024** — their mirror stopped updating —
+  so they are two seasons behind the big five.
 - **Accuracy has a ceiling.** Football is genuinely uncertain. The value here
   is in calibrated probabilities, not in a high hit rate.
 

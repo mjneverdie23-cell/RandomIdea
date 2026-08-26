@@ -51,12 +51,23 @@ first-half share) and for the newcomer Elo seeding quantile.
 
 ## 5. Validation is chronological, and three-way
 
-Every split is by time. Never random, never shuffled.
+Every split is by time. Never random, never shuffled — and by **date**, not by
+season label.
 
-For each test season:
+That distinction matters as soon as competitions with different calendars are
+mixed. Eliteserien's `2015` runs March to November 2015; the Premier League's
+`2015/16` runs August 2015 to May 2016. They overlap. A fold built from season
+labels would therefore have trained on matches played *after* some of the
+matches it was scoring — a small leak, but a real one, and invisible in the
+metrics. Folds are date windows (1 July to 30 June) applied to every
+competition alike, so every training match precedes every test match whatever
+calendar it came from. `test_backtest_windows_never_train_on_the_future` pins it.
+
+For each test window:
 
 ```
 [========= inner train =========][== validation ==][== test ==]
+ ..< 2013-07-01                   2013-07-01        2015-07-01
                                   ^                 ^
                                   |                 |
         ensemble weights and calibrators fitted here |
@@ -83,8 +94,11 @@ answer with a model that has already seen that match and everything after it.
 
 Instead `PredictionEngine`:
 
-- rewinds team state to the nearest season-start snapshot and replays only the
-  matches before the requested date;
+- rewinds team state to the nearest snapshot and replays only the matches
+  between it and the requested date. Snapshots are taken at fixed calendar
+  boundaries (1 July) rather than on season-label changes, for the same reason
+  the folds are: with a calendar-year league interleaved into the stream, "the
+  season changed" no longer marks a single point in time;
 - refits the goal models with `reference_date` set to that date;
 - uses **only replay-safe members** — Poisson, Dixon-Coles and Elo, all of
   which are refitted from scratch — and drops the ML members, which were
@@ -129,6 +143,14 @@ The rest of the file covers the remaining routes:
 | `test_inference_features_match_training_features` | serving using a different feature definition |
 | `test_inference_does_not_mutate_builder_state` | a prediction teaching the model |
 | `test_targets_are_never_offered_as_features` | a target column reaching the model |
+| `test_snapshot_replay_reproduces_a_full_rebuild` | the serving-time rewind drifting from a full pass |
+
+And in `tests/test_calendar_seasons.py`:
+
+| Test | Guards against |
+|---|---|
+| `test_backtest_windows_never_train_on_the_future` | overlapping calendars leaking across a fold |
+| `test_cleaning_does_not_relabel_a_calendar_season` | a season being silently rewritten |
 
 And in `tests/test_predict.py`:
 

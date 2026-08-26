@@ -10,21 +10,28 @@ from ..normalize import seasons as season_utils
 from ..schema import coerce_dtypes, empty_frame
 from .base import try_fetch
 from .football_data import FootballDataAdapter
+from .footballcsv import FootballCsvAdapter
 from .openfootball import OpenFootballAdapter
 
 log = logging.getLogger(__name__)
 
 ADAPTERS = {
     FootballDataAdapter.name: FootballDataAdapter(),
+    FootballCsvAdapter.name: FootballCsvAdapter(),
     OpenFootballAdapter.name: OpenFootballAdapter(),
 }
 
 
 def competition_seasons(comp: Competition) -> list[str]:
     if comp.season_dirs:
-        return [season_utils.canonical_season(d.split("--")[0]) for d in comp.season_dirs]
+        return [
+            season_utils.canonical_season(d.split("--")[0], comp.season_style)
+            for d in comp.season_dirs
+        ]
     if comp.seasons:
-        return season_utils.season_range(comp.seasons[0], comp.seasons[1])
+        return season_utils.season_range(
+            comp.seasons[0], comp.seasons[1], comp.season_style
+        )
     return []
 
 

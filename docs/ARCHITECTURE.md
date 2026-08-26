@@ -7,7 +7,7 @@ config/*.yml
     │
     ▼
 ingest/          adapters fetch raw files (cached under data/raw/)
-    │            football_data.py · openfootball.py
+    │            football_data.py · footballcsv.py · openfootball.py
     ▼
 normalize/       teams · competitions · seasons  →  canonical schema
     │
@@ -106,6 +106,14 @@ The streaming design is what makes leakage structurally hard — see
 | `calibration.py` | isotonic and Platt, plus ECE and reliability curves |
 | `base.py` | `MarketPredictions` — the one output format every model produces |
 
+The goal models are fitted across all competitions at once rather than one per
+league. That gives a single strength scale, linked by the clubs that play in
+more than one competition — which is what lets a Süper Lig side's league form
+inform its Champions League fixtures. The cost is that league-specific home
+advantage and low-score dependence are pooled rather than fitted per
+competition; the per-competition results in [BENCHMARK.md](BENCHMARK.md) are
+what to watch if that starts to hurt.
+
 Every model, statistical or learned, ends up as a `MarketPredictions` batch.
 The backtest, ensemble and API contain no model-specific branches, so a new
 model becomes available in every market at once.
@@ -153,10 +161,21 @@ their parameters*, so they are refitted every 30 days. ML models carry recency
 season. Refitting five gradient-boosting models monthly across 11 seasons
 would cost hours for no measured gain.
 
+**Time is handled as dates, not as season labels.** Every place that needed to
+know "what happened before this point" — walk-forward folds, the validation
+split, feature-builder snapshots, ML training recency — takes a date. Season
+labels look like they order time and do not: Eliteserien's `2015` runs March
+to November 2015 while the Premier League's `2015/16` runs August 2015 to May
+2016, so sorting by label puts matches in the wrong order relative to each
+other. This only became visible when a calendar-year league was added, which
+is the general lesson: the assumption was invisible while every competition
+shared one calendar.
+
 ## Repository layout
 
 ```
 config/          competition, source, model and alias configuration
+                 competitions.yml carries season_style (split | calendar)
 data/
   raw/           cached downloads (URL-hashed)
   processed/     matches.parquet, features.parquet, backtest/

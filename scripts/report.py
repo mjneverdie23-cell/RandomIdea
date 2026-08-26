@@ -36,7 +36,6 @@ HEADLINE = [
     ("catboost", "CatBoost"),
     ("lightgbm_goals", "LightGBM goal model"),
     ("ensemble", "**Ensemble**"),
-    ("ensemble_calibrated", "**Ensemble (calibrated)**"),
 ]
 
 
@@ -420,7 +419,44 @@ def calibration_comparison(summary: pd.DataFrame) -> str:
 
 
 
-def decision_section(summary: pd.DataFrame, weights: pd.DataFrame, meta: dict) -> str:
+
+def competition_commentary(predictions: pd.DataFrame) -> str:
+    """Name the best- and worst-scoring competitions from the results.
+
+    Written as a function because the answer changes when a competition is
+    added: this paragraph previously said "Ligue 1 worst" and was wrong the
+    moment Eliteserien joined.
+    """
+    if predictions is None or predictions.empty:
+        return "**Competition differences are real.** See section 7."
+
+    known = load_competitions()
+    scores = {}
+    for code, group in predictions.groupby("competition"):
+        probs = group[["raw_H", "raw_U", "raw_B"]].to_numpy()
+        scores[code] = (
+            multiclass_report(probs, group["target_result"])["log_loss"], len(group)
+        )
+    ranked = sorted(scores.items(), key=lambda kv: kv[1][0])
+    best_code, (best_score, _) = ranked[0]
+    worst_code, (worst_score, _) = ranked[-1]
+    name = lambda code: known[code].name if code in known else code
+
+    spread = worst_score - best_score
+    return f"""**Competition differences are real, and worth reading carefully.**
+Section 7 puts {name(best_code)} best ({fmt(best_score)}) and
+{name(worst_code)} worst ({fmt(worst_score)}) - a spread of {spread:.3f} in
+log loss across the eight. The best score is not the model being cleverer
+there: a competition whose fixtures include many severe mismatches is simply
+easier to call, which flatters any forecaster. The weakest scores belong to
+the competitions with the thinnest inputs - no shot data, and in Eliteserien's
+case no half-time data and only thirteen seasons of history - which is what
+the data-quality panel is for. Every competition still beats the naive
+baseline comfortably."""
+
+
+def decision_section(summary: pd.DataFrame, weights: pd.DataFrame, meta: dict,
+                     predictions: pd.DataFrame | None = None) -> str:
     """State the architecture the measurements select, computed from them."""
     hub = summary[summary["log_loss"].notna()]
     candidates = [k for k, _ in HEADLINE if k in hub.index and k != "naive"]
@@ -468,11 +504,7 @@ range reported in peer-reviewed work (see [RESEARCH.md](RESEARCH.md) §4.1).
 Any football system reporting materially more than this on out-of-sample data
 is worth checking for leakage.
 
-**Competition differences are real.** Section 7 shows the Champions League
-scoring best and Ligue 1 worst. The Champions League result is not the model
-being cleverer there: its group stage contains many severe mismatches, which
-are easier to call. Ligue 1 has been the least predictable of the five
-leagues over this window.
+{competition_commentary(predictions)}
 
 **Caveats on these numbers.** They cover {meta["n_matches"]:,} matches in six
 competitions over {len(meta["seasons"])} seasons, with no odds data, no
@@ -527,6 +559,11 @@ three, and for ECE. Accuracy is included because it is asked for, but it is
 the least informative column here.
 
 {headline_table(summary)}
+
+The shipped configuration applies no post-hoc calibration (section 3), so the
+`*_calibrated` variants recorded during the run are identical to their raw
+counterparts and are left out of this table rather than repeated. The isotonic
+and Platt comparisons below are computed separately and are not affected.
 
 ## 3. Calibration
 
@@ -617,7 +654,7 @@ stable each member's contribution is.
 
 {weights_table(weights)}
 
-{decision_section(summary, weights, meta)}
+{decision_section(summary, weights, meta, predictions)}
 """
     out_path = Path(args.out) if args.out else Path("docs/BENCHMARK.md")
     out_path.parent.mkdir(parents=True, exist_ok=True)

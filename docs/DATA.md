@@ -32,7 +32,44 @@ Those are left null rather than imputed — see *Missing data* below.
 > coverage is currently 0%; dropping in a richer CSV makes them work with no
 > code change.
 
-### 2. `openfootball_txt` — cups and international tournaments
+### 2. `footballcsv_cache` — leagues outside the big five
+
+[`footballcsv/cache.footballdata`](https://github.com/footballcsv/cache.footballdata),
+which mirrors football-data.co.uk's full catalogue in the football.csv
+"standard": one file per league and season, named by ISO country code and
+tier.
+
+| | |
+|---|---|
+| Competitions | Süper Lig (Turkey), Eliteserien (Norway) |
+| Seasons | Turkey 1994/95 – 2023/24, Norway 2012 – 2024 |
+| Matches | ~12,400 |
+| Provides | full-time goals; half-time goals for football-data's "main" leagues |
+| Missing | shots, corners, cards, xG, possession, odds |
+
+The format is five columns with the scores as strings:
+
+```
+Date,Team 1,FT,HT,Team 2
+Fri Aug 11 2023,Trabzonspor,1-0,1-0,Antalyaspor
+Mon Apr 10 2023,Rosenborg,1-0,?,Viking
+```
+
+`?` means the value was not recorded. football-data.co.uk splits its coverage
+into "main" leagues (Turkey among them, with half-time scores) and "extra"
+leagues (Norway among them, **with no half-time scores at all**). A missing
+half time is therefore normal here rather than exceptional: it is left null,
+and half-time markets are switched off for that competition rather than
+invented from other competitions' averages.
+
+Two known limitations of this mirror, both real and both reported:
+
+* it stopped updating around mid-2024, so Turkey ends at 2023/24 and Norway's
+  2024 season is present but **partial** (92 of ~240 matches);
+* older Turkish seasons (roughly pre-2003) have no half-time scores either,
+  which is why Turkey's overall half-time coverage is 83% rather than ~95%.
+
+### 3. `openfootball_txt` — cups and international tournaments
 
 [openfootball](https://github.com/openfootball) plain-text fixture files.
 Currently wired for the Champions League; the World Cup and Euros are
@@ -154,10 +191,28 @@ Verify with:
 python scripts/check_names.py
 ```
 
-which reports how many clubs are shared between competitions (47 — the big-5
-clubs that also play in Europe), how many are Champions League only (61 — all
-genuinely outside the big five), and any name key resolving to more than one
-canonical name (0).
+which reports how many clubs are shared between competitions (52), how many
+are Champions League only (56 — all genuinely outside the leagues carried
+here), and any name key resolving to more than one canonical name (0).
+
+Adding Turkey and Norway is what this machinery is for. Five clubs now link a
+domestic league to the Champions League that previously appeared only in
+Europe: Galatasaray, Beşiktaş, Trabzonspor, Bodø/Glimt, and İstanbul
+Başakşehir — the last only because football-data.co.uk still files it under
+the club's former name, `Buyuksehyr`.
+
+Three pairs were deliberately **not** merged despite looking like renames:
+
+| Kept apart | Why |
+|---|---|
+| Gaziantepspor / Gaziantep | different clubs (1969–2020 vs founded 2013) |
+| Malatyaspor / Yeni Malatyaspor | different clubs (dissolved 2011 vs founded 2010) |
+| Ankaragucu / Ankaraspor | both played the 2004/05 season, so two clubs |
+
+The decisive test for "same club or two?" is whether the two names ever appear
+in the same season. It is a signal, not a proof — `Ham-Kam` and `HamKam` both
+appear in Eliteserien 2023, but between them they account for exactly one
+club's 30 matches, so they are one club spelled two ways mid-file.
 
 A separate `display` map gives the UI readable labels (`Ath Madrid` →
 *Atlético Madrid*) without changing the modelling identity.
@@ -171,6 +226,18 @@ A four-digit string is ambiguous — `2324` is the 2023/24 season, `2022` is the
 World Cup. They are told apart by whether the halves are consecutive years: a
 season code always is, a calendar year almost never is. Seasons roll over on
 1 July when derived from a date.
+
+**Calendar-year competitions.** Not every league runs autumn to spring.
+Eliteserien plays March to November, so its season is `2023`, not `2023/24`.
+Such a competition declares `season_style: calendar`, and every place that
+turns a date or a label into a season takes that style as an argument.
+
+The heuristic above is not sufficient on its own here: `2021` reads as the
+2020/21 season *and* is a real Eliteserien season. Getting this wrong is not
+theoretical — the first version of the Norway ingestion parsed `2021`
+correctly and then the cleaning layer re-canonicalised it without the style,
+turning a whole season into `2020/21`. `tests/test_calendar_seasons.py` pins
+the fix.
 
 ### Competitions
 
@@ -212,8 +279,10 @@ From `python scripts/build_dataset.py`:
 | FRA_L1 | 11,847 | 46 | 1993-07-23 | 2026-05-17 | 92.5% | 64.6% |
 | GER_BL | 10,098 | 45 | 1993-08-07 | 2026-05-16 | 93.9% | 75.7% |
 | ITA_SA | 11,726 | 53 | 1993-08-29 | 2026-05-24 | 94.8% | 67.9% |
+| TUR_SL | 9,444 | 61 | 1994-08-13 | 2024-05-26 | 83.4% | 0% |
+| NOR_EL | 2,992 | 28 | 2012-03-23 | 2024-06-02 | **0%** | 0% |
 | UEFA_UCL | 1,997 | 108 | 2011-09-13 | 2026-05-30 | 94.4% | 0% |
-| **Total** | **61,076** | **305** | | | | |
+| **Total** | **73,512** | **389** | | | | |
 
 xG coverage is 0% (no free feed — a shot-based proxy is derived instead) and
 odds coverage is 0% (absent from this mirror).

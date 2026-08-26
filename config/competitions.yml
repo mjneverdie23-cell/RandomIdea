@@ -129,6 +129,29 @@ competitions:
     source_key: null
     enabled: false
 
+  # ----------------------------------------------------------------- Norway
+  - code: NOR_EL
+    name: Eliteserien
+    country: Norway
+    tier: 2
+    source: footballcsv_cache
+    source_key: no.1
+    # Eliteserien runs March to November, so a season is a calendar year
+    # rather than an autumn-to-spring pair.
+    season_style: calendar
+    seasons: ["2012", "2024"]
+    enabled: true
+
+  # ----------------------------------------------------------------- Turkey
+  - code: TUR_SL
+    name: Süper Lig
+    country: Turkey
+    tier: 2
+    source: footballcsv_cache
+    source_key: tr.1
+    seasons: [1994/95, 2023/24]
+    enabled: true
+
   # ----------------------------------------------------------------- Europe
   - code: UEFA_UCL
     name: UEFA Champions League

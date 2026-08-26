@@ -54,3 +54,28 @@ sources:
       - xg
       - possession
       - odds
+
+  footballcsv_cache:
+    adapter: footballcsv
+    description: >
+      footballcsv's cache of the full football-data.co.uk catalogue, converted
+      to the football.csv "standard" (one file per league and season, named by
+      ISO country code and tier). Used for leagues outside the big five, which
+      the football-datasets mirror does not carry. Carries full-time scores
+      and, for the leagues football-data.co.uk treats as "main", half-time
+      scores; its "extra" leagues have no half-time data at all.
+    base_url: https://raw.githubusercontent.com/footballcsv/cache.footballdata/master
+    path_template: "{season_dir}/{source_key}.csv"
+    licence: "Public data mirrored from football-data.co.uk (free for personal use)"
+    provides:
+      - ft_goals
+      - ht_goals        # main leagues only; absent for the extra leagues
+    missing:
+      - shots
+      - shots_on_target
+      - corners
+      - fouls
+      - cards
+      - xg
+      - possession
+      - odds

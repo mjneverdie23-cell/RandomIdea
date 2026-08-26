@@ -46,6 +46,9 @@ class Competition:
     neutral_venue: bool = False
     two_legged: bool = False
     enabled: bool = False
+    #: "split" for an autumn-to-spring season (2023/24), "calendar" for a
+    #: single-year one (2023) as played in the Nordic leagues.
+    season_style: str = "split"
 
     @property
     def is_knockout(self) -> bool:
@@ -95,6 +98,7 @@ def load_competitions() -> dict[str, Competition]:
             neutral_venue=bool(merged.get("neutral_venue", False)),
             two_legged=bool(merged.get("two_legged", False)),
             enabled=bool(merged.get("enabled", False)),
+            season_style=str(merged.get("season_style", "split")),
         )
     return out
 

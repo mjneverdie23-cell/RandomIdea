@@ -28,9 +28,8 @@ warnings.filterwarnings("ignore")
 
 from football_predictor.config import data_dir  # noqa: E402
 from football_predictor.evaluation.backtest import (  # noqa: E402
-    BacktestConfig, aggregate, run_fold,
+    BacktestConfig, aggregate, build_windows, run_fold,
 )
-from football_predictor.normalize.seasons import season_start_year  # noqa: E402
 from football_predictor.pipeline import load_dataset  # noqa: E402
 
 
@@ -50,13 +49,10 @@ def main() -> int:
     if args.quick:
         config.ml_models = ("logistic", "xgboost")
 
-    seasons = sorted(features["season"].unique(), key=season_start_year)
-    test_seasons = args.seasons or [
-        s for s in seasons
-        if season_start_year(config.first_test_season)
-        <= season_start_year(s)
-        <= season_start_year(config.last_test_season)
-    ]
+    windows = build_windows(matches, config)
+    if args.seasons:
+        wanted = set(args.seasons)
+        windows = [w for w in windows if w.label in wanted]
 
     out_dir = Path(args.out) if args.out else data_dir() / "processed" / "backtest"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -64,11 +60,11 @@ def main() -> int:
     results = []
     all_predictions = []
     started = time.time()
-    for season in test_seasons:
+    for window in windows:
         fold_started = time.time()
-        fold = run_fold(features, matches, season, config, keep_predictions=True)
+        fold = run_fold(features, matches, window, config, keep_predictions=True)
         if fold is None:
-            print(f"  {season}: skipped (insufficient history)")
+            print(f"  {window.label}: skipped (insufficient history)")
             continue
         results.append(fold)
         if fold.predictions is not None:
@@ -77,7 +73,7 @@ def main() -> int:
             ((m, v["log_loss"]) for m, v in fold.metrics.items() if "log_loss" in v),
             key=lambda kv: kv[1],
         )
-        print(f"  {season}: n={fold.n_test:5d}  best={best[0]} ({best[1]:.4f})  "
+        print(f"  {window.label}: n={fold.n_test:5d}  best={best[0]} ({best[1]:.4f})  "
               f"[{time.time() - fold_started:.0f}s]")
         sys.stdout.flush()
 
