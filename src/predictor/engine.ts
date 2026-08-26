@@ -37,6 +37,7 @@ import {
   SERIES_TARGET,
   type GoldTempo,
   type GoldTempoPoint,
+  type EarlyGoldProfile,
   type Notice,
   type PickLine,
   type Prediction,
@@ -700,6 +701,53 @@ function describeTempo(team: string, point: GoldTempoPoint): string {
   return `${head} — even out of the gate.`;
 }
 
+/** Share of the early window spent behind that reads as a pattern. */
+export const EARLY_LOPSIDED_RATE = 0.55;
+/** Win rate from a deficit at or below which a bad start is usually terminal. */
+export const EARLY_DEAD_DEFICIT_RATE = 0.15;
+
+/** `10 and 15 min`, or `10 min` — however many marks the window actually has. */
+function minuteList(minutes: readonly number[]): string {
+  if (minutes.length === 0) return 'the early game';
+  if (minutes.length === 1) return `${minutes[0]} min`;
+  return `${minutes.slice(0, -1).join(', ')} and ${minutes[minutes.length - 1]} min`;
+}
+
+/**
+ * The split of the early window into leading, level and behind.
+ *
+ * Three shares rather than one ahead-rate, because a team that is level half
+ * the time reads very differently from one that is behind half the time, and a
+ * strict ahead/behind split collapses that distinction.
+ */
+function describeEarlyShare(team: string, profile: EarlyGoldProfile): string {
+  const head =
+    `${team} at ${minuteList(profile.minutes)}: leading ${pct(profile.leadRate)}, ` +
+    `level ${pct(profile.levelRate)}, behind ${pct(profile.behindRate)} of ${profile.sample} marks`;
+
+  if (profile.leadRate >= EARLY_LOPSIDED_RATE) return `${head} — usually in front early.`;
+  if (profile.behindRate >= EARLY_LOPSIDED_RATE) return `${head} — usually playing from behind.`;
+  return `${head} — no settled early pattern.`;
+}
+
+/**
+ * What a bad start has actually turned into for this team.
+ *
+ * Two numbers, because they answer different questions: how often they win from
+ * a real deficit at all, and how often the gold lead itself came back before
+ * they did. Wins without a recovered lead are games settled after the last
+ * checkpoint at 25 minutes.
+ */
+function describeComeback(team: string, profile: EarlyGoldProfile): string | null {
+  if (profile.deficitWinRate === null || profile.comebackRate === null) return null;
+  return (
+    `${team} ${goldText(-profile.deficitGold)} or worse by ` +
+    `${profile.minutes[profile.minutes.length - 1]} min in ` +
+    `${profile.deficitSample} games — won ${pct(profile.deficitWinRate)}, ` +
+    `and led again before winning in ${pct(profile.comebackRate)}.`
+  );
+}
+
 /**
  * Per-team early-game gold reads, plus the head-to-head edge between them.
  *
@@ -711,17 +759,45 @@ function goldTempoNotices(model: PredictorModel, input: PredictionInput): Notice
   const notices: Notice[] = [];
   const points: Partial<Record<Side, GoldTempoPoint>> = {};
 
+  // One block per side — the average, then how the window splits, then what a
+  // bad start became — so a team's three gold reads sit together rather than
+  // interleaving with the opponent's.
   for (const side of ['blue', 'red'] as const) {
     const entry = input[side];
-    const point = earlyPoint(model.goldTempo.get(entry.team.toLowerCase()));
-    if (!point) continue;
-    points[side] = point;
+    const key = entry.team.toLowerCase();
+
+    const point = earlyPoint(model.goldTempo.get(key));
+    if (point) {
+      points[side] = point;
+      notices.push({
+        kind: 'gold',
+        side,
+        text: describeTempo(entry.team, point),
+        warning:
+          point.averageDiff <= -TEMPO_NOTABLE_GOLD && point.aheadRate <= 1 - TEMPO_NOTABLE_RATE,
+      });
+    }
+
+    const profile = model.earlyGold.get(key);
+    if (!profile) continue;
+
     notices.push({
       kind: 'gold',
       side,
-      text: describeTempo(entry.team, point),
-      warning: point.averageDiff <= -TEMPO_NOTABLE_GOLD && point.aheadRate <= 1 - TEMPO_NOTABLE_RATE,
+      text: describeEarlyShare(entry.team, profile),
+      warning: profile.behindRate >= EARLY_LOPSIDED_RATE,
     });
+
+    const comeback = describeComeback(entry.team, profile);
+    if (comeback) {
+      notices.push({
+        kind: 'gold',
+        side,
+        text: comeback,
+        warning:
+          profile.deficitWinRate !== null && profile.deficitWinRate <= EARLY_DEAD_DEFICIT_RATE,
+      });
+    }
   }
 
   const bluePoint = points.blue;

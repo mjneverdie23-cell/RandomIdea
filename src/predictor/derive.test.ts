@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COMEBACK_DEFICIT,
   DECISIVE_GOLD,
   META_MIN_PICKS,
   MIN_TEMPO_SAMPLE,
   buildPredictorModel,
   deriveMeta,
+  deriveEarlyGold,
   deriveScaling,
   latestSeason,
   streakOf,
@@ -442,6 +444,89 @@ describe('deriveScaling', () => {
     expect(shortCutSeconds).toBeGreaterThanOrEqual(40 * 60);
     expect(longCutSeconds).toBeGreaterThan(shortCutSeconds!);
     expect(scalingByChampion.get(makeChampion('Rumble')!.id)!.type).toBe('late');
+  });
+});
+
+describe('deriveEarlyGold', () => {
+  /** Blue-side gold diff at 10/15/20/25, with blue winning or losing. */
+  const g = (id: string, blueWins: boolean, checkpoints: (number | null)[], day = 0) =>
+    makeGame({
+      id,
+      blue: 'A',
+      red: 'B',
+      winner: blueWins ? 'blue' : 'red',
+      day,
+      blueCheckpoints: checkpoints,
+    });
+
+  it('splits the early window into leading, level and behind', () => {
+    // Blue: +2000 / +2000 (two leads), then −2000 / −2000, then +100 / −100.
+    const games = [
+      g('a', true, [2000, 2000, 0, 0], 0),
+      g('b', false, [-2000, -2000, 0, 0], 1),
+      g('c', true, [100, -100, 0, 0], 2),
+    ];
+    const profile = deriveEarlyGold(games).get('a')!;
+    // Six observations: two ahead, two behind, two inside the ±500 band.
+    expect(profile.sample).toBe(6);
+    expect(profile.leadRate).toBeCloseTo(2 / 6, 10);
+    expect(profile.behindRate).toBeCloseTo(2 / 6, 10);
+    expect(profile.levelRate).toBeCloseTo(2 / 6, 10);
+    expect(profile.minutes).toEqual([10, 15]);
+  });
+
+  it('only counts the 10 and 15 minute marks, since the export has nothing earlier', () => {
+    // Huge swings at 20 and 25 must not touch the early shares.
+    const games = Array.from({ length: 3 }, (_, i) =>
+      g(`x-${i}`, true, [100, 100, 9000, 9000], i),
+    );
+    const profile = deriveEarlyGold(games).get('a')!;
+    expect(profile.sample).toBe(6);
+    expect(profile.levelRate).toBe(1);
+    expect(profile.leadRate).toBe(0);
+  });
+
+  it('rates a comeback only when the lead came back and the game was won', () => {
+    const games = [
+      // Down 3000 at 10, leads again at 20, wins — a comeback.
+      g('c1', true, [-3000, -3000, 500, 1000], 0),
+      // Down 3000, leads again at 20, still loses — recovered but not a win.
+      g('c2', false, [-3000, -3000, 500, 1000], 1),
+      // Down 3000, never leads again, wins anyway — a late win, not a comeback.
+      g('c3', true, [-3000, -3000, -900, -400], 2),
+      // Down 3000 and loses.
+      g('c4', false, [-3000, -3000, -2000, -3000], 3),
+      g('c5', false, [-3000, -3000, -2000, -3000], 4),
+    ];
+    const profile = deriveEarlyGold(games).get('a')!;
+    expect(profile.deficitSample).toBe(5);
+    expect(profile.deficitGold).toBe(COMEBACK_DEFICIT);
+    // c1 and c3 won; only c1 led again first.
+    expect(profile.deficitWinRate).toBeCloseTo(2 / 5, 10);
+    expect(profile.comebackRate).toBeCloseTo(1 / 5, 10);
+  });
+
+  it('withholds a comeback rate below the sample floor', () => {
+    const games = [
+      g('d1', true, [-3000, -3000, 500, 900], 0),
+      ...Array.from({ length: 6 }, (_, i) => g(`e-${i}`, true, [100, 100, 0, 0], i + 1)),
+    ];
+    const profile = deriveEarlyGold(games).get('a')!;
+    expect(profile.deficitSample).toBe(1);
+    expect(profile.deficitWinRate).toBeNull();
+    expect(profile.comebackRate).toBeNull();
+  });
+
+  it('ignores marks a game never reached rather than scoring them zero', () => {
+    const games = Array.from({ length: 6 }, (_, i) =>
+      g(`s-${i}`, true, [2000, null, null, null], i),
+    );
+    const profile = deriveEarlyGold(games).get('a')!;
+    // Six games, but only the 10-minute mark ever exists — the missing 15s are
+    // silent rather than counting as level.
+    expect(profile.sample).toBe(6);
+    expect(profile.leadRate).toBe(1);
+    expect(profile.levelRate).toBe(0);
   });
 });
 

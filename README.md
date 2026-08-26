@@ -777,6 +777,49 @@ instead. And a mark a game never reached contributes nothing rather than
 counting as zero, so teams that win fast aren't dragged toward neutral at the
 20 and 25 minute marks.
 
+#### How the early window splits, and what a bad start becomes
+
+Two further lines per team sit under the average.
+
+**The lead/level/behind split** pools every early checkpoint rather than
+reporting one snapshot — "T1 at 10 and 15 min: leading 47%, level 21%, behind
+32% of 250 marks". Note the third number: without a **level band**, leading and
+behind are strict complements and reporting both says nothing the ahead-rate
+already said. The band is ±500g, which on the 2026 export covers 30% of
+team-games at 10 minutes — roughly the flattest third, about a kill plus a wave.
+It covers only 17% at 15 minutes, and that is the game rather than the metric:
+by then matches have genuinely diverged.
+
+**The comeback line** is conditional on having been **1,800g down** at 10 or 15
+minutes — "Gen.G −1,800g or worse by 15 min in 10 games — won 60%, and led again
+before winning in 10%". Two numbers on purpose, because they answer different
+questions: how often the team wins from a real deficit at all, and how often the
+gold lead itself came back first. The gap between them is games stabilised and
+won after the last checkpoint at 25 minutes.
+
+Pooled across the whole 2026 export, a 1,800g early deficit is close to fatal:
+
+| deficit by 15 min | games | won | led again later | led again **and** won |
+| --- | --- | --- | --- | --- |
+| 1,200g | 1,319 | 23.3% | 18.9% | 12.8% |
+| 1,500g | 1,110 | 21.0% | 14.7% | 10.1% |
+| **1,800g** | **931** | **17.8%** | **10.8%** | **7.7%** |
+| 2,500g | 612 | 14.1% | 6.4% | 4.4% |
+
+So the league-wide comeback rate on the strict definition is about **8%**, not
+the 45% the feature was sketched against — individual teams range widely around
+it, which is what makes the per-team line worth showing. A team needs 5 deficit
+games before either number is reported; on this data 86% of teams clear that.
+
+The whole window is **10 and 15 minutes**, not 5 to 15: Oracle's Elixir has no
+`golddiffat5` column, so there is nothing earlier to read. `EARLY_GOLD_MINUTES`
+is filtered out of `GOLD_CHECKPOINTS` by an upper bound rather than written out,
+so an export that ever adds a 5-minute column is picked up by moving one number.
+
+This is separate from the existing whole-game `comebackRate` in the behaviour
+panel, which asks a looser question — ever 2,500g down at *any* checkpoint, then
+won — and is not restricted to the early game.
+
 ### What it reports but does not score
 
 Behavioural reads — recent form, side preference, thrown leads, comebacks,

@@ -118,6 +118,36 @@ export interface GoldTempoPoint {
 /** A team's early-game gold pattern, one entry per checkpoint reached. */
 export type GoldTempo = GoldTempoPoint[];
 
+/**
+ * How a team spends the early game, and what happens when it starts badly.
+ *
+ * The share figures pool the early checkpoints rather than reporting one mark,
+ * so "leads the early game" means across the window rather than at a single
+ * snapshot. The comeback figures are conditional on having been behind, which
+ * is the only way to read them: a team that is never down has no comeback rate,
+ * and that is a compliment rather than a gap.
+ */
+export interface EarlyGoldProfile {
+  /** Checkpoints pooled — whatever the export carries inside the window. */
+  minutes: GoldCheckpoint[];
+  /** Team-game observations across those marks. */
+  sample: number;
+  /** Share of observations ahead by more than the level band. */
+  leadRate: number;
+  /** Share behind by more than the band. */
+  behindRate: number;
+  /** Share inside the band, where neither side has a real lead. */
+  levelRate: number;
+  /** The deficit these figures are conditioned on, carried so it can be shown. */
+  deficitGold: number;
+  /** Games that hit that deficit at one of those marks. */
+  deficitSample: number;
+  /** Of those, the share won — `null` below the sample floor. */
+  deficitWinRate: number | null;
+  /** Of those, the share that reached a gold lead again *and* won. */
+  comebackRate: number | null;
+}
+
 /** Hand-maintained ratings; optional, and absent by default. */
 export interface TeamRating {
   team: string;
@@ -167,6 +197,8 @@ export interface PredictorModel {
   behavior: Map<string, TeamBehavior>;
   /** Gold difference by minute mark, per team. */
   goldTempo: Map<string, GoldTempo>;
+  /** Early-window lead/behind shares and comeback record, per team. */
+  earlyGold: Map<string, EarlyGoldProfile>;
   standingsByCompetition: Map<CompetitionId, Map<string, StandingRow>>;
   standingsOverall: Map<string, StandingRow>;
   /** Season the standings and behaviour reads describe. */

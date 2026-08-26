@@ -34,6 +34,7 @@ import { anywhereKey, splitSubject } from './engine.ts';
 import type {
   GoldTempo,
   ChampionScaling,
+  EarlyGoldProfile,
   PredictorModel,
   ScalingRead,
   StandingRow,
@@ -850,6 +851,134 @@ function deriveGoldTempo(games: readonly Game[]): Map<string, GoldTempo> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Early gold window                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The checkpoints that make up "the early game".
+ *
+ * Oracle's Elixir carries gold differences at 10, 15, 20 and 25 minutes and
+ * **nothing earlier** — there is no `golddiffat5` column in the export. So an
+ * early window nominally running from 5 minutes is, in this data, the 10- and
+ * 15-minute marks. Derived from `GOLD_CHECKPOINTS` rather than written out, so
+ * a future export carrying a 5-minute column is picked up by changing the bound
+ * in one place.
+ */
+export const EARLY_GOLD_MAX_MINUTE = 15;
+export const EARLY_GOLD_MINUTES = GOLD_CHECKPOINTS.filter(
+  (minute) => minute <= EARLY_GOLD_MAX_MINUTE,
+);
+
+/**
+ * Gold inside which neither team really leads.
+ *
+ * Without a band, "leading" and "behind" are strict complements and reporting
+ * both says nothing the ahead-rate did not already say. Measured on the 2026
+ * export, ±500g covers 30% of team-games at 10 minutes — roughly the flattest
+ * third, and about one kill plus a wave. It covers only 17% at 15 minutes,
+ * which is not a flaw in the band: by then games have genuinely diverged.
+ */
+export const GOLD_LEVEL_BAND = 500;
+
+/** Deficit that counts as a bad start worth measuring a recovery from. */
+export const COMEBACK_DEFICIT = 1800;
+
+/** Deficit games a team needs before its comeback rate is reported. */
+export const MIN_COMEBACK_SAMPLE = 5;
+
+/**
+ * Early lead/behind shares, and what a team does after a bad start.
+ *
+ * Two separate reads on the same games. The shares pool every early checkpoint,
+ * so a team with 40 games contributes up to 80 observations and "ahead 60% of
+ * the early game" means across the window rather than at one snapshot.
+ *
+ * The comeback figures are conditional on having been `COMEBACK_DEFICIT` down
+ * at one of those marks, and are deliberately two numbers: the share that won
+ * at all, and the stricter share that clawed back to an actual gold lead *and*
+ * won. The gap between them is teams that stabilised and won late without the
+ * checkpoints ever showing them ahead — the last mark is 25 minutes, and plenty
+ * of games are decided after it.
+ */
+export function deriveEarlyGold(games: readonly Game[]): Map<string, EarlyGoldProfile> {
+  interface Bucket {
+    lead: number;
+    behind: number;
+    level: number;
+    sample: number;
+    deficits: number;
+    deficitWins: number;
+    comebacks: number;
+  }
+  const perTeam = new Map<string, Bucket>();
+  const earlyIndexes = GOLD_CHECKPOINTS.map((minute, index) => ({ minute, index })).filter(
+    ({ minute }) => minute <= EARLY_GOLD_MAX_MINUTE,
+  );
+
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      const checkpoints = side.goldDiff?.checkpoints;
+      if (!checkpoints) continue;
+
+      const key = side.teamName.toLowerCase();
+      const bucket = perTeam.get(key) ?? {
+        lead: 0,
+        behind: 0,
+        level: 0,
+        sample: 0,
+        deficits: 0,
+        deficitWins: 0,
+        comebacks: 0,
+      };
+
+      const early: number[] = [];
+      for (const { index } of earlyIndexes) {
+        const diff = checkpoints[index];
+        if (diff === null || diff === undefined) continue;
+        early.push(diff);
+        bucket.sample += 1;
+        if (diff > GOLD_LEVEL_BAND) bucket.lead += 1;
+        else if (diff < -GOLD_LEVEL_BAND) bucket.behind += 1;
+        else bucket.level += 1;
+      }
+
+      if (early.length > 0 && Math.min(...early) <= -COMEBACK_DEFICIT) {
+        bucket.deficits += 1;
+        const won = game.winner === side.side;
+        if (won) bucket.deficitWins += 1;
+        // A lead after the window is what "turned it around" means; a game that
+        // ends before the next mark simply never gets the chance to show one.
+        const recovered = checkpoints.some(
+          (diff, index) =>
+            index >= earlyIndexes.length && diff !== null && diff !== undefined && diff > 0,
+        );
+        if (won && recovered) bucket.comebacks += 1;
+      }
+
+      perTeam.set(key, bucket);
+    }
+  }
+
+  const profiles = new Map<string, EarlyGoldProfile>();
+  for (const [team, bucket] of perTeam) {
+    if (bucket.sample < MIN_TEMPO_SAMPLE) continue;
+    const enough = bucket.deficits >= MIN_COMEBACK_SAMPLE;
+    profiles.set(team, {
+      minutes: [...EARLY_GOLD_MINUTES],
+      sample: bucket.sample,
+      leadRate: bucket.lead / bucket.sample,
+      behindRate: bucket.behind / bucket.sample,
+      levelRate: bucket.level / bucket.sample,
+      deficitGold: COMEBACK_DEFICIT,
+      deficitSample: bucket.deficits,
+      deficitWinRate: enough ? bucket.deficitWins / bucket.deficits : null,
+      comebackRate: enough ? bucket.comebacks / bucket.deficits : null,
+    });
+  }
+  return profiles;
+}
+
+/* ------------------------------------------------------------------ */
 /* Rosters, teams, champion pools                                      */
 /* ------------------------------------------------------------------ */
 
@@ -976,6 +1105,7 @@ export function buildPredictorModel(
     scalingLongSeconds: longCutSeconds,
     behavior: deriveBehavior(formGames, runs),
     goldTempo: deriveGoldTempo(formGames),
+    earlyGold: deriveEarlyGold(formGames),
     standingsByCompetition,
     standingsOverall,
     formSeason,
@@ -1017,6 +1147,7 @@ export function emptyPredictorModel(): PredictorModel {
     scalingLongSeconds: null,
     behavior: new Map(),
     goldTempo: new Map(),
+    earlyGold: new Map(),
     standingsByCompetition: new Map(),
     standingsOverall: new Map(),
     formSeason: null,
