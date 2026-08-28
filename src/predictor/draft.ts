@@ -8,11 +8,17 @@
  * It lives in `PredictorContext` rather than in the page component, because a
  * page component unmounts the moment you navigate to another tab and its state
  * goes with it. Losing a ten-champion draft to a stray click on Leaderboard is
- * not acceptable, so the state sits above the router and is mirrored to
- * `localStorage` — which also means it survives a reload or a closed tab.
+ * not acceptable, so the state sits above the router and is persisted — which
+ * also means it survives a reload or a closed browser.
+ *
+ * Persistence goes through `tabScoped`, not `localStorage` directly. A draft is
+ * a working document rather than shared reference data, and two browser tabs
+ * following two simultaneous series must not overwrite each other; see that
+ * module for what went wrong when they did.
  */
 
 import { ROLES, type Champion, type CompetitionId, type StageKind } from '../domain/types.ts';
+import { clearTabScoped, readTabScoped, writeTabScoped } from '../storage/tabScoped.ts';
 import {
   SERIES_TARGET,
   type Motivation,
@@ -219,7 +225,7 @@ export function reviveDraft(raw: unknown): PredictorDraft {
 
 export function loadDraft(): PredictorDraft {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readTabScoped(STORAGE_KEY);
     if (!raw) return BLANK_DRAFT;
     return reviveDraft(JSON.parse(raw));
   } catch {
@@ -229,19 +235,11 @@ export function loadDraft(): PredictorDraft {
 }
 
 export function saveDraft(draft: PredictorDraft): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-  } catch {
-    // Persisting is a convenience; the draft still works for this session.
-  }
+  writeTabScoped(STORAGE_KEY, JSON.stringify(draft));
 }
 
 export function clearSavedDraft(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Nothing further to clean up.
-  }
+  clearTabScoped(STORAGE_KEY);
 }
 
 /* ------------------------------------------------------------------ */
@@ -263,7 +261,7 @@ export interface StoredQueue {
 
 export function loadQueue(): StoredQueue | null {
   try {
-    const raw = localStorage.getItem(QUEUE_KEY);
+    const raw = readTabScoped(QUEUE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return null;
@@ -276,17 +274,9 @@ export function loadQueue(): StoredQueue | null {
 }
 
 export function saveQueue(queue: StoredQueue): void {
-  try {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-  } catch {
-    // Persisting is a convenience; the queue still works for this session.
-  }
+  writeTabScoped(QUEUE_KEY, JSON.stringify(queue));
 }
 
 export function clearSavedQueue(): void {
-  try {
-    localStorage.removeItem(QUEUE_KEY);
-  } catch {
-    // Nothing further to clean up.
-  }
+  clearTabScoped(QUEUE_KEY);
 }

@@ -577,6 +577,25 @@ ever outweighing what the teams actually drafted.
 The composition survives switching tabs, and a reload or a closed browser. Use
 **Reset** to clear it; that forgets the saved copy too.
 
+**Two browser tabs keep two separate drafts.** Two series starting at once is a
+normal way to use this, and it used to destroy one of them: the draft and the
+match queue were mirrored to `localStorage`, which is per-origin rather than
+per-tab, so both tabs wrote the same two keys, the last writer won, and
+whichever tab reloaded next came back holding the *other* tab's series.
+
+The live copy now goes to `sessionStorage`, which is private to one tab and
+still survives a reload, with the `localStorage` mirror kept only as the
+cold-start fallback. Reads prefer the tab's own copy, so once a tab has saved
+anything it is immune to every other tab. A freshly opened tab has nothing of
+its own yet and inherits the last-saved draft — which is what reopening the app
+has to do anyway, and is harmless for a second concurrent tab, since inheriting
+a starting point is not the same as overwriting the first tab's work. Resetting
+in one tab cannot strand another, because that tab still answers from its own
+copy.
+
+If `sessionStorage` is unavailable — private modes, storage disabled by policy —
+it degrades to the old shared behaviour rather than losing the draft entirely.
+
 ### First-time picks count as 100%
 
 A champion a team has no recorded games on scores a full 1.00 rather than a

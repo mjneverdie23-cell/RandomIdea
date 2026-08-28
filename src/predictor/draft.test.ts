@@ -5,8 +5,10 @@ import {
   clearSavedDraft,
   gameNumberOf,
   loadDraft,
+  loadQueue,
   reviveDraft,
   saveDraft,
+  saveQueue,
   swapDraftSides,
   type PredictorDraft,
 } from './draft.ts';
@@ -139,22 +141,41 @@ describe('reviveDraft', () => {
   });
 });
 
-/** Minimal `localStorage`, since these tests run without a DOM. */
-function installStorage(): Map<string, string> {
-  const store = new Map<string, string>();
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => void store.set(key, value),
-      removeItem: (key: string) => void store.delete(key),
-      clear: () => store.clear(),
-    },
-  });
-  return store;
+/** A `Storage`-shaped object over a plain map, since these tests have no DOM. */
+function storageOver(store: Map<string, string>) {
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+    clear: () => store.clear(),
+  };
 }
 
-describe('localStorage round trip', () => {
+function define(name: string, value: unknown): void {
+  Object.defineProperty(globalThis, name, { configurable: true, value });
+}
+
+/**
+ * One `localStorage` shared by every tab, and a `sessionStorage` per tab.
+ *
+ * `openTab()` swaps in a fresh session store while keeping the shared one,
+ * which is exactly what opening a second tab on the same origin does.
+ */
+function installStorage(): { local: Map<string, string>; openTab: () => void } {
+  const local = new Map<string, string>();
+  define('localStorage', storageOver(local));
+  const openTab = () => define('sessionStorage', storageOver(new Map()));
+  openTab();
+  return { local, openTab };
+}
+
+/** No `sessionStorage` at all — private modes and locked-down browsers. */
+function installLocalOnly(): void {
+  define('localStorage', storageOver(new Map()));
+  define('sessionStorage', undefined);
+}
+
+describe('storage round trip', () => {
   beforeEach(() => {
     installStorage();
   });
@@ -171,6 +192,7 @@ describe('localStorage round trip', () => {
 
   it('survives a corrupt stored value', () => {
     localStorage.setItem('predictor:draft:v1', '{not json');
+    sessionStorage.setItem('predictor:draft:v1', '{not json');
     expect(loadDraft()).toEqual(BLANK_DRAFT);
   });
 
@@ -178,5 +200,73 @@ describe('localStorage round trip', () => {
     saveDraft(draft());
     clearSavedDraft();
     expect(loadDraft()).toEqual(BLANK_DRAFT);
+  });
+
+  it('still works when sessionStorage is unavailable', () => {
+    installLocalOnly();
+    const original = draft({ scoreBlue: 2, seriesLength: 'BO5' });
+    saveDraft(original);
+    expect(loadDraft()).toEqual(original);
+    clearSavedDraft();
+    expect(loadDraft()).toEqual(BLANK_DRAFT);
+  });
+});
+
+describe('two tabs on two series', () => {
+  let openTab: () => void;
+
+  beforeEach(() => {
+    ({ openTab } = installStorage());
+  });
+
+  it('keeps each tab on its own draft', () => {
+    const first = draft({ scoreBlue: 1, scoreRed: 0, seriesLength: 'BO5' });
+    saveDraft(first);
+    const tabOne = sessionStorage;
+
+    // A second tab composes a different series and saves over the shared key.
+    openTab();
+    const second = draft({ scoreBlue: 0, scoreRed: 1, seriesLength: 'BO3' });
+    saveDraft(second);
+    expect(loadDraft()).toEqual(second);
+
+    // The first tab reloads. Before this fix it came back holding `second`.
+    define('sessionStorage', tabOne);
+    expect(loadDraft()).toEqual(first);
+  });
+
+  it('keeps each tab on its own queue', () => {
+    saveQueue({ text: 'series-one', index: 3 });
+    const tabOne = sessionStorage;
+
+    openTab();
+    saveQueue({ text: 'series-two', index: 0 });
+    expect(loadQueue()).toEqual({ text: 'series-two', index: 0 });
+
+    define('sessionStorage', tabOne);
+    expect(loadQueue()).toEqual({ text: 'series-one', index: 3 });
+  });
+
+  it('starts a freshly opened tab from the last saved draft', () => {
+    const original = draft({ scoreBlue: 2, seriesLength: 'BO5' });
+    saveDraft(original);
+    // Nothing of its own yet, so it inherits rather than opening blank — which
+    // is also what reopening the app after closing it has to do.
+    openTab();
+    expect(loadDraft()).toEqual(original);
+  });
+
+  it('does not strand another tab when one of them resets', () => {
+    const first = draft({ scoreBlue: 1, seriesLength: 'BO5' });
+    saveDraft(first);
+    const tabOne = sessionStorage;
+
+    openTab();
+    saveDraft(draft({ scoreRed: 1 }));
+    clearSavedDraft();
+    expect(loadDraft()).toEqual(BLANK_DRAFT);
+
+    define('sessionStorage', tabOne);
+    expect(loadDraft()).toEqual(first);
   });
 });
