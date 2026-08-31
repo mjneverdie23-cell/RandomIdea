@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AbilityCharge" format=3]
+
+[ext_resource type="Script" path="res://scripts/abilities/ability_charge.gd" id="1_64sx1"]
+
+[resource]
+script = ExtResource("1_64sx1")
+id = &"ability_charge"
+display_name = "Charge"
+description = "Barrel forwards, trampling anything in the way."
+cooldown = 25.0
+duration = 1.4
+damage = 35.0
+strength = 1.9

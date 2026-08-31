@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterClassData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/character_class_data.gd" id="1_v1e40"]
+
+[resource]
+script = ExtResource("1_v1e40")
+id = &"SNIPER"
+display_name = "Ptera"
+species = "Pteranodon"
+role = "Sniper"
+description = "Long-range specialist. Fragile, deadly at distance, terrible up close."
+max_health = 90.0
+move_speed = 5.2
+jump_velocity = 7.4
+damage_taken_multiplier = 1.1
+hitbox_radius = 0.5
+hitbox_height = 1.8
+allowed_categories = Array[int]([0, 3, 2, 6, 7])
+abilities = Array[StringName]([&"ability_hawk_eye", &"ability_glide"])
+bot_buy_priority = Array[StringName]([&"sniper_longneck", &"sniper_horizon", &"rifle_ranger"])
+model_key = &"dino_ptera"
+color = Color(0.47843137, 0.43529412, 0.6901961, 1)

@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_7fu3w"]
+
+[resource]
+script = ExtResource("1_7fu3w")
+id = &"rifle_bulwark"
+display_name = "Bulwark BR"
+fire_mode = 2
+price = 2100
+kill_reward = 350
+damage = 30.0
+armor_penetration = 0.75
+range = 95.0
+falloff_start = 40.0
+falloff_end = 85.0
+fire_rate = 900.0
+burst_delay = 0.34
+mag_size = 24
+reserve_ammo = 72
+reload_time = 2.3
+move_speed_multiplier = 0.97
+spread_base = 0.45
+spread_moving = 3.6
+recoil_vertical = 0.55
+recoil_horizontal = 0.18
+recoil_max_vertical = 8.0
+model_key = &"weapon_rifle"
+color = Color(0.41960785, 0.3882353, 0.33333334, 1)

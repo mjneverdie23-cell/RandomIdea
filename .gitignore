@@ -1,4 +1,12 @@
+# Godot editor cache and imported resources - regenerated on open
+.godot/
+# Exported builds
+build/
+*.exe
+*.pck
+*.zip
+
+# Web prototype
 node_modules/
 *.log
 .DS_Store
-/tmp/

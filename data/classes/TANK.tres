@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CharacterClassData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/character_class_data.gd" id="1_ljy0t"]
+
+[resource]
+script = ExtResource("1_ljy0t")
+id = &"TANK"
+display_name = "Ankylo"
+species = "Ankylosaurus"
+role = "Tank"
+description = "Armoured wall. Soaks damage, holds chokes, breaks sites open."
+max_health = 150.0
+starting_armor = 25.0
+move_speed = 4.6
+jump_velocity = 6.4
+damage_taken_multiplier = 0.85
+hitbox_radius = 0.62
+hitbox_height = 1.95
+eye_height_fraction = 0.86
+allowed_categories = Array[int]([0, 4, 5, 2, 6, 7])
+abilities = Array[StringName]([&"ability_bulwark", &"ability_tail_slam"])
+bot_buy_priority = Array[StringName]([&"lmg_thunder", &"shotgun_maw", &"rifle_apex"])
+model_key = &"dino_ankylo"
+color = Color(0.3529412, 0.49019608, 0.3529412, 1)
+model_scale = 1.15

@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_j8qga"]
+
+[resource]
+script = ExtResource("1_j8qga")
+id = &"pistol_scav"
+display_name = "Scavenger P9"
+category = 0
+slot = 1
+fire_mode = 1
+kill_reward = 450
+damage = 26.0
+armor_penetration = 0.55
+range = 55.0
+falloff_start = 18.0
+falloff_end = 45.0
+fire_rate = 400.0
+mag_size = 15
+reserve_ammo = 60
+reload_time = 1.9
+move_speed_multiplier = 1.05
+recoil_vertical = 0.5
+recoil_horizontal = 0.2
+recoil_max_vertical = 4.0
+model_key = &"weapon_pistol"
+color = Color(0.5568628, 0.57254905, 0.5882353, 1)

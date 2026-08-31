@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_3iwtq"]
+
+[resource]
+script = ExtResource("1_3iwtq")
+id = &"sniper_horizon"
+display_name = "Horizon DMR"
+category = 3
+fire_mode = 1
+price = 3200
+damage = 68.0
+headshot_multiplier = 2.8
+armor_penetration = 0.85
+range = 160.0
+falloff_start = 80.0
+falloff_end = 150.0
+falloff_min_multiplier = 0.7
+fire_rate = 180.0
+mag_size = 10
+reserve_ammo = 40
+reload_time = 2.8
+move_speed_multiplier = 0.9
+spread_base = 2.2
+spread_moving = 7.0
+spread_ads = -2.0
+recoil_vertical = 1.6
+recoil_horizontal = 0.4
+recoil_recovery = 10.0
+recoil_max_vertical = 7.0
+ads_zoom = 2.5
+ads_time = 0.28
+model_key = &"weapon_sniper"
+color = Color(0.3372549, 0.3764706, 0.4392157, 1)

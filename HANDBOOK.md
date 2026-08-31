@@ -1,22 +1,22 @@
-# Raptor Strike - Modding & Development Handbook
+# Raptor Strike - Modding & Development Handbook (Godot 4.7)
 
 Everything you need to change this prototype without rewriting it.
 
-Each section names **exactly which file to open**, shows a **concrete example**, and
-lists **what else (if anything) is affected**. If a section says "nothing else changes",
-that is a promise the architecture is meant to keep - if you find otherwise, that's a bug.
+Each section names **exactly which file to open**, shows a **concrete example**, and says
+what else (if anything) is affected. Where a section says "nothing else changes", that is a
+promise the architecture is meant to keep - if you find otherwise, that's a bug.
 
 ---
 
 ## Table of contents
 
-1. [Build & run](#1-build--run)
+1. [Open, run and test](#1-open-run-and-test)
 2. [Project structure](#2-project-structure)
 3. [Architecture in one page](#3-architecture-in-one-page)
 4. [Replacing capsule characters with dinosaur models](#4-replacing-capsule-characters-with-dinosaur-models)
 5. [Character classes: add, remove, change](#5-character-classes-add-remove-change)
 6. [Class stats](#6-class-stats)
-7. [Adding a new dinosaur (end-to-end)](#7-adding-a-new-dinosaur-end-to-end)
+7. [Adding a new dinosaur (end to end)](#7-adding-a-new-dinosaur-end-to-end)
 8. [Abilities](#8-abilities)
 9. [Weapons: creating and adding](#9-weapons-creating-and-adding)
 10. [Weapon tuning: damage, fire rate, ammo, reload, range, recoil](#10-weapon-tuning-damage-fire-rate-ammo-reload-range-recoil)
@@ -33,104 +33,102 @@ that is a promise the architecture is meant to keep - if you find otherwise, tha
 21. [Changing the UI](#21-changing-the-ui)
 22. [Sounds, music and VFX](#22-sounds-music-and-vfx)
 23. [Bots](#23-bots)
-24. [Input & controls](#24-input--controls)
+24. [Input and controls](#24-input-and-controls)
 25. [Events reference](#25-events-reference)
 26. [Testing](#26-testing)
-27. [Troubleshooting](#27-troubleshooting)
+27. [Exporting a build](#27-exporting-a-build)
+28. [Troubleshooting](#28-troubleshooting)
 
 ---
 
-## 1. Build & run
+## 1. Open, run and test
 
-There is **no build step and no install step**. The project is plain ES modules; three.js
-is vendored at `vendor/three.module.js` (MIT, see `vendor/THREE_LICENSE.txt`).
+**Requires Godot 4.7** (developed and verified against 4.7.2-stable). No addons, no C#,
+no external dependencies.
+
+- **Play:** open this folder with the Godot project manager and press **F5**.
+- **From the command line:**
 
 ```bash
-npm start                 # http://localhost:5173  (tools/dev-server.js, zero dependencies)
-npm start -- 8080         # different port
-npm test                  # 86 headless tests, ~8 seconds
-npm run sim               # simulate a whole bot-vs-bot match in the terminal
-npm run sim -- --verbose  # ...with a kill feed and bomb events
-npm run sim -- --seed 42  # a different (still deterministic) match
+godot --path .                                   # play
+godot --path . -- --seed 7 --difficulty hard     # options go after the bare --
+godot --headless --path . res://tests/test_main.tscn        # 83 tests, ~75s, exit code 0/1
+godot --headless --path . res://tools/headless_match.tscn -- --verbose   # simulate a whole match
+godot --path . res://tools/screenshot.tscn -- --out shot.png --autostart # capture a frame
 ```
 
-Any static file server works instead of `npm start` (e.g. `python3 -m http.server 5173`).
-You must serve over HTTP - opening `index.html` from the filesystem breaks ES module imports.
+**Command-line options** (always after a bare `--`):
 
-**URL parameters** (`src/main.js`):
-
-| Parameter | Example | Effect |
+| Option | Example | Effect |
 |---|---|---|
-| `seed` | `?seed=7` | deterministic match seed |
-| `map` | `?map=dust_proto` | pick a map from the registry |
-| `name` | `?name=Rex` | your player name |
-| `difficulty` | `?difficulty=hard` | bot difficulty (`easy`/`normal`/`hard`) |
-| `debug` | `?debug=1` | on-screen fps, phase, position, bot goals |
-
-**Switching to npm-installed three.js instead of the vendored copy:**
-`npm i three`, then edit the import map in `index.html`:
-
-```html
-<script type="importmap">
-  { "imports": { "three": "./node_modules/three/build/three.module.js" } }
-</script>
-```
+| `--seed` | `--seed 7` | deterministic match seed |
+| `--map` | `--map dust_proto` | map id from `Config.get_map()` |
+| `--difficulty` | `--difficulty hard` | bot difficulty (`easy`/`normal`/`hard`) |
+| `--class` | `--class TANK` | your starting class |
+| `--debug` | `--debug` | on-screen readout: fps, phase, position, bot goals |
 
 **Controls:** WASD move, Space jump, Ctrl crouch, Shift sprint, LMB fire, RMB aim,
-R reload, **E hold** to plant/defuse/pick up the bomb, 1/2/3/4 slots, V grenade,
-Q/F abilities, B shop, Tab scoreboard, P overhead debug camera, Esc release mouse.
+R reload, **E hold** to plant/defuse/pick up the bomb, 1/2/3 weapon slots, V grenade,
+Q/F abilities, B buy menu, Tab scoreboard, P overhead debug camera, Esc release the mouse.
 
 ---
 
 ## 2. Project structure
 
 ```
-index.html                      import map + canvas + #ui-root
-vendor/three.module.js          vendored three.js (swap for npm if you prefer)
+project.godot                 autoloads, input map, physics (64 Hz), layers
+icon.svg
 
-src/
-  main.js                       composition root for the browser build
-  config/                       ALL tunable data lives here - start here for balance changes
-    gameplay.config.js          match, round, bomb, economy, combat, movement, sim constants
-    classes.config.js           the five dinosaur classes
-    weapons.config.js           every weapon + equipment item
-    abilities.config.js         ability data + behaviour hooks
-    shop.config.js              buy-menu layout and purchase rules
-    bots.config.js              AI difficulty and behaviour tuning
-    input.config.js             key bindings and mouse sensitivity
-    audio.config.js             sound cue registry (placeholder tones)
-    visuals.config.js           colours, camera, lighting, effect tuning
-    maps/index.js               map registry
-    maps/dust_proto.map.js      the prototype map (areas + props + spawns + sites)
+autoload/                     singletons, loaded before everything else
+  events.gd                   Events   - the global signal hub
+  config.gd                   Config   - loads every data resource once
+  game.gd                     Game     - points at the current MatchSession
+  audio_manager.gd            AudioManager - event-driven cues
 
-  core/                         THE SIMULATION - no three.js, no DOM, runs in Node
-    GameManager.js              composition root + fixed-step tick order
-    entities/Character.js       a player/bot: transform + components
-    components/                 Health, Inventory, MovementController,
-                                EffectController, AbilityController, Intent
-    weapons/                    Weapon (runtime state), WeaponFactory
-    systems/                    CombatSystem, BombSystem, RoundManager, MatchManager,
-                                TeamManager, EconomySystem, ShopSystem, SpawnSystem
-    world/                      World (collision + raycasts), MapData, MapCompiler
-    ai/                         BotBrain, NavGrid (A*)
-    events/                     EventBus, GameEvents (the event catalogue)
-    math/                       vec3, aabb, seeded Random
+data/                         *** ALL TUNING LIVES HERE *** (.tres, inspector-editable)
+  config/game_config.tres     match, round, bomb, economy, combat, movement
+  config/bot_config.tres      bot difficulty and behaviour
+  weapons/*.tres              13 weapons
+  equipment/*.tres            5 pieces of gear
+  classes/*.tres              5 dinosaur classes
+  abilities/*.tres            10 abilities
 
-  render/                       three.js presentation layer (delete it and the game still runs)
-    Renderer.js                 scene, lights, camera modes, per-frame sync
-    ModelRegistry.js            *** THE MODEL SWAP POINT ***
-    CharacterView.js            one visual per character + name/health tag
-    MapView.js                  builds map meshes; prop model registry
-    ViewModel.js                first-person weapon
-    Effects.js                  tracers, impacts, explosions, bomb beacon
+scripts/
+  config/                     the Resource *types* behind those .tres files
+    game_config.gd  weapon_data.gd  equipment_data.gd  character_class_data.gd
+    ability_data.gd  bot_config.gd
+    map_definition.gd  map_area.gd  map_prop.gd  spawn_point_data.gd  bomb_site_data.gd
+  core/                       the simulation
+    match_session.gd          composition root: builds the world, owns the systems, ticks
+    character.gd              CharacterBody3D: transform + components, no input, no rules
+    character_models.gd       *** THE MODEL SWAP POINT ***
+    placeholder_capsule.gd    the stand-in dinosaur
+    character_visual.gd       mirrors simulation state onto whatever model is loaded
+    intent.gd                 the one input contract players and bots share
+    player_controller.gd      keyboard/mouse -> Intent, plus the camera
+    view_model.gd             first-person weapon
+    world_query.gd            "who is near?", "can A see B?", "what does this ray hit?"
+    ability_context.gd        the sandbox an ability runs inside
+    status_effect.gd          one timed modifier
+    game_enums.gd             every shared enum
+    components/               health, inventory, effects, abilities
+    weapons/                  weapon.gd (runtime state), grenade.gd
+    world/                    compiled_map.gd (rasteriser), map_builder.gd (nodes)
+    systems/                  combat, bomb, round, match, team, economy, shop, spawn
+    ai/bot_brain.gd           perceive -> pick a goal -> path -> shoot
+  abilities/                  one script per ability
+  ui/                         hud, shop, scoreboard, class select, screens, ui_root
+  maps/dust_proto_map.gd      the prototype map layout
 
-  ui/                           DOM HUD and overlays (+ styles.css)
-  audio/AudioManager.js         WebAudio; synthesised placeholders
-  platform/                     BrowserInput (keyboard/mouse -> Intent), GameLoop
+scenes/
+  main.tscn                   entry point: environment, sun, UI, spawns the MatchSession
+  character.tscn              body, collider, visual holder, head, name tag
+  ui/hud.tscn                 the HUD layout (edit this to restyle)
+  ui/ui_root.tscn             HUD + overlay screens
 
-tests/                          86 tests (node --test)
-tools/dev-server.js             static server
-tools/headless-match.js         full match simulation in the terminal
+tests/                        83 tests, run headless (see §26)
+tools/                        headless_match, screenshot, generate_data
+web-prototype/                the earlier three.js prototype, kept for reference
 ```
 
 ---
@@ -138,221 +136,206 @@ tools/headless-match.js         full match simulation in the terminal
 ## 3. Architecture in one page
 
 ```
-              input (keyboard/mouse)        BotBrain
-                        \                    /
-                         v                  v
-                      +--------------------------+
-                      |        Intent            |   one struct: move, look, fire, use...
-                      +--------------------------+
-                                   |
-                                   v
-   +-------------------------------------------------------------+
-   |                      GameManager.tick(dt)                    |
-   |  bots think -> apply intents -> movement -> systems -> round |
-   +-------------------------------------------------------------+
-        |            |             |            |            |
-     World      CombatSystem   BombSystem   EconomySystem  RoundManager
-   (collision,   (hitscan,     (plant/       (money)        (phases,
-    raycasts)     damage)       defuse)                      win rules)
-        \____________________ EventBus ______________________/
-                                   |
-                +------------------+------------------+
-                v                  v                  v
-            Renderer            HUD/UI            AudioManager
+        input (keyboard/mouse)                 BotBrain
+                    \                            /
+                     v                          v
+                  +--------------------------------+
+                  |            Intent              |   move, look, fire, use, abilities
+                  +--------------------------------+
+                                 |
+                                 v
+   +-------------------------------------------------------------------+
+   |                MatchSession._physics_process(delta)                |
+   |  bots think -> apply intents -> move bodies -> systems -> round    |
+   +-------------------------------------------------------------------+
+        |             |              |             |              |
+    WorldQuery   CombatSystem   BombSystem   EconomySystem   RoundManager
+   (raycasts,     (hitscan,     (plant/       (money)        (phases,
+    proximity)     damage)       defuse)                      win rules)
+        \_________________ Events (global signals) _________________/
+                                 |
+             +-------------------+--------------------+
+             v                   v                    v
+           HUD/UI          AudioManager        CharacterVisual
 ```
 
 Rules the codebase follows - keep them and extensions stay cheap:
 
-1. **`src/core` never imports three.js or touches the DOM.** That is why `npm run sim`
-   can play a whole match in Node and why the tests are fast.
-2. **Systems talk through `EventBus`,** not direct references. Economy does not know
-   combat exists; it just listens for `CHARACTER_DIED`.
-3. **Players and bots are identical downstream of `Intent`.** Anything a bot can do,
-   a player can do.
-4. **Data over code.** Weapons, classes, abilities, prices, the map and the round rules
-   are objects in `src/config`, not `if` statements in systems.
-5. **The renderer is a read-only consumer.** Views read simulation state; they never
-   write to it.
+1. **One tick order, written down once.** `MatchSession.tick()` runs think -> act -> move ->
+   resolve -> round rules, every physics frame. No system schedules itself.
+2. **Systems talk through `Events`,** not direct references. `EconomySystem` does not know
+   `CombatSystem` exists; it listens for `character_died`.
+3. **Players and bots are identical downstream of `Intent`.** Anything a bot can do, a
+   player can do, and vice versa.
+4. **Data over code.** Weapons, classes, abilities, prices, round rules and the map are
+   resources and data, not `if` statements inside systems.
+5. **The visual layer only reads.** `CharacterVisual`, the HUD and the audio never write
+   simulation state.
+6. **`data/*.tres` is the source of truth for tuning.** `tools/generate_data.gd` can
+   regenerate the defaults, but it is a "restore defaults" button, not a build step.
 
 ---
 
 ## 4. Replacing capsule characters with dinosaur models
 
-**File: `src/render/ModelRegistry.js`. This is the only file you need to touch.**
+**File: `scripts/core/character_models.gd`. This is the only file you need to touch.**
 
-Each class declares a `visual.modelKey` in `src/config/classes.config.js`
-(`dino_ankylo`, `dino_ptera`, `dino_raptor`, `dino_para`, `dino_rex`). The registry maps
-that key to a factory. With no factory registered you get the placeholder capsule.
+Each class declares a `model_key` in its class resource (`data/classes/*.tres`):
+`dino_ankylo`, `dino_ptera`, `dino_raptor`, `dino_para`, `dino_rex`. The registry maps that
+key to a factory. With no factory registered you get the placeholder capsule.
 
-A model factory returns an object implementing this interface:
+A factory is `func(class_data: CharacterClassData, team_color: Color) -> Node3D`. The node
+it returns may implement any of these optional methods - `CharacterVisual` calls them only
+if they exist:
 
-```js
-{
-  object3D,                 // THREE.Object3D, origin at the character's feet
-  setPose?({ yaw, pitch, speed, crouching, airborne, aiming }),
-  playAnimation?(name),     // 'idle' | 'run' | 'jump' | 'fire' | 'death'
-  update?(dt),              // called every frame (drive your AnimationMixer here)
-  setVisible?(v), setOpacity?(o), setTeamColor?(hex), dispose?(),
-}
+```gdscript
+set_pose(pose: Dictionary)        # {yaw, pitch, speed, crouching, airborne, aiming}
+play_animation(name: StringName)  # &"idle" | &"run" | &"jump" | &"fire" | &"death"
+set_team_color(color: Color)
+set_opacity(value: float)         # used by camouflage
 ```
 
-Concrete example - a GLTF raptor with animations:
+Register your factories once at startup - anywhere that runs early, for example a new
+autoload or the top of `scripts/main.gd`:
 
-```js
-// src/render/ModelRegistry.js (bottom of the file)
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+```gdscript
+# scripts/render/dino_models.gd  (call register_all() from main.gd _ready)
+const RAPTOR := preload("res://assets/models/raptor.glb")
 
-const loader = new GLTFLoader();
-const cache = new Map();
+static func register_all() -> void:
+    CharacterModels.register(&"dino_raptor", func(class_data, team_color):
+        var model: Node3D = RAPTOR.instantiate()
+        model.scale = Vector3.ONE * class_data.model_scale
+        model.set_script(preload("res://scripts/render/raptor_model.gd"))
+        model.setup(team_color)
+        return model)
+```
 
-registerModel('dino_raptor', async ({ character, teamColor, THREE }) => {
-  if (!cache.has('raptor')) cache.set('raptor', await loader.loadAsync('assets/models/raptor.glb'));
-  const source = cache.get('raptor');
-  const scene = source.scene.clone(true);
-  scene.scale.setScalar(character.visual.scale);
+```gdscript
+# scripts/render/raptor_model.gd
+extends Node3D
+@onready var animation: AnimationPlayer = $AnimationPlayer
 
-  const mixer = new THREE.AnimationMixer(scene);
-  const actions = Object.fromEntries(source.animations.map((clip) => [clip.name, mixer.clipAction(clip)]));
-  let current = actions.idle?.play();
+func setup(team_color: Color) -> void:
+    $Body.material_override = ... # tint however you like
 
-  return {
-    object3D: scene,
-    setPose({ yaw, speed, crouching }) {
-      scene.rotation.y = yaw;                       // gameplay yaw drives the model
-      const next = speed > 0.5 ? actions.run : actions.idle;
-      if (next && next !== current) { current?.fadeOut(0.15); next.reset().fadeIn(0.15).play(); current = next; }
-    },
-    playAnimation(name) { actions[name]?.reset().play(); },
-    update(dt) { mixer.update(dt); },
-    setVisible(v) { scene.visible = v; },
-    setOpacity(o) { scene.traverse((c) => { if (c.material) { c.material.transparent = o < 1; c.material.opacity = o; } }); },
-    dispose() { mixer.stopAllAction(); },
-  };
-});
+func set_pose(pose: Dictionary) -> void:
+    rotation.y = pose["yaw"]
+    var clip := &"run" if pose["speed"] > 0.5 else &"idle"
+    if animation.current_animation != clip:
+        animation.play(clip)
+
+func play_animation(name: StringName) -> void:
+    animation.play(name)
 ```
 
 Notes:
 
-- `createCharacterModel` is called synchronously by `CharacterView`. If your factory is
-  `async`, either preload assets before the match (`await loader.loadAsync(...)` at module
-  scope) or return a placeholder group immediately and `.add()` the loaded model into it
-  when the promise resolves - the second pattern needs no other changes.
-- **The hitbox does not come from the model.** It comes from
-  `classes.config.js -> stats.hitboxRadius / hitboxHeight`. Match your model to those
-  numbers (or change them - see §6) or players will shoot at air.
-- Weapons work the same way: `registerWeaponModel('weapon_rifle', factory)`, keyed by
-  `weapons.config.js -> visual.modelKey`.
-- **No gameplay file changes.** `CharacterView`, `Renderer`, and all of `src/core` are untouched.
+- **The hitbox does not come from the model.** It comes from `hitbox_radius` /
+  `hitbox_height` in the class resource. Match your model to those numbers (or change
+  them - see §6) or players will be shooting at air.
+- The capsule placeholder lives in `scripts/core/placeholder_capsule.gd`; read it as a
+  worked example of the model interface.
+- Weapons work the same way: `ViewModel.register_weapon_model(&"weapon_rifle", factory)`,
+  keyed by `WeaponData.model_key`.
+- **No gameplay file changes.** `Character`, `MatchSession` and every system stay untouched.
 
 ---
 
 ## 5. Character classes: add, remove, change
 
-**File: `src/config/classes.config.js`.**
-
 ### Add a class
 
-```js
-export const ClassId = Object.freeze({
-  TANK: 'TANK', SNIPER: 'SNIPER', ASSASSIN: 'ASSASSIN', RANGER: 'RANGER', BRUISER: 'BRUISER',
-  SUPPORT: 'SUPPORT',                                  // <- 1. add the id
-});
+1. **Duplicate a class resource.** In the FileSystem dock, right-click
+   `data/classes/RANGER.tres` -> Duplicate -> `SUPPORT.tres`.
+2. **Edit it in the inspector**: set `id` to `SUPPORT` (it must match the file name's intent
+   and be unique), pick stats, allowed categories, abilities, and a `model_key`.
+3. That's it. `Config` scans `data/classes/` at startup, so the new class appears in the
+   class picker, gets its own filtered shop, and enters the bot class rotation.
 
-export const CLASS_DEFINITIONS = Object.freeze({
-  /* ...existing classes... */
-  [ClassId.SUPPORT]: {                                 // <- 2. add the definition
-    id: ClassId.SUPPORT,
-    displayName: 'Stego',
-    species: 'Stegosaurus',
-    role: 'Support',
-    description: 'Heals and shields the team while holding an angle.',
-    stats: {
-      maxHealth: 115, maxArmor: 100, startingArmor: 10, hasHelmetByDefault: false,
-      moveSpeed: 5.3, jumpVelocity: 6.9,
-      damageTakenMultiplier: 0.95, damageDealtMultiplier: 0.95,
-      hitboxRadius: 0.55, hitboxHeight: 1.88, eyeHeightFraction: 0.87,
-    },
-    allowedCategories: ['PISTOL', 'SMG', 'RIFLE', 'MELEE', 'EQUIPMENT'],
-    defaultLoadout: { primary: null, secondary: 'pistol_scav', melee: 'melee_claws' },
-    abilities: ['ability_field_dressing', 'ability_echo_call'],
-    visual: { modelKey: 'dino_stego', color: 0x6f9f4f, scale: 1.05 },
-    botPreference: { buyPriority: ['rifle_apex', 'smg_swarm'] },
-  },
-});
+To do the same in code (for example in `tools/generate_data.gd`):
+
+```gdscript
+var support := CharacterClassData.new()
+support.id = &"SUPPORT"
+support.display_name = "Stego"
+support.species = "Stegosaurus"
+support.role = "Support"
+support.max_health = 115.0
+support.move_speed = 5.3
+support.hitbox_radius = 0.55
+support.hitbox_height = 1.88
+support.allowed_categories = [
+    GameEnums.WeaponCategory.PISTOL, GameEnums.WeaponCategory.SMG,
+    GameEnums.WeaponCategory.RIFLE, GameEnums.WeaponCategory.MELEE,
+    GameEnums.WeaponCategory.EQUIPMENT] as Array[int]
+support.abilities = [&"ability_field_dressing", &"ability_echo_call"] as Array[StringName]
+support.bot_buy_priority = [&"rifle_apex", &"smg_swarm"] as Array[StringName]
+support.model_key = &"dino_stego"
+ResourceSaver.save(support, "res://data/classes/SUPPORT.tres")
 ```
-
-That is the whole job. `CLASS_IDS` is derived from the object, so the new class
-automatically appears in the class-select UI, gets its own shop filtered by
-`allowedCategories`, and enters the bot class rotation.
 
 ### Remove a class
 
-Delete its entry (and its `ClassId` key). Check nothing else references the id:
+Delete its `.tres`. Then check nothing still references the id:
 
 ```bash
-grep -rn "ASSASSIN" src/ tests/
+grep -rn "ASSASSIN" scripts/ tests/ data/
 ```
 
-`DEFAULT_CLASS_ID` and `GameManager`'s `playerClassId` default must point at a class
-that still exists.
+`Config.default_class_id()` falls back to `RANGER`, then to the first class found - make
+sure at least one class survives.
 
 ### Change which weapons a class may buy
 
-Edit `allowedCategories` (categories come from `WeaponCategory` in `weapons.config.js`).
-For per-weapon control, set `allowedClasses` on the weapon itself:
+Edit `allowed_categories` on the class resource. For per-weapon control, set
+`allowed_classes` on the weapon itself (empty = "any class whose categories allow it"):
 
-```js
-sniper_longneck: W({ /* ... */ allowedClasses: ['SNIPER'] }),   // only snipers, ever
+```gdscript
+sniper_longneck.allowed_classes = [&"SNIPER"]   # only snipers, ever
 ```
 
 ---
 
 ## 6. Class stats
 
-**File: `src/config/classes.config.js` -> `CLASS_DEFINITIONS[<id>].stats`.**
+**File: `data/classes/<CLASS>.tres`** (inspector), typed by
+`scripts/config/character_class_data.gd`.
 
-| Field | Meaning | Read by |
+| Property | Meaning | Read by |
 |---|---|---|
-| `maxHealth` | hit points | `Health` |
-| `maxArmor` / `startingArmor` | armour cap / free armour each round | `Health` |
-| `hasHelmetByDefault` | free helmet | `Health` |
-| `moveSpeed` | base walk speed (world units/s) | `MovementController.targetSpeed()` |
-| `jumpVelocity` | jump impulse | `MovementController` |
-| `damageTakenMultiplier` | <1 = tanky | `CombatSystem.applyDamage` |
-| `damageDealtMultiplier` | >1 = hits harder | `CombatSystem.applyDamage` |
-| `hitboxRadius` / `hitboxHeight` | the capsule people shoot at | `World`, `CharacterView` |
-| `eyeHeightFraction` | camera height as a fraction of hitbox height | `Character.eyeHeight` |
+| `max_health` | hit points | `HealthComponent` |
+| `max_armor` / `starting_armor` | armour cap / free armour each round | `HealthComponent` |
+| `has_helmet_by_default` | free helmet | `HealthComponent` |
+| `move_speed` | base walk speed (m/s) | `Character.target_speed()` |
+| `jump_velocity` | jump impulse | `Character.tick_movement()` |
+| `damage_taken_multiplier` | below 1.0 = tanky | `CombatSystem.apply_damage()` |
+| `damage_dealt_multiplier` | above 1.0 = hits harder | `CombatSystem.apply_damage()` |
+| `hitbox_radius` / `hitbox_height` | the capsule people shoot at | `Character.apply_class()` |
+| `eye_height_fraction` | camera height as a fraction of hitbox height | `Character.eye_position()` |
 
-Example - make the Tank slower but tougher:
+Example - make the Tank slower but tougher: open `data/classes/TANK.tres` and set
+`max_health = 175`, `move_speed = 4.2`, `damage_taken_multiplier = 0.75`.
 
-```js
-[ClassId.TANK]: { stats: { maxHealth: 175, moveSpeed: 4.2, damageTakenMultiplier: 0.75, /* ... */ } }
-```
+Global movement feel (gravity, acceleration, friction, sprint/crouch multipliers, fall
+damage) is in `data/config/game_config.tres` under **Movement** and applies to every class.
 
-Global movement feel (acceleration, friction, gravity, sprint/crouch multipliers, step
-height, fall damage) lives in `MovementConfig` in `src/config/gameplay.config.js` and
-applies to every class.
-
-Changes take effect on the next `applyClass()` - i.e. next round or next match. Verify with:
-
-```bash
-npm test -- # tests/classes.test.js asserts stats reach the character
-```
+Changes take effect the next time `apply_class()` runs - that is, the next round or the
+next match.
 
 ---
 
-## 7. Adding a new dinosaur (end-to-end)
+## 7. Adding a new dinosaur (end to end)
 
-The full checklist for "a new playable dinosaur":
-
-1. **Class data** - add an entry to `CLASS_DEFINITIONS` (§5) with a unique `visual.modelKey`.
-2. **Abilities** - either reuse existing ability ids or add new ones (§8).
-3. **Model** - register a factory for the `modelKey` in `src/render/ModelRegistry.js` (§4).
-   Skip this and it uses a coloured capsule, which is fine for prototyping.
-4. **Weapons** - set `allowedCategories`, and add class-specific guns if wanted (§9).
-5. **Bot support** - set `botPreference.buyPriority` so bots buy sensibly. Nothing else:
-   bots handle any class automatically.
-6. **Audio/VFX (optional)** - add cues in `audio.config.js` and play them from an event.
+1. **Class data** - add `data/classes/<ID>.tres` with a unique `model_key` (§5).
+2. **Abilities** - reuse existing ability ids or add new ones (§8).
+3. **Model** - register a factory for the `model_key` (§4). Skip this and it gets a coloured
+   capsule, which is fine while you prototype.
+4. **Weapons** - set `allowed_categories`, and add class-specific guns if you want (§9).
+5. **Bots** - set `bot_buy_priority` so bots buy sensibly. Nothing else: bots handle any
+   class automatically.
+6. **Audio/VFX (optional)** - add cues in `autoload/audio_manager.gd` and play them from an
+   event.
 
 No system file changes at any step.
 
@@ -360,493 +343,414 @@ No system file changes at any step.
 
 ## 8. Abilities
 
-**File: `src/config/abilities.config.js`.**
+**Data: `data/abilities/*.tres`. Behaviour: `scripts/abilities/*.gd`.**
 
-An ability is data plus two optional hooks. It receives a sandboxed context - it can query
-the world, deal damage, and apply effects, and nothing else:
+An ability is a Resource that extends `AbilityData` and overrides `activate()`. It receives
+an `AbilityContext` - the only surface it may touch:
 
-```js
-ctx = {
-  character,                                  // the user
-  time,                                       // simulation seconds
-  bus,                                        // EventBus
-  world: { charactersWithin(pos, radius, { team, enemyOf, aliveOnly }), hasLineOfSight(a, b) },
-  combat: { applyDamage({ target, attacker, amount, source }) },
-  random,                                     // seeded RNG - never use Math.random()
-}
+```gdscript
+ctx.character                                   # the user
+ctx.time                                        # simulation seconds
+ctx.rng                                         # seeded RNG - never use randf() directly
+ctx.characters_within(origin, radius, filter)   # filter: {"enemy_of":, "team":, "alive_only":}
+ctx.has_line_of_sight(from_character, to_character)
+ctx.apply_damage(target, amount, source)
 ```
 
-Example - a smoke-like blind that slows and blurs enemies near a point:
+Adding one:
 
-```js
-ability_ash_cloud: {
-  id: 'ability_ash_cloud',
-  displayName: 'Ash Cloud',
-  description: 'Kick up ash: enemies nearby are slowed and cannot sprint for 5s.',
-  cooldown: 28,
-  duration: 5,
-  radius: 9,
-  onActivate(ctx) {
-    const def = ABILITY_DEFINITIONS.ability_ash_cloud;
-    for (const enemy of ctx.world.charactersWithin(ctx.character.position, def.radius, {
-      enemyOf: ctx.character, aliveOnly: true,
-    })) {
-      enemy.effects.add({
-        id: 'ash_blind',
-        duration: def.duration,
-        modifiers: { speedMultiplier: 0.55, spreadMultiplier: 2.5 },
-        visual: 'ash',
-      });
-    }
-  },
-  onEnd(ctx) { /* optional cleanup when the duration elapses */ },
-}
+```gdscript
+# scripts/abilities/ability_ash_cloud.gd
+class_name AbilityAshCloud
+extends AbilityData
+
+func activate(ctx: AbilityContext) -> void:
+    for enemy in ctx.characters_within(ctx.character.global_position, radius, {"enemy_of": ctx.character}):
+        enemy.effects.add(StatusEffect.new(&"ash_blind", duration, {
+            "speed": 0.55, "spread": 2.5,
+        }))
 ```
 
-Then list it on a class: `abilities: ['ability_ash_cloud', 'ability_pounce']`.
-Slot order = key order: **first = Q, second = F** (rebind in `input.config.js`).
+Then create the resource (inspector: New Resource -> AbilityAshCloud, save as
+`data/abilities/ability_ash_cloud.tres`, set `id`, `cooldown`, `duration`, `radius`), and
+list its id in a class's `abilities` array. Slot order is Q, then F (rebind in §24).
 
-**Available effect modifiers** (`src/core/components/EffectController.js`): `speedMultiplier`,
-`damageTakenMultiplier`, `damageDealtMultiplier`, `spreadMultiplier`, `gravityMultiplier`,
-`invisible`. To add a new modifier: add it to `NEUTRAL`, fold it in `_recompute()`, and read
-it where it matters (e.g. `MovementController.targetSpeed()`).
+**Effect modifier keys** (`scripts/core/components/effect_component.gd`): `speed`,
+`damage_taken`, `damage_dealt`, `spread`, `gravity`, `invisible`. To add a new one: add it
+to `NEUTRAL`, fold it in `_recompute()`, and read it where it matters (for example
+`Character.target_speed()`).
 
-Extra hooks available on an effect: `onTick(character, dt, ctx)` (see `ability_charge` for a
-per-tick trample) and `breakOnFire: true` (see `ability_camouflage`).
-
-Abilities can also be *instant* (`duration: 0`) or *charge-limited* (`chargesPerRound: 1`).
+Extra hooks on a `StatusEffect`: `tick_callback` (see `ability_charge.gd` for a per-tick
+trample) and `break_on_fire` (see `ability_camouflage.gd`). Abilities can be instant
+(`duration = 0`) or charge-limited (`charges_per_round`).
 
 ---
 
 ## 9. Weapons: creating and adding
 
-**File: `src/config/weapons.config.js`.** Weapons are data; there is no weapon subclassing.
+**Data: `data/weapons/*.tres`, typed by `scripts/config/weapon_data.gd`.**
 
-```js
-export const WEAPON_DEFINITIONS = Object.freeze({
-  /* ...existing... */
-  rifle_thagomizer: W({                       // W() merges WEAPON_DEFAULTS for you
-    id: 'rifle_thagomizer',                   // must equal the key
-    displayName: 'Thagomizer AR',
-    category: WeaponCategory.RIFLE,           // gates which classes may buy it
-    slot: WeaponSlot.PRIMARY,                 // primary | secondary | melee | grenade
-    fireMode: FireMode.AUTO,                  // AUTO | SEMI | BURST | MELEE | THROWN
-    price: 3100,
-    damage: 36, headshotMultiplier: 4.0, armorPenetration: 0.8,
-    fireRate: 600, magSize: 25, reserveAmmo: 75, reloadTime: 2.6, equipTime: 0.8,
-    range: 110, falloffStart: 50, falloffEnd: 95, falloffMinMultiplier: 0.6,
-    moveSpeedMultiplier: 0.94, killReward: 300,
-    spread:  { base: 0.5, moving: 3.8, jumping: 6.5, crouching: -0.3, ads: -0.4 },
-    recoil:  { vertical: 0.6, horizontal: 0.25, recovery: 6.5, recoveryDelay: 0.22, maxVertical: 10 },
-    visual:  { modelKey: 'weapon_rifle', color: 0x5a6b52 },
-    allowedClasses: null,                     // null = any class whose categories allow it
-  }),
-});
+Weapons are data, not subclasses: `Weapon` (`scripts/core/weapons/weapon.gd`) holds only
+mutable state (ammo, cooldowns, recoil) and reads every stat from the resource.
+
+**In the editor:** duplicate `data/weapons/rifle_ranger.tres`, rename it
+`rifle_thagomizer.tres`, set `id = rifle_thagomizer`, and tune it in the inspector.
+
+**In code** (for example inside `tools/generate_data.gd`, next to the others):
+
+```gdscript
+_weapon({
+    "id": &"rifle_thagomizer", "display_name": "Thagomizer AR",
+    "category": GameEnums.WeaponCategory.RIFLE, "slot": GameEnums.WeaponSlot.PRIMARY,
+    "fire_mode": GameEnums.FireMode.AUTO, "price": 3100,
+    "damage": 36.0, "fire_rate": 600.0, "mag_size": 25, "reserve_ammo": 75,
+    "reload_time": 2.6, "range": 110.0, "falloff_start": 50.0, "falloff_end": 95.0,
+    "armor_penetration": 0.8, "move_speed_multiplier": 0.94,
+    "spread_base": 0.5, "spread_moving": 3.8,
+    "recoil_vertical": 0.6, "recoil_max_vertical": 10.0,
+    "model_key": &"weapon_rifle", "color": Color("5a6b52"),
+})
 ```
 
-Then make it purchasable - `src/config/shop.config.js`:
+It appears in the shop automatically for every class whose `allowed_categories` include
+`RIFLE` - the buy menu is generated from the data, not from a list (§11).
 
-```js
-{ id: 'RIFLE', displayName: 'Rifles', items: ['rifle_apex', 'rifle_bulwark', 'rifle_ranger', 'rifle_thagomizer'] },
-```
-
-That's it. `WeaponFactory` instantiates it, the shop lists it for every class with
-`RIFLE` in `allowedCategories`, and `tests/weapons.test.js` validates it on the next run.
-
-**Equipment** (non-shooting items) goes in `EQUIPMENT_DEFINITIONS` in the same file, with an
-`apply(character)` and an optional `canBuy(character)`:
-
-```js
-eq_stim: {
-  id: 'eq_stim', displayName: 'Adrenal Gland', category: WeaponCategory.EQUIPMENT,
-  price: 500, description: 'Move 20% faster for 12 seconds after the round starts.',
-  apply: (character) => character.effects.add({ id: 'stim', duration: 12, modifiers: { speedMultiplier: 1.2 } }),
-  canBuy: (character) => !character.effects.has('stim'),
-  sideRestriction: 'ATTACKERS',              // optional: ATTACKERS | DEFENDERS
-},
-```
-
-**Throwables** need a `grenade` block (see `eq_frag`): `fuseTime`, `damage`, `radius`,
-`minDamageFraction`, `throwSpeed`, `gravityScale`, `bounce`, `killReward`.
+**Equipment** (`data/equipment/*.tres`, typed by `scripts/config/equipment_data.gd`) has an
+`effect` enum instead of stats: `ARMOR`, `ARMOR_HELMET`, `DEFUSE_KIT`, `GRENADE`, `HEAL`.
+Adding a new *kind* of gear means adding an enum value and one branch in
+`EquipmentData.apply()` - never a change in `ShopSystem`.
 
 ---
 
 ## 10. Weapon tuning: damage, fire rate, ammo, reload, range, recoil
 
-All in `src/config/weapons.config.js`. Defaults for every field live in `WEAPON_DEFAULTS`
-at the top - change one there and every weapon that doesn't override it follows.
+All in `data/weapons/<weapon>.tres` (inspector), grouped exactly as listed here.
 
-| Want to change | Field(s) | Notes |
+| Want to change | Property | Notes |
 |---|---|---|
-| Damage | `damage` | before falloff/zone multipliers |
-| Headshot damage | `headshotMultiplier` | `HEAD` zone only |
-| Armour effectiveness | `armorPenetration` | 0..1, fraction bypassing armour |
-| Fire rate | `fireRate` | rounds per minute |
-| Burst behaviour | `burstCount`, `burstDelay` | with `fireMode: BURST` |
-| Magazine / reserve | `magSize`, `reserveAmmo` | `Infinity` = never reload (melee) |
-| Reload time | `reloadTime` | seconds |
-| Draw time | `equipTime` | cannot fire while drawing |
+| Damage | `damage` | before falloff and hit-zone multipliers |
+| Headshot damage | `headshot_multiplier` | HEAD zone only |
+| Armour effectiveness | `armor_penetration` | 0..1, fraction that bypasses armour |
+| Fire rate | `fire_rate` | **rounds per minute** |
+| Burst behaviour | `burst_count`, `burst_delay` | with `fire_mode = BURST` |
+| Magazine / reserve | `mag_size`, `reserve_ammo` | `-1` = never reloads (melee) |
+| Reload time | `reload_time` | seconds |
+| Draw time | `equip_time` | cannot fire while drawing |
 | Max range | `range` | rays stop here |
-| Damage falloff | `falloffStart`, `falloffEnd`, `falloffMinMultiplier` | linear between start and end |
-| Hip/moving accuracy | `spread.base`, `spread.moving`, `spread.jumping` | degrees of cone |
-| Crouch/ADS accuracy | `spread.crouching`, `spread.ads` | **added**, so negative = tighter |
-| Recoil climb | `recoil.vertical`, `recoil.horizontal`, `recoil.maxVertical` | degrees per shot |
-| Recoil recovery | `recoil.recovery`, `recoil.recoveryDelay` | recovery starts `recoveryDelay` after the last shot |
-| Shotgun pellets | `pellets` | each pellet is a separate ray |
-| Scope | `adsZoom`, `adsTime` | FOV divisor; `>= 2` also hides the crosshair |
-| Carry speed | `moveSpeedMultiplier` | multiplies class `moveSpeed` |
-| Kill money | `killReward` | paid by `EconomySystem` |
+| Damage falloff | `falloff_start`, `falloff_end`, `falloff_min_multiplier` | linear between start and end |
+| Hip/moving accuracy | `spread_base`, `spread_moving`, `spread_jumping` | degrees of cone |
+| Crouch/ADS accuracy | `spread_crouching`, `spread_ads` | **added**, so negative = tighter |
+| Recoil climb | `recoil_vertical`, `recoil_horizontal`, `recoil_max_vertical` | degrees per shot |
+| Recoil recovery | `recoil_recovery`, `recoil_recovery_delay` | recovery starts this long after the last shot, never mid-burst |
+| Shotgun pellets | `pellets` | each pellet is its own ray |
+| Scope | `ads_zoom`, `ads_time` | FOV divisor; `>= 2` also hides the crosshair |
+| Carry speed | `move_speed_multiplier` | multiplies the class `move_speed` |
+| Kill money | `kill_reward` | paid by `EconomySystem` |
 
-Damage actually applied is:
+The damage actually applied is:
 
 ```
 damage
-  x range falloff                       (CombatSystem._falloffMultiplier)
-  x hit-zone multiplier                 (CombatConfig.hitZones, gameplay.config.js)
-  x weapon headshotMultiplier           (head only)
-  x attacker damageDealtMultiplier      (class + active effects)
-  x target damageTakenMultiplier        (class + active effects)
-  -> armour model                       (Health.takeDamage, armorPenetration)
+  x range falloff                    (WeaponData.falloff_multiplier)
+  x hit-zone multiplier              (GameConfig.hit_zone_multiplier)
+  x weapon headshot_multiplier       (head only)
+  x attacker damage_dealt_multiplier (class + active effects)
+  x target damage_taken_multiplier   (class + active effects)
+  -> armour model                    (HealthComponent.take_damage, armor_penetration)
 ```
 
-Hit zones and their sizes are in `CombatConfig` (`headZoneFraction`, `stomachZoneFraction`,
-`legsZoneFraction`) in `src/config/gameplay.config.js`.
+Hit-zone sizes are `head_zone_fraction`, `stomach_zone_fraction` and `legs_zone_fraction`
+in `data/config/game_config.tres`.
 
 ---
 
 ## 11. Shop items and prices
 
-- **Price**: on the item itself in `weapons.config.js` (`price:`). One number, one place.
-- **Which items appear and in what order**: `SHOP_CATEGORIES` in `src/config/shop.config.js`.
-- **Purchase rules**: `ShopConfig` in the same file.
+- **Price:** the `price` property on the item resource itself. One number, one place.
+- **What appears and in what order:** `ShopSystem.CATEGORY_ORDER` and `CATEGORY_NAMES` in
+  `scripts/core/systems/shop_system.gd`. The *items* inside each category are collected
+  from the data, filtered by class, and sorted by price - you never maintain a list.
+- **Purchase rules:** `shop_require_spawn_zone` and `shop_allowed_phases` in
+  `data/config/game_config.tres`.
 
-```js
-export const ShopConfig = Object.freeze({
-  allowedPhases: ['BUY', 'WARMUP'],  // add 'LIVE' for buy-anytime
-  requireSpawnZone: true,            // false = buy anywhere on the map
-  refundWindow: 0,
-  dropWeaponOnDeath: true,
-});
-```
+Rejections are reported as `GameEnums.PurchaseResult` values (`WRONG_PHASE`,
+`NOT_IN_BUY_ZONE`, `NOT_ENOUGH_MONEY`, `CLASS_RESTRICTED`, `SIDE_RESTRICTED`,
+`ALREADY_OWNED`, `UNKNOWN_ITEM`, `DEAD`). The buy menu greys out what you cannot afford and
+shows the reason as a tooltip; items your class can *never* use are hidden entirely.
 
-Rejections are reported with a reason code (`PurchaseRejection` in
-`src/core/systems/ShopSystem.js`): `WRONG_PHASE`, `NOT_IN_BUY_ZONE`, `NOT_ENOUGH_MONEY`,
-`CLASS_RESTRICTED`, `SIDE_RESTRICTED`, `ALREADY_OWNED`, `UNKNOWN_ITEM`, `DEAD`. The buy
-menu greys items out and shows the reason as a tooltip; items a class can *never* use are
-hidden entirely.
-
-To change how the menu *looks*, edit `src/ui/ShopUI.js` and the `#shop` rules in
-`src/ui/styles.css`.
+To restyle the menu, edit `scripts/ui/shop_ui.gd` (and `scripts/ui/overlay_panel.gd` for
+the shared frame).
 
 ---
 
 ## 12. Starting money and economy rewards
 
-**File: `src/config/gameplay.config.js` -> `EconomyConfig`.**
+**File: `data/config/game_config.tres` -> Economy group.**
 
-```js
-export const EconomyConfig = Object.freeze({
-  startingMoney: 800,          // per player at match start and after the side switch
-  maxMoney: 16000,
-  resetOnSideSwitch: true,     // false = carry money into the second half
+| Property | Default | Meaning |
+|---|---|---|
+| `starting_money` | 800 | per player at match start and after the side switch |
+| `max_money` | 16000 | wallet cap |
+| `reset_money_on_side_switch` | true | false = carry money into the second half |
+| `round_win_reward` | 3250 | to every member of the winning team |
+| `bomb_detonated_bonus` / `bomb_defused_bonus` | 300 | on top of the win reward |
+| `loss_bonus_base` / `loss_bonus_increment` / `loss_bonus_max` | 1400 / 500 / 3400 | consecutive-loss bonus |
+| `loss_with_plant_bonus` | 800 | lost the round but planted |
+| `plant_reward` / `defuse_reward` | 300 | to the individual |
+| `team_kill_penalty` / `suicide_penalty` | -300 | |
 
-  roundWinReward: 3250,
-  bombDetonatedBonus: 300,     // on top of the win reward
-  bombDefusedBonus: 300,
+Per-kill money is the **weapon's** `kill_reward` - that is how a claw kill pays 1200 while
+a sniper kill pays 100.
 
-  lossBonusBase: 1400,         // 1st loss
-  lossBonusIncrement: 500,     // per additional consecutive loss
-  lossBonusMax: 3400,
-  lossWithPlantBonus: 800,     // lost the round but planted
-
-  plantReward: 300,            // to the planter
-  defuseReward: 300,           // to the defuser
-  teamKillPenalty: -300,
-  suicidePenalty: -300,
-});
-```
-
-Per-kill money is the **weapon's** `killReward` (`weapons.config.js`) - that is how a
-knife kill can pay 1200 while an AWP kill pays 100.
-
-`tests/economy.test.js` covers every one of these numbers; run `npm test` after edits.
+`tests/test_economy.gd` covers every one of these numbers; run the suite after editing.
 
 ---
 
 ## 13. Round settings
 
-**File: `src/config/gameplay.config.js` -> `RoundConfig`.**
+**File: `data/config/game_config.tres` -> Round group.**
 
-```js
-export const RoundConfig = Object.freeze({
-  warmupDuration: 6,        // free roam before round 1
-  buyDuration: 15,          // freeze time; players rooted, shop open
-  roundDuration: 115,       // live time before defenders win on the clock
-  roundEndDuration: 5,      // pause between rounds
-  buyGraceDuration: 0,
-  respawnDuringWarmup: true,
-  warmupRespawnDelay: 3,
-});
-```
+| Property | Default | Meaning |
+|---|---|---|
+| `warmup_duration` | 6 | free roam before round 1 |
+| `buy_duration` | 15 | freeze time; players rooted, shop open |
+| `round_duration` | 115 | live time before the defenders win on the clock |
+| `round_end_duration` | 5 | pause between rounds |
+| `respawn_during_warmup` | true | warmup deathmatch |
 
-The state machine is `src/core/systems/RoundManager.js`:
+The state machine is `scripts/core/systems/round_manager.gd`:
 
 ```
 WARMUP -> BUY -> LIVE -> ROUND_END -> BUY (next round) ... -> MATCH_END
 ```
 
-- **Freeze time**: `_enterPhase(BUY)` sets `character.frozen = true` and
-  `combat.combatEnabled = false`.
-- **Skipping a phase** (a "ready up" button, or tests): `game.round.skipPhase()`.
-- **Pausing** (debugging): `game.round.paused = true`.
-- **Adding a phase**: add it to `RoundPhase` in the config, handle it in `update()` and
-  `_enterPhase()`. The UI reads `game.round.phase` and will show the raw name until you add
-  a label in `phaseLabel()` in `src/ui/HUD.js`.
+- **Freeze time** is `_enter_phase(BUY)` setting `character.frozen = true` and
+  `combat.combat_enabled = false`.
+- **Skip a phase** (a "ready up" button, or a test): `session.round_manager.skip_phase()`.
+- **Pause everything** (debugging): `session.round_manager.paused = true`.
+- **Add a phase:** add it to `GameEnums.RoundPhase`, handle it in `update()` and
+  `_enter_phase()`, and give it a label in `HUD._phase_label()`.
 
 ---
 
 ## 14. Win conditions
 
-**File: `src/config/gameplay.config.js` -> `MatchConfig`.**
+**File: `data/config/game_config.tres` -> Match group.**
 
-```js
-export const MatchConfig = Object.freeze({
-  roundsToWin: 13,             // first team to this many round wins takes the match
-  switchSidesAfterRound: 12,   // sides swap once this many rounds are complete
-  maxRounds: 24,               // regulation cap (2 x switchSidesAfterRound)
-  overtime: { enabled: false, roundsPerHalf: 3, startingMoney: 12500 },
-  teamSize: 5,
-});
-```
+| Property | Default | Meaning |
+|---|---|---|
+| `rounds_to_win` | 13 | first team to this many round wins takes the match |
+| `switch_sides_after_round` | 12 | sides swap once this many rounds are complete |
+| `max_rounds` | 24 | regulation cap (normally 2 x the switch round) |
+| `team_size` | 5 | players per team; empty slots become bots |
+| `overtime_enabled` | false | when false, an exhausted regulation is a draw |
 
 Examples:
 
-- **Short scrim (first to 5, switch at 4):** `{ roundsToWin: 5, switchSidesAfterRound: 4, maxRounds: 8 }`
-- **MR15 (first to 16, switch at 15):** `{ roundsToWin: 16, switchSidesAfterRound: 15, maxRounds: 30 }`
-- **Enable overtime instead of draws:** `overtime.enabled: true` - sides then switch every
-  `roundsPerHalf` overtime rounds and everyone gets `overtime.startingMoney`.
+- **Short scrim (first to 5, switch at 4):** `rounds_to_win = 5`,
+  `switch_sides_after_round = 4`, `max_rounds = 8`.
+- **MR15 (first to 16, switch at 15):** `16 / 15 / 30`.
+- **Overtime instead of draws:** `overtime_enabled = true`; sides then switch every
+  `overtime_rounds_per_half` rounds and everyone gets `overtime_starting_money`.
 
 **Round** win conditions live in `RoundManager` and are deliberately explicit:
 
 | Condition | Winner | Implemented in |
 |---|---|---|
-| Bomb detonates | attackers | `_onBombExploded` |
-| Bomb defused | defenders | `_onBombDefused` |
-| All defenders dead | attackers | `_checkElimination` |
-| All attackers dead **and bomb not planted** | defenders | `_checkElimination` |
-| Round timer expires with no plant | defenders | `_updateLive` |
+| Bomb detonates | attackers | `_on_bomb_exploded()` |
+| Bomb defused | defenders | `_on_bomb_defused()` |
+| All defenders dead | attackers | `_check_elimination()` |
+| All attackers dead **and the bomb is not planted** | defenders | `_check_elimination()` |
+| Round timer expires with no plant | defenders | `_update_live()` |
 
-Note the deliberate CS rule: once the bomb is planted, wiping the attackers does **not**
-end the round - the defenders must defuse. Change that by removing the `!this.bomb.isPlanted`
-guard in `_checkElimination`.
+Note the deliberate CS rule: once the bomb is planted, wiping the attackers does **not** end
+the round - the defenders have to defuse. Remove the `not bomb.is_planted()` guard in
+`_check_elimination()` to change that.
 
 ---
 
 ## 15. Bomb: timer, plant, defuse
 
-**File: `src/config/gameplay.config.js` -> `BombConfig`.**
+**File: `data/config/game_config.tres` -> Bomb group.**
 
-```js
-export const BombConfig = Object.freeze({
-  fuseDuration: 40,               // plant -> detonation
-  plantDuration: 3.2,             // uninterrupted hold to plant
-  defuseDuration: 10,             // without a kit
-  defuseDurationWithKit: 5,       // with eq_defuser
-  plantMaxHeightAboveSite: 2.5,   // stops planting on top of tall cover
-  interactRadius: 2.2,            // defuse/interact distance
-  explosionRadius: 28,
-  explosionDamage: 500,
-  explosionMinDamageFraction: 0.15,
-  carrierSide: Side.ATTACKERS,
-  pickupRadius: 1.8,
-});
-```
+| Property | Default | Meaning |
+|---|---|---|
+| `bomb_fuse_duration` | 40 | plant to detonation |
+| `plant_duration` | 3.2 | uninterrupted hold to plant |
+| `defuse_duration` / `defuse_duration_with_kit` | 10 / 5 | |
+| `plant_max_height_above_site` | 2.5 | stops planting from on top of tall cover |
+| `bomb_interact_radius` | 2.2 | defuse distance |
+| `bomb_pickup_radius` | 1.8 | pick a dropped bomb back up |
+| `explosion_radius` / `explosion_damage` / `explosion_min_damage_fraction` | 28 / 500 / 0.15 | |
 
-Behaviour lives in `src/core/systems/BombSystem.js` (state machine:
-`CARRIED -> DROPPED/PLANTED -> DEFUSED/EXPLODED`). It emits events and never decides who
+Behaviour is `scripts/core/systems/bomb_system.gd`
+(`CARRIED -> DROPPED/PLANTED -> DEFUSED/EXPLODED`). It emits events and never decides who
 wins - `RoundManager` does that.
 
 Common tweaks:
 
-- **Plant anywhere (no sites):** make `siteAt()` return a dummy site.
+- **Plant anywhere:** make `site_at()` return a dummy site.
 - **Require standing still to plant:** in `update()`, add
-  `if (character.movement.horizontalSpeed > 0.5) this.cancelPlant();`
-- **Defuse without a kit only within the last 10s:** guard inside `canDefuse()`.
-- **The bomb never drops:** remove the `_onCharacterDied` -> `drop()` call.
+  `if planting.horizontal_speed() > 0.5: cancel_plant()`.
+- **Defuse only in the last 10 seconds:** guard inside `can_defuse()`.
+- **The bomb never drops:** remove the `drop()` call in `_on_character_died()`.
 
-The HUD's plant/defuse prompt and progress bar come from `bomb.canPlant/canDefuse/
-plantProgress/defuseProgress` in `src/ui/HUD.js -> _updateInteraction`.
+The plant/defuse prompt and progress bar come from `can_plant` / `can_defuse` /
+`plant_progress` / `defuse_progress` in `HUD._update_interaction()`.
 
 ---
 
 ## 16. Editing the map
 
-**File: `src/config/maps/dust_proto.map.js`.**
+**File: `scripts/maps/dust_proto_map.gd`.**
 
-The map is authored as **walkable rectangles** ("areas") plus **props**. `MapCompiler`
-(`src/core/world/MapCompiler.js`) rasterises the areas on a grid, turns all the *non*-walkable
-space into merged wall boxes, and builds the bot navigation grid. **You never place a wall
-by hand, and you cannot leave an accidental hole between two rooms.**
+The map is authored as **walkable rectangles** ("areas") plus **props**.
+`CompiledMap.compile()` rasterises the areas onto a grid, turns every cell that is *not*
+walkable into merged wall boxes, and builds the navigation mesh from the same grid.
+**You never place a wall by hand, and the layout cannot develop a hole between two rooms.**
 
-Orientation: `+Z` is north (defender side), `-Z` south (attacker side), `+X` east (A side),
-`-X` west (B side), `Y` up, floor at 0. Rectangles are `[x0, z0, x1, z1]`.
+Orientation: `+Z` north (defenders), `-Z` south (attackers), `+X` east (A side), `-X` west
+(B side), `Y` up, floor at 0.
 
 ### Add a room or corridor
 
-```js
-area('A_BALCONY', [58, 24, 70, 40], { label: 'A Balcony' }),
+```gdscript
+MapArea.make(&"A_BALCONY", 58, 24, 70, 40, "A Balcony"),
 ```
 
-Two areas connect wherever their rectangles **touch or overlap**. `A_BALCONY` starts at
-x=58, which is where `A_SITE` ends, so they are connected. Walls are regenerated around it
-automatically.
+Areas connect wherever their rectangles touch or overlap: `A_BALCONY` starts at x=58, which
+is where `A_SITE` ends, so they are joined and the walls regenerate around it.
 
 ### Add cover
 
-```js
-box('a_balcony_crate', { at: [64, 32], size: [3, 2.2, 3], color: 0xa8792f }),
-cylinder('a_balcony_pillar', { at: [60, 36], radius: 1.1, height: 5 }),
-...stairs('a_balcony_steps', { at: [58, 22], width: 5, length: 3, height: 1.2, steps: 3, direction: '+z' }),
+```gdscript
+MapProp.box(&"a_balcony_crate", Vector2(64, 32), Vector3(3, 2.2, 3), 0.0, CRATE),
+MapProp.cylinder(&"a_balcony_pillar", Vector2(60, 36), 1.1, 5.0, 0.0, PILLAR),
+MapProp.ramp(&"a_balcony_ramp", Vector2(58, 22), 5.0, 3.0, 1.2, "+z", RAMPC),
 ```
 
-- `at` is the **footprint centre** `[x, z]`; `size` is `[width, height, depth]`; `y` is the base (default 0).
-- Props taller than **1.4** units block bot navigation by default. Override with `blocksNav: false`
-  (do this for platforms and low crates bots should walk over) or `blocksNav: true`.
-- `stairs(...)` returns an **array**, so spread it: `...stairs(...)`.
-- Anything a character can step onto must rise in increments under
-  `MovementConfig.stepHeight` (0.6) - that is what `stairs()` guarantees.
+- `Vector2(x, z)` is the **footprint centre**; `Vector3(w, h, d)` is the size; the next
+  argument is the base height.
+- Props taller than **1.4** block bot navigation by default. Pass `0` as the last argument
+  to keep a low crate navigable, or `1` to force blocking.
+- `MapProp.ramp(id, at, width, length, height, direction, color)` builds a walkable slope -
+  that is how characters reach the raised platforms.
 
-### Move spawns / buy zones
+### Move spawns, buy zones and sites
 
-```js
-spawns: {
-  ATTACKERS: [spawn([-16, -66], Math.PI), /* ... */],   // yaw: PI faces north, 0 faces south
-  DEFENDERS: [spawn([-10, 68], 0), /* ... */],
-},
-buyZones: { ATTACKERS: [-30, -72, 30, -56], DEFENDERS: [-14, 56, 14, 72] },
+```gdscript
+map.attacker_spawns = [SpawnPointData.make(-16, -66, PI), ...]   # PI faces north, 0 faces south
+map.attacker_buy_zone = Rect2(Vector2(-30, -72), Vector2(60, 16))
+map.bomb_sites = [BombSiteData.make(&"A", 34, 28, 52, 42, Vector3(42, 0, 32)), ...]
 ```
 
-Give each side at least `MatchConfig.teamSize` spawn points; extras are scattered nearby.
+Give each side at least `team_size` spawn points; extras are scattered nearby.
 
 ### Verify your edit
 
 ```bash
-npm test -- # tests/map.test.js flood-fills the nav grid and fails on unreachable pockets
+godot --headless --path . res://tests/test_main.tscn
 ```
 
-`tests/map.test.js` checks: everything is reachable, every spawn is walkable and inside its
-buy zone, and both bomb sites are pathable from both spawns. Then look at it in-game and
-press **P** for the overhead camera.
+`tests/test_map.gd` flood-fills the navigation grid and fails on unreachable pockets, checks
+every spawn is walkable and inside its buy zone, and proves both sites are pathable from
+both spawns. Then look at it: press **P** in game for the overhead camera.
 
-Map-level knobs: `cellSize` (grid resolution, default 2 - lower it for finer walls at the
-cost of more boxes), `wallHeight`, `padding`, `wallColor`, `floorColor`, `skyColor`, `fogDensity`.
+Map-level knobs on the `MapDefinition`: `cell_size` (grid resolution, default 2 - lower it
+for finer walls at the cost of more boxes), `wall_height`, `padding`, and the colours.
 
 ---
 
 ## 17. Replacing primitive map objects with art
 
-**File: `src/render/MapView.js`.** Two options:
+**File: `scripts/core/world/map_builder.gd`.** Two options:
 
-**A. Change how all primitives look** - edit `createSolidMesh(solid)`:
+**A. Change how all primitives look** - edit `_create_solid_mesh()`.
 
-```js
-createSolidMesh(solid) {
-  const material = this._material(solid.color, { map: this.crateTexture });
-  /* ...your geometry... */
-}
+**B. Give one prop (or one kind) a real model** - register a factory before the map is
+built. `MapBuilder.prop_models` is keyed by prop id (exact match wins) or by
+`GameEnums.PropKind` (`WALL`, `COVER`, `PLATFORM`, `RAMP`, `PILLAR`, `DECOR`):
+
+```gdscript
+# in MatchSession.configure(), before map_builder.build(...)
+map_builder.prop_models[&"a_platform"] = func(prop: MapProp) -> Node3D:
+    var model: Node3D = preload("res://assets/props/platform.glb").instantiate()
+    model.scale = prop.size / Vector3(10, 1.2, 7)   # the size the art was made at
+    return model
+map_builder.prop_models[GameEnums.PropKind.PILLAR] = func(prop): return pillar_scene.instantiate()
 ```
 
-**B. Give one prop (or one prop kind) a real model** - register a factory:
-
-```js
-// anywhere that runs before the Renderer is constructed (e.g. top of src/main.js)
-import { registerPropModel } from './render/MapView.js';
-import { PropKind } from './core/world/MapData.js';
-
-registerPropModel('a_platform', ({ solid, THREE }) => {
-  const mesh = crateModel.clone();          // your loaded GLTF
-  mesh.scale.set(solid.size.x, solid.size.y, solid.size.z);
-  return mesh;
-});
-registerPropModel(PropKind.PILLAR, ({ solid, THREE }) => pillarModel.clone());
-```
-
-The key is the prop `id` (exact match wins) or its `kind`
-(`WALL`, `COVER`, `PLATFORM`, `STAIRS`, `PILLAR`, `DECOR`).
-
-**Collision does not change.** Physics always uses the authored box/cylinder bounds, so a
-prettier crate never becomes a different obstacle. If you want art that is *not* solid, set
-`collidable: false` on the prop (it is then purely decorative).
+**Collision never changes.** Physics always uses the authored box/cylinder bounds, so nicer
+art can never become a different obstacle. For purely decorative art, set
+`collidable = false` on the prop.
 
 ---
 
 ## 18. Adding bomb sites
 
-**File: `src/config/maps/<map>.map.js`.**
+**File: `scripts/maps/<map>_map.gd`.**
 
-```js
-bombSites: [
-  bombSite('A', [34, 28, 52, 42], { label: 'Bomb Site A', plantPoint: { x: 42, y: 0, z: 32 } }),
-  bombSite('B', [-52, 28, -34, 42], { label: 'Bomb Site B', plantPoint: { x: -42, y: 0, z: 32 } }),
-  bombSite('C', [-9, -46, 9, -30], { label: 'Bomb Site C', plantPoint: { x: 0, y: 0, z: -38 } }),
-],
+```gdscript
+map.bomb_sites = [
+    BombSiteData.make(&"A", 34, 28, 52, 42, Vector3(42, 0, 32)),
+    BombSiteData.make(&"B", -52, 28, -34, 42, Vector3(-42, 0, 32)),
+    BombSiteData.make(&"C", -9, -46, 9, -30, Vector3(0, 0, -38)),
+]
 ```
 
-- `rect` is the plantable footprint; it must sit inside walkable areas.
-- `plantPoint` is where bots head to plant (defaults to the rect centre) - make sure it is
-  not inside a prop.
-- Everything adapts automatically: `BombSystem.siteAt()` scans all sites, the HUD prints
-  whichever `siteId` was planted, `MapView` draws a marker and a floor letter, and bots
-  distribute across sites (`BotBrain._planRound` picks uniformly for 3+ sites; for exactly
-  two it uses `BotConfig.siteBPreference`).
-- Removing a site is just deleting its entry - a one-site map works fine.
+- The rect is the plantable footprint and must sit inside walkable areas.
+- The plant point is where bots head to plant - keep it clear of props
+  (`tests/test_map.gd` checks this).
+- Everything adapts: `BombSystem.site_at()` scans all sites, the HUD prints whichever
+  `site_id` was planted, `MapBuilder` draws a marker and a floor letter, and bots spread
+  across sites (`BotBrain._plan_round()` picks uniformly for three or more; with exactly
+  two it uses `site_b_preference`).
+- Removing a site is just deleting its entry - a one-site map works.
 
 ---
 
 ## 19. Adding a new map
 
-1. Copy `src/config/maps/dust_proto.map.js` to `src/config/maps/my_map.map.js`.
-2. Change `id` and `displayName`, then edit areas/props/spawns/sites (§16).
-3. Register it in `src/config/maps/index.js`:
+1. Copy `scripts/maps/dust_proto_map.gd` to `scripts/maps/my_map.gd`, rename the class, and
+   change `id` / `display_name`.
+2. Edit its areas, props, spawns and sites (§16).
+3. Register it in `autoload/config.gd`:
 
-```js
-import MyMap from './my_map.map.js';
-export const MAPS = Object.freeze({ [DustProtoMap.id]: DustProtoMap, [MyMap.id]: MyMap });
+```gdscript
+func get_map(map_id: StringName = &"dust_proto") -> MapDefinition:
+    match map_id:
+        &"dust_proto": return DustProtoMap.build()
+        &"my_map": return MyMap.build()
+    ...
+
+func map_ids() -> Array[StringName]:
+    return [&"dust_proto", &"my_map"]
 ```
 
-4. Play it: `http://localhost:5173/?map=my_map`, or `new GameManager({ mapId: 'my_map' })`.
-5. Point `tests/map.test.js` at it (or parameterise the test over `listMaps()`) to get
-   connectivity checks for free.
+4. Play it: `godot --path . -- --map my_map`, or `MatchSession.configure({"map_id": &"my_map"})`.
 
 ---
 
 ## 20. Team rules
 
-**Files: `src/config/gameplay.config.js` (ids and sides) and
-`src/core/systems/TeamManager.js` (behaviour).**
+**Files: `scripts/core/systems/team_manager.gd` and `data/config/game_config.tres`.**
 
-The important distinction: a **team** (`TEAM_ONE`, `TEAM_TWO`) is permanent and owns the
+The distinction that matters: a **team** (`TEAM_ONE`, `TEAM_TWO`) is permanent and owns the
 score; a **side** (`ATTACKERS`, `DEFENDERS`) is a role that swaps at halftime. Never assume
-"team one attacks" - ask `teams.sideOf(teamId)`.
+"team one attacks" - ask `teams.side_of(team_id)`.
 
-Common changes:
+```gdscript
+# team names: scripts/core/match_session.gd, where TeamManager is constructed
+teams = TeamManager.new("Sauropods", "Theropods")
 
-```js
-// Team names (src/core/GameManager.js, where TeamManager is constructed)
-new TeamManager({ bus: this.bus, names: { TEAM_ONE: 'Sauropods', TEAM_TWO: 'Theropods' } })
-
-// Team size (src/config/gameplay.config.js)
-MatchConfig.teamSize = 3;
-
-// Friendly fire (src/config/gameplay.config.js -> CombatConfig)
-friendlyFire: true, friendlyFireMultiplier: 0.35,
+# team size: data/config/game_config.tres -> team_size
+# friendly fire: data/config/game_config.tres -> friendly_fire, friendly_fire_multiplier
 ```
 
-Adding a **third team** would need more: `TeamManager` assumes two teams in `switchSides()`
-and `MatchManager` compares two scores. The rest (spawns, sides, rounds) is already keyed by
-id, so it is contained work.
+Team colours come from `Character.team_color()` and the HUD's theme overrides.
 
-Team colours are `VisualsConfig.teamColors` in `src/config/visuals.config.js`.
+A **third team** would need more work: `switch_sides()` assumes two, and `MatchManager`
+compares two scores. Everything else is keyed by id already, so it is contained.
 
 ---
 
@@ -854,35 +758,24 @@ Team colours are `VisualsConfig.teamColors` in `src/config/visuals.config.js`.
 
 | Element | File |
 |---|---|
-| HUD (health, armour, ammo, money, timer, score, objective, killfeed, crosshair, banners) | `src/ui/HUD.js` |
-| Buy menu | `src/ui/ShopUI.js` |
-| Scoreboard (Tab) | `src/ui/Scoreboard.js` |
-| Class picker | `src/ui/ClassSelectUI.js` |
-| Start screen / match-end screen | `src/ui/Overlays.js` |
-| All styling | `src/ui/styles.css` |
+| HUD layout (score bar, clock, vitals, weapon, abilities, killfeed, crosshair, banner) | `scenes/ui/hud.tscn` - **edit this in the editor** |
+| HUD behaviour (what text goes where) | `scripts/ui/hud.gd` |
+| Buy menu | `scripts/ui/shop_ui.gd` |
+| Scoreboard (Tab) | `scripts/ui/scoreboard.gd` |
+| Class picker | `scripts/ui/class_select.gd` |
+| Title card / match end | `scripts/ui/start_screen.gd`, `scripts/ui/match_end_screen.gd` |
+| Shared menu frame (dim, panel, title, buttons) | `scripts/ui/overlay_panel.gd` |
+| Screen ownership and mouse capture | `scripts/ui/ui_root.gd` |
 
-The HUD builds its DOM from the `TEMPLATE` string at the bottom of `HUD.js` and refreshes
-it in `update(dt)`. To add a widget:
+The HUD is a normal Godot scene: move nodes, change fonts and colours in the inspector, and
+`hud.gd` keeps filling them in - it only ever sets `text`, `value`, `visible` and `modulate`.
+To add a widget: add the node in `hud.tscn`, add an `@onready` reference, and set it in
+`_process()`.
 
-```js
-// 1. add markup to TEMPLATE
-<div class="hud-panel" id="hud-streak"><span class="value">0</span><span class="label">STREAK</span></div>
-
-// 2. update it in update(dt)
-this.$('#hud-streak .value').textContent = this.game.localPlayer.score.kills;
-
-// 3. style it in styles.css
-#hud-streak { position: absolute; right: 18px; top: 120px; }
-```
-
-The UI is a **read-only consumer**: it reads `game.localPlayer`, `game.round`, `game.bomb`,
-`game.teams`, `game.match` and listens to events. Never mutate simulation state from the UI -
-route it through an intent or a system call (the shop's `game.shop.buy(...)` is the model).
-
-For a machine-readable snapshot (useful for a different UI framework, or for a spectator
-view) call `game.snapshot()`.
-
-Colours/theme: the CSS custom properties at the top of `styles.css`.
+The UI is a **read-only consumer**: it reads `Game.session`, `Game.local_player()` and the
+systems, and listens to `Events`. Never mutate simulation state from the UI - route it
+through an intent or a system call (`Game.session.shop.buy(...)` is the model).
+`MatchSession.snapshot()` gives a plain-data view if you want to build a different UI.
 
 ---
 
@@ -890,243 +783,241 @@ Colours/theme: the CSS custom properties at the top of `styles.css`.
 
 ### Sound
 
-**File: `src/config/audio.config.js`.** The prototype ships **no audio files** - every cue is
-a synthesised tone. Replace one by giving it a `src`:
+**File: `autoload/audio_manager.gd`.** No audio files ship with the prototype: every cue in
+the `CUES` dictionary is synthesised as a short tone at runtime. To use a real file, give
+the cue a `path`:
 
-```js
-'weapon.fire.RIFLE': { src: 'assets/audio/rifle_fire.ogg', category: 'sfx', volume: 0.4 },
+```gdscript
+&"weapon.fire.RIFLE": {"path": "res://assets/audio/rifle_fire.ogg", "volume": 0.4},
 ```
 
-Files are preloaded and decoded on `AudioManager.unlock()` (first click). Cue ids are looked
-up by name; weapon fire uses `weapon.fire.<CATEGORY>`, so a new weapon category needs a new
-cue - a missing cue logs one warning and is silent, it never throws.
+Cue ids are looked up by name; weapon fire uses `weapon.fire.<CATEGORY>`, so a new weapon
+category needs a new cue. A missing cue logs one warning and stays silent - it never throws.
 
-Add a *new* cue and play it from an event - `src/audio/AudioManager.js -> _bindEvents`:
+Adding a *new* cue means adding an entry to `CUES` and one line in `_bind_events()`:
 
-```js
-bus.on(GameEvents.ABILITY_USED, ({ character, abilityId }) =>
-  this.play(`ability.${abilityId}`, { position: character.position }));
+```gdscript
+Events.ability_used.connect(func(character, ability_id):
+    play(StringName("ability.%s" % ability_id), character.global_position))
 ```
 
-Music: `AudioConfig.music = { enabled: true, src: 'assets/audio/theme.ogg', volume: 0.3 }`
-(hook it up in `unlock()` - one `createBufferSource` with `loop = true`).
+Positional audio is currently a simple distance attenuation (`_attenuation`). For true 3D
+sound, swap the `AudioStreamPlayer` pool for `AudioStreamPlayer3D` nodes - the call sites
+already pass a position.
 
-Positional audio here is a simple distance attenuation (`_distanceAttenuation`). For real 3D
-audio, swap the gain node for a `PannerNode` - the call sites already pass `position`.
+Music: add an `AudioStreamPlayer` with your track in `scenes/main.tscn` and set it looping,
+or extend `AudioManager` with a music bus.
 
 ### VFX
 
-**File: `src/render/Effects.js`.** Tracers, impacts, muzzle flashes, explosions, the bomb
-beacon and grenade meshes all live here, all driven by events. Tuning is in
-`VisualsConfig.effects` (`src/config/visuals.config.js`).
+The prototype's effects are deliberately minimal (muzzle-free hitscan, a bomb marker,
+grenade meshes). Because everything is event-driven, adding effects touches nothing else:
 
-Add an effect:
-
-```js
-// in the constructor's subscription list
-bus.on(GameEvents.ABILITY_USED, ({ character, abilityId }) => {
-  if (abilityId === 'ability_roar') this.spawnExplosion(character.position, 14);
-});
+```gdscript
+# a new autoload or a Node in main.tscn
+func _ready() -> void:
+    Events.weapon_fired.connect(_spawn_tracer)
+    Events.grenade_exploded.connect(_spawn_explosion)
+    Events.character_damaged.connect(_spawn_blood)
 ```
 
-Because effects are event-driven, **no gameplay system needs to know they exist**. The same
-applies to a particle library: import it in `Effects.js` and nowhere else.
+Use `GPUParticles3D` for impacts, `MeshInstance3D` with an emissive material for tracers,
+and `OmniLight3D` with a tween for muzzle flashes.
 
 ---
 
 ## 23. Bots
 
-**Files: `src/config/bots.config.js` (tuning), `src/core/ai/BotBrain.js` (behaviour),
-`src/core/ai/NavGrid.js` (A* pathfinding).**
+**Tuning: `data/config/bot_config.tres`. Behaviour: `scripts/core/ai/bot_brain.gd`.**
 
-```js
-export const BotConfig = Object.freeze({
-  enabled: true,
-  fillTeams: true,                    // top both teams up to MatchConfig.teamSize
-  defaultDifficulty: 'NORMAL',
-  difficulties: {
-    EASY:   { aimTurnRate: 2.2, aimError: 4.5, reactionTime: 0.55, viewDistance: 55, /* ... */ },
-    NORMAL: { aimTurnRate: 4.5, aimError: 2.2, reactionTime: 0.3,  viewDistance: 75, /* ... */ },
-    HARD:   { aimTurnRate: 7.5, aimError: 1.1, reactionTime: 0.16, viewDistance: 95, /* ... */ },
-  },
-  fieldOfView: Math.PI * 0.75,
-  targetMemory: 2.5, waypointRadius: 2.5, siteBPreference: 0.5,
-  saveThreshold: 1500, thinkInterval: 0.25, combatStrafe: 0.8,
-});
+| Property | Meaning |
+|---|---|
+| `enabled`, `fill_teams` | whether bots exist and top both teams up to `team_size` |
+| `default_difficulty` | `EASY` / `NORMAL` / `HARD` (see `with_difficulty()`) |
+| `aim_turn_rate`, `aim_error`, `reaction_time` | how fast and how accurately they track |
+| `fire_burst_min` / `fire_burst_max` | trigger discipline |
+| `view_distance`, `field_of_view`, `target_memory` | perception |
+| `site_b_preference` | attack split on a two-site map |
+| `save_threshold`, `think_interval`, `combat_strafe` | economy and movement |
+
+### Add or remove bots
+
+```gdscript
+MatchSession.configure({"fill_bots": false})                  # no bots at all
+session.add_bot("Spike", &"TANK", GameEnums.Team.TEAM_TWO, &"HARD")   # one specific bot
 ```
 
-### Add / remove bots
-
-```js
-// bots off entirely
-new GameManager({ fillBots: false });
-
-// a specific bot
-game.addBot({ name: 'Spike', classId: 'TANK', teamId: 'TEAM_TWO', difficulty: 'HARD' });
-
-// a new difficulty tier
-difficulties: { NIGHTMARE: { aimTurnRate: 12, aimError: 0.4, reactionTime: 0.08, viewDistance: 120, fireBurstMin: 0.4, fireBurstMax: 1.2, accuracyMoving: 0.95 } }
-```
-
-Bot names come from `BOT_NAMES` in `src/core/GameManager.js`; classes are cycled from `CLASS_IDS`.
+A new difficulty tier is a branch in `BotConfig.with_difficulty()`. Bot names come from
+`MatchSession.BOT_NAMES`; classes cycle through `Config.class_ids`.
 
 ### Add a behaviour
 
-Goals are in `BotGoal` (`BotBrain.js`); the decision is `_chooseGoal()`, movement is
-`_updateMovement()`, shooting is `_updateCombat()`. Example - defenders rotate to a teammate
-who called for help:
+Goals are `BotBrain.Goal`; the decision is `_choose_goal()`, movement is
+`_update_movement()`, shooting is `_update_combat()`. Example - defenders rotating to a
+teammate under fire:
 
-```js
-// in _chooseGoal(), defenders branch
-const ally = this.teams.membersOnSide(Side.DEFENDERS, { aliveOnly: true })
-  .find((mate) => mate !== me && this.world.time - mate.lastDamageTime < 2);
-if (ally) { goal = BotGoal.RETAKE; goalPosition = this._positionNear(ally.position, 6); }
+```gdscript
+# inside _choose_goal(), the defender branch
+for mate in session.teams.members_on_side(GameEnums.Side.DEFENDERS, true):
+    if mate != character and session.elapsed - mate.last_damage_time < 2.0:
+        chosen = Goal.HOLD_SITE
+        destination = _position_near(mate.global_position, 6.0)
+        break
 ```
 
-Bots use abilities by setting `intent.useAbility = 0 | 1` - the same path a player uses.
-They currently do not; adding it is a couple of lines in `_updateCombat`.
+Bots use abilities by setting `intent.use_ability = 0` or `1` - the same path a player uses.
+They currently do not; wiring it up is a couple of lines in `_update_combat()`.
 
-**Bots need no navigation authoring.** `NavGrid` runs A* on the grid `MapCompiler` produced,
-so they path correctly on any map you draw.
+**Bots need no navigation authoring.** They use `NavigationAgent3D` against the navigation
+mesh `CompiledMap` generates, so they path correctly on any map you draw.
 
 ---
 
-## 24. Input & controls
+## 24. Input and controls
 
-**File: `src/config/input.config.js`.** Keys are `KeyboardEvent.code` values (layout independent).
+**Project Settings -> Input Map** (stored in `project.godot`). Actions:
+`move_forward/backward/left/right`, `jump`, `crouch`, `sprint`, `fire`, `aim`, `reload`,
+`use`, `drop_bomb`, `ability_primary`, `ability_secondary`, `throw_grenade`, `toggle_shop`,
+`scoreboard`, `slot_primary/secondary/melee`, `toggle_freecam`.
 
-```js
-bindings: { jump: ['Space'], crouch: ['ControlLeft', 'KeyC'], use: ['KeyE'], /* ... */ },
-mouse: { sensitivity: 0.0022, adsSensitivityMultiplier: 0.6, invertY: false, fireButton: 0, aimButton: 2 },
-pitchLimit: Math.PI / 2 - 0.05,
-```
+Rebinding in the editor is enough - `PlayerController` and the HUD read the action names,
+not key codes.
 
-Multiple codes per action are alternatives. The HUD prints key hints from these bindings, so
-a rebind updates the prompts too.
+Mouse sensitivity and inversion are exported properties on `PlayerController`
+(`mouse_sensitivity`, `ads_sensitivity_multiplier`, `invert_y`, `pitch_limit`).
 
-To add an action: add a binding, handle it in `BrowserInput._handleActionKey` (one-shot) or
-`update()` (held), and add the field to `createIntent()` in
-`src/core/components/Intent.js` so bots can express it as well.
-
-**Adding a gamepad or a network client** means writing another producer of `Intent` - nothing
-in `src/core` changes.
+To add an action: add it to the Input Map, handle it in `PlayerController._poll_actions()`,
+and add the field to `Intent` so bots can express it too. **Adding a gamepad or a network
+client means writing another producer of `Intent` - nothing in the simulation changes.**
 
 ---
 
 ## 25. Events reference
 
-**File: `src/core/events/GameEvents.js`** - the full catalogue, with payloads documented
-inline. Subscribe from anywhere:
+**File: `autoload/events.gd`** - the full catalogue, with payload documentation inline.
+Subscribe from anywhere:
 
-```js
-game.bus.on(GameEvents.BOMB_PLANTED, ({ character, siteId, position }) => { /* ... */ });
-const off = game.bus.onAny((name, payload) => console.log(name, payload));  // debug firehose
-game.bus.debug = true;                                                      // log everything
+```gdscript
+Events.bomb_planted.connect(func(character, site_id, position): ...)
+Events.round_ended.connect(_on_round_ended)
 ```
 
 Groups: match/round lifecycle, characters, weapons/combat, abilities, economy/shop, bomb,
-and presentation hooks (`NOTIFICATION`, `KILL_FEED`).
+and presentation hooks (`notification_posted`, `kill_feed`).
 
-This is the seam to use for anything additive - stats tracking, a demo recorder, an
-achievement system, a spectator overlay - without touching gameplay code.
+This is the seam for anything additive - stats tracking, a demo recorder, achievements, a
+spectator overlay - with no changes to gameplay code. `Events.reset()` disconnects
+everything; the test runner calls it between files.
 
 ---
 
 ## 26. Testing
 
 ```bash
-npm test              # everything (86 tests, ~8s)
-npm run test:watch    # re-run on save
-node --test tests/bomb.test.js
-npm run sim -- --seed 3 --verbose   # eyeball a whole match
+godot --headless --path . res://tests/test_main.tscn      # 83 tests, ~75s, exit code 0 or 1
+godot --headless --path . res://tools/headless_match.tscn -- --seed 3 --verbose
 ```
 
 | File | Covers |
 |---|---|
-| `tests/map.test.js` | compilation, full connectivity, spawns, site pathing |
-| `tests/movement.test.js` | gravity, walls, step-up, crouch, jump, bounds |
-| `tests/weapons.test.js` | definitions, fire modes, fire rate, reload, recoil, spread, switching |
-| `tests/combat.test.js` | damage model, headshots, armour, falloff, LOS, grenades |
-| `tests/economy.test.js` | starting money, kill rewards, win/loss bonuses, cap |
-| `tests/shop.test.js` | phase/zone/class/side restrictions, equipment |
-| `tests/bomb.test.js` | plant, interrupt, fuse, defuse (+kit), drop/pickup, both sites |
-| `tests/round.test.js` | phase machine, freeze, all five win conditions, round reset |
-| `tests/match.test.js` | scoring, side switch at 12, match win at 13, halftime reset |
-| `tests/classes.test.js` | class data integrity, stats, abilities, effects |
-| `tests/bots.test.js` | buying, pathing, fighting, a full match, determinism |
+| `tests/test_map.gd` | compilation, full connectivity, spawns, buy zones, navigation paths |
+| `tests/test_movement.gd` | gravity, walls, crouch, jump, ramps, class speed |
+| `tests/test_weapons.gd` | resources, fire modes, fire rate, reload, recoil, spread, switching |
+| `tests/test_combat.gd` | damage model, headshots, armour, falloff, line of sight, grenades |
+| `tests/test_economy.gd` | starting money, kill rewards, win/loss income, caps |
+| `tests/test_shop.gd` | phase/zone/class/side restrictions, gear limits |
+| `tests/test_bomb.gd` | plant, interrupt, fuse, defuse (+kit), drop/pickup, both sites |
+| `tests/test_round.gd` | phase machine, freeze time, all five win conditions, round reset |
+| `tests/test_match.gd` | scoring, side switch at 12, match win at 13, halftime reset |
+| `tests/test_classes.gd` | class data, stats, abilities, effects, class switching |
+| `tests/test_bots.gd` | buying, navigation, fighting, a full match, determinism |
 
-Helpers in `tests/helpers.js`: `createTestGame`, `advance`, `advanceUntil`,
-`startLiveRound`, `pauseRounds`, `place`, `aimAt`, `collectEvents`.
+Writing a test: create `tests/test_<thing>.gd` extending `TestCase` with `test_*` methods.
+The runner discovers it automatically. Helpers in `tests/test_case.gd`: `make_session`,
+`advance`, `advance_until`, `start_live_round`, `pause_rounds`, `place`, `aim_at`, `record`,
+`sync_navigation`, and the `check_*` assertions.
 
-**Matches are deterministic per seed** (`Random` in `src/core/math/random.js`) - never call
-`Math.random()` inside `src/core` or you lose reproducibility.
+Two things worth knowing before you write one:
+
+- **The runner speeds time up** by raising `Engine.physics_ticks_per_second` and
+  `Engine.time_scale` together, so each tick still advances 1/64 s. `advance(session, 2.0)`
+  means two *game* seconds.
+- **GDScript lambdas capture by value.** To record something from inside a signal handler,
+  mutate a Dictionary or Array, never a plain local.
 
 ---
 
-## 27. Troubleshooting
+## 27. Exporting a build
 
-**Blank page / "Failed to resolve module specifier 'three'"**
-You opened `index.html` from the filesystem. Serve it: `npm start`. Check the import map in
-`index.html` points at an existing `vendor/three.module.js`.
+Nothing in the project blocks exporting: no editor-only APIs at runtime, no absolute paths.
 
-**Black screen, no errors**
-The canvas has zero size (a CSS regression), or the camera is inside a wall. Press **P** for
-the overhead camera and add `?debug=1` to see position and phase.
+1. Editor -> Project -> Export -> add a preset (Windows/Linux/macOS/Web).
+2. Export. `Config` loads `data/**.tres` through `ResourceLoader`, and its directory scan
+   already strips the `.remap` suffix exported builds add.
+3. `tools/` and `tests/` are dev-only; add `res://tools/*` and `res://tests/*` to the
+   preset's exclude filter if you want them out of the shipped build.
 
-**"Cannot find module '/…/tests'" when running tests**
-Use the quoted glob: `node --test "tests/*.test.js"` (that is what `npm test` does).
+---
 
-**Mouse look does nothing**
-Pointer lock is not held. Click the canvas. Overlays (shop, class select) intentionally
-release it - Esc closes them.
+## 28. Troubleshooting
 
-**I fall through the floor / get stuck in a wall**
-A prop was authored overlapping a wall, or a spawn point sits inside geometry.
-`World.findFreePositionNear` recovers spawns; run `npm test` - `tests/map.test.js` fails on
-unwalkable spawns. Adjust the prop's `at`/`size` in the map file.
+**"Cannot infer the type of X" when you add code**
+GDScript refuses `:=` when the right-hand side is untyped. Either annotate
+(`var weapon: Weapon = ...`) or use `=`. Fields like `Character.damage_sink` are untyped on
+purpose to avoid cyclic class references.
 
-**Bots stand still or bunch up in spawn**
-Their goal is unreachable: a nav-blocking prop is covering a `plantPoint` or a corridor.
-Set `blocksNav: false` on walkable-over props, or move the prop. `?debug=1` prints each
-bot's goal; `tests/map.test.js` proves the sites are pathable.
+**Nothing happens when I press Play / the mouse is not captured**
+Click "Click to play" on the title card first - the match starts and the mouse is captured
+there. Esc releases it; opening the shop or class picker releases it too.
+
+**The camera is inside a capsule**
+The local player's own visual is hidden by `PlayerController`. If you replaced the model,
+make sure your factory's root is a `Node3D` under `Character/Visual` so hiding still works.
+
+**Bots stand still**
+Their goal is unreachable, or navigation is not synced yet. `--debug` prints each bot's
+goal. Navigation needs two server sync iterations after the map is built; in game the
+warmup covers it, and in tests use `sync_navigation()`. If a bot's goal is on a
+nav-blocking prop, `CompiledMap.nearest_navigable()` should have fixed it - check the prop
+sizes in the map file.
 
 **Bots never plant**
-The bomb carrier died and nobody picked it up (check `game.bomb.state`), or the site's
-`plantPoint` is inside a prop, or `plantMaxHeightAboveSite` is too small for a raised site.
+The carrier died and nobody picked the bomb up (check `session.bomb.state`), the site's
+`plant_point` is inside a prop (`tests/test_map.gd` catches this), or
+`plant_max_height_above_site` is too small for a raised site.
 
 **Shots pass through enemies**
-`hitboxRadius`/`hitboxHeight` in the class config no longer match your model. Collision uses
-the *config*, not the mesh.
+`hitbox_radius` / `hitbox_height` in the class resource no longer match your model.
+Collision uses the *resource*, not the mesh.
 
-**A weapon fires far too fast/slow**
-`fireRate` is **rounds per minute**, not per second.
+**A weapon fires far too fast or slow**
+`fire_rate` is **rounds per minute**, not per second.
 
 **Recoil does nothing**
-`recoil.recovery` is high relative to `recoil.vertical`, or `recoveryDelay` is 0 - recovery
-only starts `recoveryDelay` seconds after the last shot and never while the trigger is held.
+`recoil_recovery` is high relative to `recoil_vertical`, or `recoil_recovery_delay` is 0.
+Recovery only starts that long after the last shot and never while the trigger is held.
 
 **Nothing happens when I buy**
-You are outside the buy phase or outside your spawn zone. The rejection reason is shown in
-the HUD banner and returned by `game.shop.buy()`; see `PurchaseRejection`.
+You are outside the buy phase or outside your spawn zone. The reason is shown in the HUD
+banner and returned by `shop.buy()`.
 
-**Round never ends**
-A team has an alive member you did not expect (`game.teams.aliveCount(id)`), or
-`game.round.paused` is still true from a debugging session.
+**The round never ends**
+A team has an alive member you did not expect (`session.teams.alive_count(id)`), or
+`round_manager.paused` is still true from a debugging session.
 
-**The match ends too early/late**
-`MatchConfig.roundsToWin` vs `switchSidesAfterRound` vs `maxRounds` are inconsistent.
-`maxRounds` should normally be `2 x switchSidesAfterRound`, and `roundsToWin` should be
-`switchSidesAfterRound + 1` for a standard format.
+**The match ends too early or too late**
+`rounds_to_win`, `switch_sides_after_round` and `max_rounds` are inconsistent. Normally
+`max_rounds = 2 x switch_sides_after_round` and `rounds_to_win = switch_sides_after_round + 1`.
 
-**The game runs in slow motion on a weak machine**
-`SimConfig.maxTicksPerFrame` (default 5) caps catch-up ticks per frame on purpose so a
-stalled tab cannot fast-forward. Lower `SimConfig.tickRate` (64) if you need headroom.
+**Changes to a .tres do nothing**
+Most data is read when a character or weapon is *created*. Class stat changes apply next
+round; match and round settings apply to the next match. `Config.reload()` re-reads
+everything at runtime.
 
-**No sound**
-Browsers block audio until a gesture: click the start screen. Cues without a `src` are
-synthesised tones by design.
+**Audio is silent**
+Expected in `--headless` (the manager disables itself). In a normal run, the cues are
+synthesised tones - quiet by design. Check the Master bus volume.
 
-**Changes to a config file do nothing**
-Most config is read when a character/weapon is *created*. Class stat changes apply on the
-next `applyClass()` (next round); match/round config applies to the next match. Hard-refresh
-to clear the module cache.
+**"map_get_path returned empty" in your own code**
+Query the navigation map only after it has synced twice. Copy the readiness probe in
+`tests/test_case.gd -> sync_navigation()`.

@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_20hlx"]
+
+[resource]
+script = ExtResource("1_20hlx")
+id = &"lmg_thunder"
+display_name = "Thunderfoot LMG"
+category = 5
+price = 4200
+damage = 30.0
+armor_penetration = 0.8
+range = 110.0
+falloff_start = 50.0
+falloff_end = 95.0
+fire_rate = 700.0
+mag_size = 100
+reserve_ammo = 200
+reload_time = 5.2
+equip_time = 1.1
+move_speed_multiplier = 0.82
+spread_base = 1.4
+spread_moving = 5.0
+spread_crouching = -0.8
+recoil_vertical = 0.42
+recoil_horizontal = 0.4
+recoil_recovery = 5.5
+recoil_max_vertical = 11.0
+model_key = &"weapon_lmg"
+color = Color(0.30980393, 0.3529412, 0.30980393, 1)

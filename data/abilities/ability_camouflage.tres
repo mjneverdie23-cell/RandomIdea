@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityCamouflage" format=3]
+
+[ext_resource type="Script" path="res://scripts/abilities/ability_camouflage.gd" id="1_meu4r"]
+
+[resource]
+script = ExtResource("1_meu4r")
+id = &"ability_camouflage"
+display_name = "Camouflage"
+description = "Blend into the environment for 5 seconds. Firing breaks it."
+cooldown = 30.0
+duration = 5.0

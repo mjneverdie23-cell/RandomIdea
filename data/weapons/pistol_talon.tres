@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_f0ie8"]
+
+[resource]
+script = ExtResource("1_f0ie8")
+id = &"pistol_talon"
+display_name = "Talon .50"
+category = 0
+slot = 1
+fire_mode = 1
+price = 700
+kill_reward = 350
+damage = 52.0
+headshot_multiplier = 3.6
+armor_penetration = 0.82
+range = 70.0
+falloff_start = 25.0
+falloff_end = 60.0
+fire_rate = 230.0
+mag_size = 7
+reserve_ammo = 35
+reload_time = 2.3
+spread_base = 1.1
+spread_moving = 5.0
+recoil_vertical = 1.4
+recoil_horizontal = 0.5
+recoil_max_vertical = 7.0
+model_key = &"weapon_pistol_heavy"
+color = Color(0.43529412, 0.45490196, 0.46666667, 1)

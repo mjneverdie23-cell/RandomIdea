@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="CharacterClassData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/character_class_data.gd" id="1_mh1d2"]
+
+[resource]
+script = ExtResource("1_mh1d2")
+id = &"BRUISER"
+display_name = "Rex"
+species = "Tyrannosaurus"
+role = "Bruiser"
+description = "Mid-range brawler. Trades hard, buffs allies, terrifies sites."
+max_health = 125.0
+move_speed = 5.1
+jump_velocity = 6.8
+damage_taken_multiplier = 0.95
+damage_dealt_multiplier = 1.05
+hitbox_radius = 0.58
+hitbox_height = 1.9
+eye_height_fraction = 0.87
+allowed_categories = Array[int]([0, 2, 4, 5, 6, 7])
+default_secondary = &"pistol_talon"
+abilities = Array[StringName]([&"ability_roar", &"ability_charge"])
+bot_buy_priority = Array[StringName]([&"rifle_bulwark", &"shotgun_maw", &"rifle_ranger"])
+model_key = &"dino_rex"
+color = Color(0.6901961, 0.3137255, 0.24705882, 1)
+model_scale = 1.08

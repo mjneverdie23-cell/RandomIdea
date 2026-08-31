@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityPounce" format=3]
+
+[ext_resource type="Script" path="res://scripts/abilities/ability_pounce.gd" id="1_wf4ra"]
+
+[resource]
+script = ExtResource("1_wf4ra")
+id = &"ability_pounce"
+display_name = "Pounce"
+description = "Explosive leap in the direction you are looking."
+cooldown = 12.0
+strength = 16.0

@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_6gxfd"]
+
+[resource]
+script = ExtResource("1_6gxfd")
+id = &"pistol_dart"
+display_name = "Dart Repeater"
+category = 0
+slot = 1
+price = 450
+kill_reward = 500
+damage = 17.0
+armor_penetration = 0.5
+range = 45.0
+falloff_start = 14.0
+falloff_end = 38.0
+fire_rate = 850.0
+mag_size = 24
+reserve_ammo = 96
+reload_time = 1.8
+move_speed_multiplier = 1.08
+spread_base = 1.0
+spread_moving = 3.4
+recoil_vertical = 0.35
+recoil_horizontal = 0.3
+recoil_max_vertical = 5.0
+model_key = &"weapon_pistol_auto"
+color = Color(0.5764706, 0.52156866, 0.41960785, 1)

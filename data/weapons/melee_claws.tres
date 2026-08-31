@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_xsvm6"]
+
+[resource]
+script = ExtResource("1_xsvm6")
+id = &"melee_claws"
+display_name = "Claws"
+category = 6
+slot = 2
+fire_mode = 3
+kill_reward = 1200
+damage = 55.0
+headshot_multiplier = 2.0
+armor_penetration = 0.85
+range = 2.4
+falloff_start = 2.4
+falloff_end = 2.4
+fire_rate = 90.0
+mag_size = -1
+reserve_ammo = -1
+reload_time = 0.0
+equip_time = 0.35
+move_speed_multiplier = 1.1
+model_key = &"weapon_claws"
+color = Color(0.8509804, 0.7882353, 0.6392157, 1)

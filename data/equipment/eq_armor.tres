@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/equipment_data.gd" id="1_q8lou"]
+
+[resource]
+script = ExtResource("1_q8lou")
+id = &"eq_armor"
+display_name = "Hide Plating"
+description = "Restores armour to full."
+price = 650

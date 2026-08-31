@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_g5cvh"]
+
+[resource]
+script = ExtResource("1_g5cvh")
+id = &"rifle_apex"
+display_name = "Apex Carbine"
+price = 2250
+damage = 28.0
+range = 85.0
+falloff_end = 75.0
+fire_rate = 780.0
+reload_time = 2.1
+move_speed_multiplier = 0.99
+spread_base = 0.7
+spread_moving = 3.0
+recoil_vertical = 0.4
+recoil_horizontal = 0.3
+recoil_max_vertical = 8.0
+model_key = &"weapon_rifle"
+color = Color(0.3882353, 0.4392157, 0.41960785, 1)

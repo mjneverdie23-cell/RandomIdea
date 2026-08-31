@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityBulwark" format=3]
+
+[ext_resource type="Script" path="res://scripts/abilities/ability_bulwark.gd" id="1_m82b6"]
+
+[resource]
+script = ExtResource("1_m82b6")
+id = &"ability_bulwark"
+display_name = "Bulwark"
+description = "Brace behind armoured plates: 50% damage reduction, slower movement."
+cooldown = 30.0
+duration = 8.0

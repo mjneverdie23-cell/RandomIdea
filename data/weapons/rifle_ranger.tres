@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_5u55d"]
+
+[resource]
+script = ExtResource("1_5u55d")
+id = &"rifle_ranger"
+display_name = "Ranger AR"
+price = 2700
+damage = 33.0
+armor_penetration = 0.78
+range = 100.0
+falloff_start = 45.0
+falloff_end = 90.0
+fire_rate = 660.0
+reload_time = 2.4
+move_speed_multiplier = 0.96
+spread_base = 0.55
+spread_moving = 3.4
+recoil_vertical = 0.5
+recoil_horizontal = 0.26
+model_key = &"weapon_rifle"
+color = Color(0.34901962, 0.3882353, 0.41960785, 1)

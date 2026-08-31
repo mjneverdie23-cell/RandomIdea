@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="CharacterClassData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/character_class_data.gd" id="1_5ly70"]
+
+[resource]
+script = ExtResource("1_5ly70")
+id = &"ASSASSIN"
+display_name = "Raptor"
+species = "Velociraptor"
+role = "Assassin"
+description = "Fast flanker. Wins the duels it starts, loses the ones it does not."
+max_health = 85.0
+max_armor = 75.0
+move_speed = 6.6
+jump_velocity = 7.8
+damage_taken_multiplier = 1.12
+damage_dealt_multiplier = 1.08
+hitbox_radius = 0.46
+hitbox_height = 1.65
+eye_height_fraction = 0.9
+allowed_categories = Array[int]([0, 1, 4, 6, 7])
+default_secondary = &"pistol_dart"
+abilities = Array[StringName]([&"ability_pounce", &"ability_camouflage"])
+bot_buy_priority = Array[StringName]([&"smg_swarm", &"shotgun_maw", &"smg_needler"])
+model_key = &"dino_raptor"
+color = Color(0.7529412, 0.5411765, 0.24313726, 1)
+model_scale = 0.92

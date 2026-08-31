@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AbilityGlide" format=3]
+
+[ext_resource type="Script" path="res://scripts/abilities/ability_glide.gd" id="1_8b2mb"]
+
+[resource]
+script = ExtResource("1_8b2mb")
+id = &"ability_glide"
+display_name = "Glide"
+description = "Catch the air: reduced gravity and a boost upwards."
+duration = 4.0

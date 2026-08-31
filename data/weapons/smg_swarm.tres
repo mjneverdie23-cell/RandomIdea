@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_vugdf"]
+
+[resource]
+script = ExtResource("1_vugdf")
+id = &"smg_swarm"
+display_name = "Swarm SMG"
+category = 1
+price = 1250
+kill_reward = 600
+damage = 22.0
+armor_penetration = 0.6
+range = 55.0
+falloff_start = 16.0
+falloff_end = 45.0
+falloff_min_multiplier = 0.45
+fire_rate = 900.0
+reserve_ammo = 120
+reload_time = 2.0
+move_speed_multiplier = 1.06
+spread_base = 1.0
+spread_moving = 2.4
+recoil_vertical = 0.34
+recoil_horizontal = 0.28
+recoil_max_vertical = 7.0
+model_key = &"weapon_smg"
+color = Color(0.49019608, 0.5411765, 0.57254905, 1)

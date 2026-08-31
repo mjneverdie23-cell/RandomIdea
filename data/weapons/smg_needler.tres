@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/config/weapon_data.gd" id="1_tu4o6"]
+
+[resource]
+script = ExtResource("1_tu4o6")
+id = &"smg_needler"
+display_name = "Needler PDW"
+category = 1
+price = 1600
+kill_reward = 450
+damage = 27.0
+armor_penetration = 0.72
+range = 62.0
+falloff_start = 20.0
+falloff_end = 50.0
+fire_rate = 750.0
+mag_size = 25
+reserve_ammo = 100
+move_speed_multiplier = 1.03
+spread_base = 0.9
+spread_moving = 2.8
+recoil_vertical = 0.42
+recoil_horizontal = 0.24
+recoil_max_vertical = 7.5
+model_key = &"weapon_smg"
+color = Color(0.42745098, 0.49019608, 0.52156866, 1)

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AbilityHawkEye" format=3]
+
+[ext_resource type="Script" path="res://scripts/abilities/ability_hawk_eye.gd" id="1_y6i46"]
+
+[resource]
+script = ExtResource("1_y6i46")
+id = &"ability_hawk_eye"
+display_name = "Hawk Eye"
+description = "Steady the shot and reveal enemies in line of sight for 6 seconds."
+cooldown = 35.0
+duration = 6.0
+radius = 120.0
