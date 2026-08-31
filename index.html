@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Raptor Strike - tactical dinosaur shooter prototype</title>
+  <link rel="stylesheet" href="./src/ui/styles.css" />
+  <!--
+    three.js is vendored locally (vendor/three.module.js, MIT) so the prototype
+    runs with no install step and no network access. To switch to npm instead:
+        npm i three
+    and point this import map at node_modules/three/build/three.module.js.
+  -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="ui-root"></div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
