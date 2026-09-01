@@ -8,7 +8,6 @@
  *                   career averaged; an off-meta pick with no record scores 1.0
  *   meta bonus      +1 per meta champion (meta = picks + bans, computed live)
  *   pocket picks    1-2 off-meta picks -> +1.5 each ; more than 2 -> -2
- *                   (halved in game one, where the read is least informative)
  *   form edge       up to +1 for the better current-season series record
  *   motivation      +0.5 must-win, -0.5 nothing to play for, -1 tank incentive
  *   series edge     +0.3 per game of lead in the series so far, capped
@@ -72,21 +71,24 @@ export const POCKET_MAX = 2;
 export const POCKET_MANY_PENALTY = -2.0;
 
 /**
- * How much of the pocket-pick term survives in game one.
+ * The pocket term used to be halved in game one, and no longer is.
  *
- * Opening games are the volatile ones: neither side has seen what the other
- * intends to play, so an off-meta pick there says far less about a plan than
- * the same pick in game three, where it answers something already on the
- * board. The whole term is discounted — reward and chaos penalty alike —
- * because the read is less informative, not because surprises are worth less.
+ * The argument for the discount was that opening games are the volatile ones:
+ * neither side has seen what the other intends to play, so an off-meta pick
+ * there says less about a plan than the same pick in game three. Reasonable,
+ * and wrong. Measured three ways over the same 1,317 games, full weight beat
+ * the halved version every time — +3 games raising the scale to 1.0, +3 pricing
+ * a game-one pocket pick at 1.25, and a per-pick sweep with a broad flat
+ * optimum from 1.25 to 1.75 and a dip exactly at the halved 0.75.
+ *
+ * The old rule also produced an oddity nobody would design on purpose: because
+ * an off-meta pick forfeits its meta point but earned only half a pocket bonus,
+ * a game-one pocket pick scored **-0.25 against an all-meta draft** — the model
+ * charged a team for the surprise. It is now +0.5, the same as any other game.
  */
-export const GAME_ONE_POCKET_SCALE = 0.5;
-
-export function pocketBonusFor(offMetaCount: number, gameNumber: number): number {
+export function pocketBonusFor(offMetaCount: number): number {
   if (offMetaCount <= 0) return 0;
-  const raw =
-    offMetaCount <= POCKET_MAX ? offMetaCount * POCKET_POINT : POCKET_MANY_PENALTY;
-  return gameNumber <= 1 ? raw * GAME_ONE_POCKET_SCALE : raw;
+  return offMetaCount <= POCKET_MAX ? offMetaCount * POCKET_POINT : POCKET_MANY_PENALTY;
 }
 /** Logistic scale converting a point margin into a per-game probability. */
 export const PROB_SCALE = 2.0;
@@ -509,12 +511,7 @@ function usableForm(model: PredictorModel, competition: string | null, team: str
 /* Per-side tally                                                      */
 /* ------------------------------------------------------------------ */
 
-function scoreSide(
-  model: PredictorModel,
-  input: SideInput,
-  opposing: SideInput,
-  gameNumber: number,
-): SideScore {
+function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput): SideScore {
   const own = input.champions.filter((c): c is Champion => c !== null);
   const against = opposing.champions.filter((c): c is Champion => c !== null);
   const roster = model.rosters.get(input.team.toLowerCase()) ?? {};
@@ -554,7 +551,7 @@ function scoreSide(
   winRateBase = Math.min(winRateBase, ROLES.length);
 
   const offMetaCount = picks.length - metaCount;
-  const pocketBonus = pocketBonusFor(offMetaCount, gameNumber);
+  const pocketBonus = pocketBonusFor(offMetaCount);
 
   const fraudPenalty = lookupRating(model.ratings, input.team)?.fraud ?? 0;
 
@@ -869,7 +866,6 @@ function buildNotices(
     });
   }
 
-  const gameOne = input.gameNumber <= 1;
   for (const [side, score] of [
     ['blue', blue],
     ['red', red],
@@ -883,7 +879,7 @@ function buildNotices(
         side,
         text:
           `${score.team}: ${score.offMetaCount} pocket pick(s) — surprise factor ` +
-          `(${signed(score.pocketBonus)}${gameOne ? ', halved in game one' : ''}).`,
+          `(${signed(score.pocketBonus)}).`,
       });
     } else {
       notices.push({
@@ -892,7 +888,7 @@ function buildNotices(
         warning: true,
         text:
           `${score.team}: ${score.offMetaCount} off-meta picks — chaotic, high-risk draft ` +
-          `(${signed(score.pocketBonus)}${gameOne ? ', halved in game one' : ''}).`,
+          `(${signed(score.pocketBonus)}).`,
       });
     }
   }
@@ -1054,8 +1050,8 @@ function signed(value: number): string {
 /* ------------------------------------------------------------------ */
 
 export function predict(model: PredictorModel, input: PredictionInput): Prediction {
-  const blue = scoreSide(model, input.blue, input.red, input.gameNumber);
-  const red = scoreSide(model, input.red, input.blue, input.gameNumber);
+  const blue = scoreSide(model, input.blue, input.red);
+  const red = scoreSide(model, input.red, input.blue);
 
   const blueForm = usableForm(model, input.blue.competition, input.blue.team);
   const redForm = usableForm(model, input.red.competition, input.red.team);

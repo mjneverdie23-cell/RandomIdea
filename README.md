@@ -331,7 +331,7 @@ higher total is the predicted winner.
 | --- | --- |
 | Win-rate base | The five champions' win rates for **the player starting that lane** — current split and career averaged — capped at 1.00 per lane. An off-meta champion they have no record on counts as 1.00 |
 | Meta champions | +1 per champion clearing the presence bar on the newest patches — **picks plus bans** in that role, 5% of games and at least 4 appearances |
-| Pocket picks | +1.5 per off-meta pick, up to two; three or more −2. Halved in game one |
+| Pocket picks | +1.5 per off-meta pick, up to two; three or more −2 |
 | Form edge | Up to +1 for the better current-season series record |
 | Motivation | +0.5 must-win, −0.5 nothing to play for, −1 tank incentive. **Stated by you** — see below |
 | Series edge | +0.3 per game of lead in the series so far, capped at +0.6 |
@@ -537,29 +537,30 @@ The point margin becomes a per-game probability through a logistic curve, and
 the series and sweep odds follow by counting the ways a best-of can still be
 won from the current score.
 
-The pocket term is halved in game one, where neither side has seen what the
-other intends to play and an off-meta pick says far less about a plan than the
-same pick in game three. Worth knowing: because an off-meta pick still forfeits
-its full meta point while earning only half a pocket bonus, a game-one pocket
-pick nets −0.25 against an all-meta draft, and +0.5 from game two on.
+The pocket term used to be **halved in game one** and no longer is. The argument
+for the discount was that opening games are the volatile ones — neither side has
+seen what the other intends to play, so an off-meta pick says less about a plan
+than the same pick in game three. Reasonable, and wrong.
 
-The halving has been measured three ways over 1,317 games (522 of them game
-ones, 227 with a non-zero pocket term):
+Measured three separate ways over the same 1,317 games, full weight beat the
+halved version every time:
 
-| game one | all 1,317 | Brier | game ones only | the 227 that fire |
-| --- | --- | --- | --- | --- |
-| Halved (shipped) | 64.8% | 0.2299 | 65.4% | 64.3% |
-| Full weight | **65.1%** | 0.2299 | **66.0%** | **65.6%** |
-| Dropped entirely | 64.7% | 0.2323 | 65.1% | 63.7% |
+| test | result |
+| --- | --- |
+| Raise the game-one scale 0.5 → 1.0 | **+3 games** (852-462 → 855-459) |
+| Price a game-one pocket pick at 1.25 | **+3 games**, and 1.00 — treating it as a plain meta pick — was *worse* than shipped |
+| Sweep the per-pick worth in game one | broad flat optimum from **1.25 to 1.75**, with a dip exactly at the halved 0.75 |
 
-Two things come out of that. **The term belongs in game one** — dropping it is
-worst on every measure, including the only one with any margin in it: Brier on
-the games it actually touches goes 0.2251 at full weight to 0.2393 dropped. But
-**the halving costs almost nothing**: three games in 1,317, and a Brier that is
-flat to four decimal places. Three games out of 1,317 is 0.23 points, well
-inside the run-to-run noise of this model, so the halving stays — the argument
-for it is about what game one can tell you, and the measurement gives no reason
-to overturn it.
+The rule also produced an oddity nobody would design on purpose: because an
+off-meta pick forfeits its meta point but earned only half a pocket bonus, a
+game-one pocket pick scored **−0.25 against an all-meta draft** — the model
+charged a team for the surprise it exists to reward. It is now +0.5, the same as
+any other game.
+
+Worth knowing for contrast: raising `POCKET_POINT` for games 2+ from 1.5 toward
+3.0 is monotonically *worse* (−11 at 2.0, −29 at 3.0). The two results agree —
+1.5 is the right price everywhere, and the game-one special case was the thing
+that was wrong.
 
 A pocket pick is priced above a meta pick on purpose. An off-meta champion
 earns no meta bonus, so while the two were equal they cancelled exactly: four

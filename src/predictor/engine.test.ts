@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   FIRST_PICK_SIDE,
   FORM_CAP,
-  GAME_ONE_POCKET_SCALE,
   META_POINT,
   MOTIVATION_POINTS,
   POCKET_MANY_PENALTY,
@@ -390,21 +389,21 @@ describe('predict — point tally', () => {
     );
   });
 
-  it('halves the whole pocket term in game one', () => {
+  it('scores the pocket term the same in game one as later', () => {
     const one = (metaCount: number) =>
       predict(model({ metaByRole: metaFor(metaCount) }), input({ gameNumber: 1 })).blue
         .pocketBonus;
     const later = (metaCount: number) =>
       predict(model({ metaByRole: metaFor(metaCount) }), laterGame()).blue.pocketBonus;
 
-    expect(one(4)).toBe(POCKET_POINT * GAME_ONE_POCKET_SCALE);
-    expect(one(3)).toBe(2 * POCKET_POINT * GAME_ONE_POCKET_SCALE);
-    // The chaos penalty is discounted too — the read is less informative in
-    // game one, not less punishing.
-    expect(one(2)).toBe(POCKET_MANY_PENALTY * GAME_ONE_POCKET_SCALE);
+    // Game one used to be discounted by half. Measured three ways, full weight
+    // beat the halved version every time, so the special case is gone.
+    expect(one(4)).toBe(POCKET_POINT);
+    expect(one(3)).toBe(2 * POCKET_POINT);
+    expect(one(2)).toBe(POCKET_MANY_PENALTY);
 
     for (const metaCount of [2, 3, 4]) {
-      expect(one(metaCount)).toBeCloseTo(later(metaCount) * GAME_ONE_POCKET_SCALE, 10);
+      expect(one(metaCount)).toBeCloseTo(later(metaCount), 10);
     }
   });
 
@@ -429,23 +428,23 @@ describe('predict — point tally', () => {
     expect(onePocket.total).toBeGreaterThan(allMeta.total);
   });
 
-  it('turns a game-one pocket pick into a small net cost', () => {
-    // A consequence of halving, worth pinning because it flips the sign: an
-    // off-meta pick still forfeits its full meta point, but only earns half a
-    // pocket bonus. At 1.5 * 0.5 = 0.75 against META_POINT of 1.0 that is a
-    // net -0.25 in game one, where the same pick is +0.5 from game two on.
+  it('makes a game-one pocket pick an edge, not a cost', () => {
+    // While the term was halved this flipped sign: the pick forfeited its full
+    // meta point but earned only half a pocket bonus, so 0.75 against a
+    // META_POINT of 1.0 left a game-one surprise scoring -0.25 against an
+    // all-meta draft. It is now +0.5, the same as any other game.
     const allMeta = predict(model({ metaByRole: metaFor(5) }), input({ gameNumber: 1 })).blue;
     const onePocket = predict(model({ metaByRole: metaFor(4) }), input({ gameNumber: 1 })).blue;
-    expect(onePocket.total - allMeta.total).toBeCloseTo(
-      POCKET_POINT * GAME_ONE_POCKET_SCALE - META_POINT,
-      10,
-    );
-    expect(onePocket.total).toBeLessThan(allMeta.total);
+    expect(onePocket.total - allMeta.total).toBeCloseTo(POCKET_POINT - META_POINT, 10);
+    expect(onePocket.total).toBeGreaterThan(allMeta.total);
 
-    // From game two it is an edge again.
+    // And identical from game two on.
     const laterAllMeta = predict(model({ metaByRole: metaFor(5) }), laterGame()).blue;
     const laterPocket = predict(model({ metaByRole: metaFor(4) }), laterGame()).blue;
-    expect(laterPocket.total).toBeGreaterThan(laterAllMeta.total);
+    expect(laterPocket.total - laterAllMeta.total).toBeCloseTo(
+      onePocket.total - allMeta.total,
+      10,
+    );
   });
 
   it('makes a second pocket pick worth more than the first, then falls off a cliff', () => {
@@ -837,12 +836,12 @@ describe('predict — notices', () => {
     );
     expect(pocket?.text).toContain('+1.5');
 
-    // Game one says so rather than quietly reporting a different number.
-    const halved = predict(model({ metaByRole: metaFor(4) }), input({ gameNumber: 1 })).notices.find(
+    // Game one reads the same, now that the term is no longer discounted there.
+    const gameOne = predict(model({ metaByRole: metaFor(4) }), input({ gameNumber: 1 })).notices.find(
       (n) => n.kind === 'draft' && n.side === 'blue',
     );
-    expect(halved?.text).toContain('+0.75');
-    expect(halved?.text).toContain('halved in game one');
+    expect(gameOne?.text).toContain('+1.5');
+    expect(gameOne?.text).not.toContain('halved');
 
     // The fraud rating is a band now, not a signed point value.
     const ratings = new Map([['red team', { team: 'Red Team', globalRank: null, fraud: 0.25 }]]);
