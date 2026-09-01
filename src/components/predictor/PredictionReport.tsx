@@ -285,6 +285,19 @@ function presenceSplit(pick: PickLine): string | undefined {
   return `${picked.toFixed(1)}% picked, ${banned.toFixed(1)}% banned`;
 }
 
+/** The class chip's tooltip: what they usually play, and how often this class. */
+function affinityDetail(pick: PickLine): string | undefined {
+  const a = pick.classAffinity;
+  if (!a) return undefined;
+  const who = pick.player ?? 'this player';
+  const usual = a.favourites.map((c) => c.toLowerCase()).join(' and ');
+  return (
+    `${who} usually drafts ${usual} — ${(a.share * 100).toFixed(0)}% of ` +
+    `${a.profileGames} games on ${a.championClass.toLowerCase()}` +
+    (a.offType ? ', so this is off-type' : '')
+  );
+}
+
 const SCALING_LABEL: Record<ChampionScaling, string> = {
   late: 'late game',
   balanced: 'balanced',
@@ -334,6 +347,16 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
                   </span>
                 )}
               </span>
+              {pick.classAffinity && (
+                // What this player usually drafts. Reported only — a deduction
+                // for off-type picks was measured and never helped.
+                <span
+                  className={`lane-affinity${pick.classAffinity.offType ? ' is-off' : ''}`}
+                  title={affinityDetail(pick)}
+                >
+                  {pick.classAffinity.championClass.toLowerCase()}
+                </span>
+              )}
               {pick.scaling && (
                 // How the champion trends with game length. Reported only —
                 // it scores nothing, and the title carries the two win rates

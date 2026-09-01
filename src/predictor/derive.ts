@@ -31,9 +31,11 @@ import {
   type Side,
 } from '../domain/types.ts';
 import { anywhereKey, splitSubject } from './engine.ts';
+import { primaryClass, type ChampionClass } from './championClasses.ts';
 import type {
   GoldTempo,
   ChampionScaling,
+  ClassProfile,
   EarlyGoldProfile,
   PredictorModel,
   ScalingRead,
@@ -851,6 +853,67 @@ function deriveGoldTempo(games: readonly Game[]): Map<string, GoldTempo> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Player champion-class profiles                                      */
+/* ------------------------------------------------------------------ */
+
+/** Games a player needs before their class profile is worth reporting. */
+export const MIN_CLASS_PROFILE = 15;
+/** How many classes count as "what this player usually drafts". */
+export const FAVOURITE_CLASSES = 2;
+
+/**
+ * What each player usually drafts, by champion class.
+ *
+ * Faker is mostly mages; a Zed game is unusual for him and a Zed game for
+ * Chovy is not. That is real, legible information about a draft, and the
+ * per-lane breakdown says so.
+ *
+ * **It is reported and deliberately not scored.** Backtested over the full
+ * 2026 season, a deduction for picking outside a player's two most-played
+ * classes never helped: flat penalties from 0.1 to 0.8 scored −1 to −7 games,
+ * grading the deduction by how unusual the pick was scored −5 to −23, and
+ * restricting it to the one bucket that loses (two off-type picks, 45.0% over
+ * 211 sides) gave 0, −3, +1, −1 across four sizes. A wrong-sign control that
+ * *rewarded* off-type picks also lost 13 games, which is what a term made of
+ * noise looks like from both directions.
+ *
+ * The reason is redundancy rather than the idea being wrong. A player picking
+ * outside their comfort classes usually has no record on that champion, and the
+ * win-rate base already prices exactly that — either as the prepared-surprise
+ * 1.00 or the neutral 0.50, both far from their 60-70% on a comfort pick. The
+ * class profile is mostly restating what the biggest term already knows.
+ */
+export function deriveClassProfiles(games: readonly Game[]): Map<string, ClassProfile> {
+  const counts = new Map<string, Map<ChampionClass, number>>();
+
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      for (const player of side.players) {
+        const klass = primaryClass(player.champion);
+        if (!klass) continue;
+        const key = player.playerName.toLowerCase();
+        const perClass = counts.get(key) ?? new Map<ChampionClass, number>();
+        perClass.set(klass, (perClass.get(klass) ?? 0) + 1);
+        counts.set(key, perClass);
+      }
+    }
+  }
+
+  const profiles = new Map<string, ClassProfile>();
+  for (const [player, perClass] of counts) {
+    const games_ = [...perClass.values()].reduce((a, b) => a + b, 0);
+    if (games_ < MIN_CLASS_PROFILE) continue;
+    const ranked = [...perClass.entries()].sort((a, b) => b[1] - a[1]);
+    profiles.set(player, {
+      games: games_,
+      shares: new Map(ranked.map(([klass, n]) => [klass, n / games_])),
+      favourites: ranked.slice(0, FAVOURITE_CLASSES).map(([klass]) => klass),
+    });
+  }
+  return profiles;
+}
+
+/* ------------------------------------------------------------------ */
 /* Early gold window                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -1106,6 +1169,8 @@ export function buildPredictorModel(
     behavior: deriveBehavior(formGames, runs),
     goldTempo: deriveGoldTempo(formGames),
     earlyGold: deriveEarlyGold(formGames),
+    // Class preference is a durable habit, so it reads all scoped history.
+    classProfiles: deriveClassProfiles(games),
     standingsByCompetition,
     standingsOverall,
     formSeason,
@@ -1148,6 +1213,7 @@ export function emptyPredictorModel(): PredictorModel {
     behavior: new Map(),
     goldTempo: new Map(),
     earlyGold: new Map(),
+    classProfiles: new Map(),
     standingsByCompetition: new Map(),
     standingsOverall: new Map(),
     formSeason: null,

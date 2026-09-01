@@ -408,6 +408,53 @@ fixed. By league it is mixed rather than uniform: LPL 59.4% → 60.3%, First Sta
 68.9% → 73.3%, MSI 63.4% → 64.8%, against LCK 66.9% → 65.2% and EWC 65.7% →
 65.1%.
 
+#### What each player usually drafts
+
+Every pick carries a chip naming the champion's class — fighter, mage, assassin,
+marksman, tank or support — and it lights up when the pick sits **outside the two
+classes that player drafts most**. Hovering gives the numbers behind it:
+
+```
+Azir     Faker    mage                Faker usually drafts mage and assassin
+                                      — 83% of 125 games on mage
+Yone     Chovy    fighter  OFF-TYPE   Chovy usually drafts mage and tank
+                                      — 4% of 100 games on fighter, so this is off-type
+```
+
+Classes ship as a static table (`src/predictor/data/championClasses.json`, 173
+champions) keyed by the app's champion id, because a champion's class is a
+statement about design rather than something match results reveal. Tags are
+Riot's, in Riot's order, and **only the primary tag is used** — the secondary
+tags are so broad that "Assassin" appears on Lucian, Vayne and Tristana, which
+would make almost every champion belong to almost every class. Coverage is 152 of
+the 153 champions picked in the 2026 export; the one gap was Locke, which
+postdates the source table and is stated rather than derived.
+
+Profiles need **15 games** before they are shown, and read all scoped history
+rather than the current split — what a player likes is a durable habit.
+
+**It scores nothing, and the measurement is why.** Backtested across the full
+2026 season, a deduction for off-type picks never helped:
+
+| deduction | vs shipped |
+| --- | --- |
+| flat −0.1 … −0.8 per off-type pick | −1 to −7 games |
+| graded by how unusual the pick is (−0.1 … −0.8) | −5 to −23 games |
+| only when a side has 2+ off-type picks (−0.2 … −1.0) | 0, −3, +1, −1 |
+| *wrong-sign control: **reward** +0.3 per off-type pick* | −13 games |
+
+The wrong-sign control losing 13 games too is the tell: the term adds noise in
+either direction. The raw win rates say the same — 0 off-type picks 50.4% (2,482
+sides), 1 → 50.0% (926), 2 → 45.0% (211), 3+ → 57.1% (21). Only one bucket is
+below even and the trend reverses after it.
+
+The reason is redundancy rather than the idea being wrong. A player drafting
+outside their comfort classes usually has no record on that champion, and the
+win-rate base already prices exactly that — as the prepared-surprise 1.00 or the
+neutral 0.50, both far from their 60-70% on a comfort pick. The class profile
+mostly restates what the biggest term already knows. So it is shown to the
+reader and moves nothing, like the fraud rating and champion scaling.
+
 #### Champion scaling: late game, balanced, early game
 
 Every pick carries a second chip next to meta / off-meta saying whether the

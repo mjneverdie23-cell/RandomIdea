@@ -23,20 +23,24 @@
  * best-of can still be won. Behaviour (throws, comebacks, deciders), early-game
  * gold tempo and each champion's late/early scaling are reported as plain
  * language and deliberately do not move the score — they are context for the
- * reader, not fitted terms. Scaling in particular was measured as a scoring
- * term and runs backwards: see the README.
+ * reader, not fitted terms. Two were measured as scoring terms and rejected:
+ * champion scaling runs backwards, and a deduction for drafting outside a
+ * player's usual champion classes lost games in every form tried. See the
+ * README.
  *
  * Pure: no I/O, no React, no dates. Everything it knows arrives in the model.
  */
 
 import { ROLES, type Champion, type Role, type Side } from '../domain/types.ts';
 import { relevantEdges } from './championGraph.ts';
+import { primaryClass } from './championClasses.ts';
 import { lookupRating } from './ratings.ts';
 import {
   SERIES_TARGET,
   type GoldTempo,
   type GoldTempoPoint,
   type EarlyGoldProfile,
+  type ClassAffinity,
   type Notice,
   type PickLine,
   type Prediction,
@@ -511,6 +515,31 @@ function usableForm(model: PredictorModel, competition: string | null, team: str
 /* Per-side tally                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * How usual this pick is for the player starting the lane.
+ *
+ * Reported only. A deduction for drafting outside a player's usual classes was
+ * measured across the full 2026 season and never helped — see
+ * `deriveClassProfiles` for the numbers and the reason.
+ */
+function classAffinityFor(
+  model: PredictorModel,
+  player: string | null,
+  champion: Champion,
+): ClassAffinity | null {
+  const klass = primaryClass(champion);
+  if (!player || !klass) return null;
+  const profile = model.classProfiles.get(player.toLowerCase());
+  if (!profile) return null;
+  return {
+    championClass: klass,
+    share: profile.shares.get(klass) ?? 0,
+    offType: !profile.favourites.includes(klass),
+    favourites: profile.favourites,
+    profileGames: profile.games,
+  };
+}
+
 function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput): SideScore {
   const own = input.champions.filter((c): c is Champion => c !== null);
   const against = opposing.champions.filter((c): c is Champion => c !== null);
@@ -543,6 +572,7 @@ function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput)
       presenceRate: model.presenceRateByRole.get(role)?.get(champion.id) ?? null,
       meta,
       scaling: model.scalingByChampion.get(champion.id) ?? null,
+      classAffinity: classAffinityFor(model, roster[role] ?? null, champion),
       ...edges,
     });
   });

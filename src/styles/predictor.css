@@ -842,6 +842,22 @@
   cursor: help;
 }
 
+/* What the starter usually drafts. Muted by default — it is context, not a
+   verdict — and only lights up when the pick sits outside their usual classes. */
+.lane-affinity {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  opacity: 0.7;
+  cursor: help;
+}
+
+.lane-affinity.is-off {
+  color: var(--violet);
+  opacity: 1;
+}
+
 /* Green grows into the game, amber burns out of it. Neither is gold, which
    already means meta one chip to the left. */
 .lane-scaling.is-late {

@@ -6,6 +6,8 @@ import {
   MIN_TEMPO_SAMPLE,
   buildPredictorModel,
   deriveMeta,
+  MIN_CLASS_PROFILE,
+  deriveClassProfiles,
   deriveEarlyGold,
   deriveScaling,
   latestSeason,
@@ -947,5 +949,58 @@ describe('buildPredictorModel — early-game gold tempo', () => {
     const point = buildPredictorModel(games).goldTempo.get('t1')!.find((p) => p.minute === 10)!;
     expect(point.averageDiff).toBe(700);
     expect(point.sample).toBe(8);
+  });
+});
+
+describe('deriveClassProfiles', () => {
+  /** `n` games where blue's top laner pilots `champion`. */
+  const spam = (tag: string, champion: string, n: number, from = 0) =>
+    Array.from({ length: n }, (_, i) =>
+      makeGame({
+        id: `${tag}-${i}`,
+        blue: 'A',
+        red: 'B',
+        winner: 'blue',
+        day: from + i,
+        bluePlayers: ['Star', 'A-jungle', 'A-mid', 'A-bot', 'A-support'],
+        blueDraft: [champion, 'Viego', 'Azir', 'Jinx', 'Thresh'],
+      }),
+    );
+
+  it('ranks a player’s classes by how often they play them', () => {
+    // Aatrox is a Fighter, Sion a Tank: 12 fighter games against 6 tank ones.
+    const games = [...spam('f', 'Aatrox', 12), ...spam('t', 'Sion', 6, 100)];
+    const profile = deriveClassProfiles(games).get('star')!;
+    expect(profile.games).toBe(18);
+    expect(profile.favourites[0]).toBe('Fighter');
+    expect(profile.shares.get('Fighter')).toBeCloseTo(12 / 18, 10);
+    expect(profile.shares.get('Tank')).toBeCloseTo(6 / 18, 10);
+  });
+
+  it('withholds a profile below the sample floor', () => {
+    const games = spam('f', 'Aatrox', MIN_CLASS_PROFILE - 1);
+    expect(deriveClassProfiles(games).has('star')).toBe(false);
+    const enough = spam('f', 'Aatrox', MIN_CLASS_PROFILE);
+    expect(deriveClassProfiles(enough).has('star')).toBe(true);
+  });
+
+  it('keeps only the two most-played classes as favourites', () => {
+    const games = [
+      ...spam('f', 'Aatrox', 10),
+      ...spam('t', 'Sion', 6, 100),
+      ...spam('m', 'Ryze', 4, 200),
+    ];
+    const profile = deriveClassProfiles(games).get('star')!;
+    expect(profile.favourites).toEqual(['Fighter', 'Tank']);
+    expect(profile.favourites).not.toContain('Mage');
+    // The share is still reported for a class outside the favourites.
+    expect(profile.shares.get('Mage')).toBeCloseTo(4 / 20, 10);
+  });
+
+  it('ignores champions the class table does not know', () => {
+    // Every lane still counts for the other players; only the unknown pick is
+    // skipped, so a missing champion cannot silently shrink a profile's total.
+    const profile = deriveClassProfiles(spam('f', 'Aatrox', 20)).get('star')!;
+    expect(profile.games).toBe(20);
   });
 });

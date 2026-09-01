@@ -7,6 +7,7 @@
  * never formatted text. Presentation lives in the page.
  */
 
+import type { ChampionClass } from './championClasses.ts';
 import type {
   Champion,
   CompetitionId,
@@ -18,6 +19,29 @@ import type {
 
 /** Best-of length the series is played to. */
 export type SeriesLength = 'BO1' | 'BO3' | 'BO5';
+
+/** What a player usually drafts, by champion class. */
+export interface ClassProfile {
+  /** Games behind the profile. */
+  games: number;
+  /** Class -> share of this player's games, most-played first. */
+  shares: Map<ChampionClass, number>;
+  /** The player's most-played classes, in order. */
+  favourites: ChampionClass[];
+}
+
+/** How a single pick sits against the player's usual classes. */
+export interface ClassAffinity {
+  /** The picked champion's primary class. */
+  championClass: ChampionClass;
+  /** Share of this player's games spent on that class. */
+  share: number;
+  /** True when the class is outside the player's most-played. */
+  offType: boolean;
+  /** The player's usual classes, for the tooltip. */
+  favourites: ChampionClass[];
+  profileGames: number;
+}
 
 /** Whether a champion gets better or worse the longer the game runs. */
 export type ChampionScaling = 'late' | 'balanced' | 'early';
@@ -199,6 +223,8 @@ export interface PredictorModel {
   goldTempo: Map<string, GoldTempo>;
   /** Early-window lead/behind shares and comeback record, per team. */
   earlyGold: Map<string, EarlyGoldProfile>;
+  /** What each player usually drafts, by champion class. */
+  classProfiles: Map<string, ClassProfile>;
   standingsByCompetition: Map<CompetitionId, Map<string, StandingRow>>;
   standingsOverall: Map<string, StandingRow>;
   /** Season the standings and behaviour reads describe. */
@@ -264,6 +290,8 @@ export interface PickLine {
   meta: boolean;
   /** How the champion trends with game length; `null` when too few games. */
   scaling: ScalingRead | null;
+  /** How usual this pick is for the starter; `null` below the profile floor. */
+  classAffinity: ClassAffinity | null;
   counters: Champion[];
   counteredBy: Champion[];
   synergy: Champion[];
