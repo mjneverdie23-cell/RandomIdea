@@ -127,10 +127,29 @@ the alias in `competitions.ts`, at the cost of also taking the current feeder.
 
 ## How the quiz works
 
-**Setup** — pick a source (Mixed, or a single competition) and a length (10, 25
-or 50). Only the seasons switched on in the Data tab are in the pool. Options that the loaded dataset can't satisfy are disabled and labelled
-with the pool size, so an impossible configuration can't be started. Picking a
-thin source auto-trims the length to fit.
+**Setup** — pick a source (Mixed, or a single competition), a season, and a
+length (10, 25 or 50). Only the seasons switched on in the Data tab are in the
+pool. Options that the loaded dataset can't satisfy are disabled and labelled
+with the pool size, so an impossible configuration can't be started. Narrowing
+the pool auto-trims the length to fit.
+
+**Season** — a run can be locked to one year, or to a single split inside it. A
+whole year is a lot of meta to hold at once: patches turn over, the pick pool
+rotates, and a Spring draft reads nothing like a Summer one, so a split makes
+the quiz a test of one meta rather than of several.
+
+Source and season restate each other — the competition chips show their counts
+for the chosen season and the season chips show theirs for the chosen
+competition — so you can arrive at a selection from either direction. Only
+splits the chosen competition actually played are offered, and switching to a
+competition that never played the selected split widens the run back to the
+whole year rather than stranding it on an empty pool.
+
+Splits come from regional leagues only. Oracle's Elixir reuses the `split`
+column for the *stage* at international events (`Play-In`, `Swiss Stage`,
+`Quarterfinal`), which would be meaningless as a season filter, so Worlds and
+MSI are reached by picking the competition and the year instead — a year
+selection deliberately includes the events that carry no split of their own.
 
 **Question style** — two modes, chosen on the setup screen.
 
@@ -318,6 +337,10 @@ a side with two matches on record cannot land a question on the wrong rung.
 Every quiz carries a seed. The same seed against the same dataset produces the
 same questions in the same order, which makes runs shareable and bugs
 reportable. The seed is editable on the setup screen and shown on results.
+
+The source, season and length are folded into the seed alongside the handle, so
+the same seed played against two different splits gives two independent draws
+rather than correlated ones.
 
 ---
 

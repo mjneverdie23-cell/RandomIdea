@@ -10,11 +10,19 @@
  * complete, both teams named, a real winner, a usable date.
  */
 
-import { COMPETITION_IDS } from '../domain/competitions.ts';
+import { COMPETITION_IDS, competitionScope } from '../domain/competitions.ts';
+import { compareYears, yearOf } from '../data/years.ts';
 import { ROLES, type CompetitionId, type Game } from '../domain/types.ts';
 import { createRng, type Rng } from './rng.ts';
 import { groupIntoSeries, seriesKeyOf } from './series.ts';
-import type { QuestionSource, QuizConfig } from './config.ts';
+import {
+  ALL_PERIOD,
+  periodKey,
+  sourceKey,
+  type QuestionSource,
+  type QuizConfig,
+  type QuizPeriod,
+} from './config.ts';
 
 /** Bans are nice-to-have; a game without them is still a fair question. */
 const MIN_BANS_FOR_FULL_DRAFT = 3;
@@ -67,31 +75,131 @@ export function filterBySource(games: readonly Game[], source: QuestionSource): 
   return games.filter((game) => game.competition === source.competition);
 }
 
+/**
+ * Narrow to a season, or to one split inside it.
+ *
+ * A `year` selection deliberately includes games with no split — that is where
+ * Worlds and MSI live, since the source data gives them no split name.
+ */
+export function filterByPeriod(games: readonly Game[], period: QuizPeriod): Game[] {
+  if (period.kind === 'all') return [...games];
+  if (period.kind === 'year') return games.filter((game) => yearOf(game) === period.year);
+  // `hasSeasonSplit` rather than a bare `split ===` so the draw matches the
+  // counts exactly: both sides agree on what counts as a split.
+  return games.filter(
+    (game) => yearOf(game) === period.year && hasSeasonSplit(game) && game.split === period.split,
+  );
+}
+
+/**
+ * Whether a game's `split` names a real season split.
+ *
+ * Only regional leagues run splits. At an international event the column
+ * carries the *stage* instead — `Play-In`, `Swiss Stage`, `Quarterfinal` — and
+ * offering those as "splits" would be both wrong and useless, since the stage
+ * is already visible on the game itself. Worlds and MSI are reached by picking
+ * the competition and the year.
+ */
+export function hasSeasonSplit(game: Game): game is Game & { split: string } {
+  return game.split !== null && competitionScope(game.competition) === 'regional';
+}
+
+/** A season present in the dataset, with the splits found inside it. */
+export interface SeasonOption {
+  year: string;
+  /** Split names in the order they were played. */
+  splits: string[];
+}
+
 export interface Availability {
   /** Eligible games across every competition. */
   total: number;
   /** Eligible games per competition. */
   perCompetition: Record<CompetitionId, number>;
+  /** Seasons present in the data, newest first. */
+  seasons: SeasonOption[];
+  /**
+   * Eligible games for every source/period pair, keyed `${sourceKey}#${periodKey}`.
+   *
+   * Precomputed rather than filtered on demand because the setup screen shows a
+   * live count on every chip, and both axes move: choosing a split has to
+   * restate the per-competition counts and vice versa.
+   */
+  counts: Record<string, number>;
+}
+
+export function countsKey(source: QuestionSource, period: QuizPeriod): string {
+  return `${sourceKey(source)}#${periodKey(period)}`;
 }
 
 export function computeAvailability(games: readonly Game[]): Availability {
   const perCompetition = Object.fromEntries(
     COMPETITION_IDS.map((id) => [id, 0]),
   ) as Record<CompetitionId, number>;
+  const counts: Record<string, number> = {};
+  // Splits are ordered by when they were actually played, so Spring lands
+  // before Summer without hardcoding either name.
+  const splitFirstSeen = new Map<string, number>();
+
+  const add = (key: string) => { counts[key] = (counts[key] ?? 0) + 1; };
 
   let total = 0;
   for (const game of games) {
     if (!isQuizEligible(game)) continue;
     total += 1;
     perCompetition[game.competition] += 1;
+
+    const year = yearOf(game);
+    const periods: QuizPeriod[] = [ALL_PERIOD, { kind: 'year', year }];
+    if (hasSeasonSplit(game)) {
+      periods.push({ kind: 'split', year, split: game.split });
+      const bucket = `${year}|${game.split}`;
+      const time = Date.parse(game.date);
+      const seen = splitFirstSeen.get(bucket);
+      if (Number.isFinite(time) && (seen === undefined || time < seen)) {
+        splitFirstSeen.set(bucket, time);
+      }
+    }
+    const sources: QuestionSource[] = [
+      { kind: 'mixed' },
+      { kind: 'single', competition: game.competition },
+    ];
+    for (const source of sources) {
+      for (const period of periods) add(countsKey(source, period));
+    }
   }
-  return { total, perCompetition };
+
+  const byYear = new Map<string, { split: string; at: number }[]>();
+  for (const [bucket, at] of splitFirstSeen) {
+    const [year = '', split = ''] = bucket.split('|');
+    const list = byYear.get(year);
+    if (list) list.push({ split, at });
+    else byYear.set(year, [{ split, at }]);
+  }
+  const years = new Set<string>();
+  for (const game of games) if (isQuizEligible(game)) years.add(yearOf(game));
+
+  const seasons: SeasonOption[] = [...years].sort(compareYears).map((year) => ({
+    year,
+    splits: (byYear.get(year) ?? [])
+      .sort((a, b) => a.at - b.at)
+      .map((entry) => entry.split),
+  }));
+
+  return { total, perCompetition, seasons, counts };
 }
 
-export function availableFor(availability: Availability, source: QuestionSource): number {
-  return source.kind === 'mixed'
-    ? availability.total
-    : availability.perCompetition[source.competition];
+export function availableFor(
+  availability: Availability,
+  source: QuestionSource,
+  period: QuizPeriod = ALL_PERIOD,
+): number {
+  if (period.kind === 'all') {
+    return source.kind === 'mixed'
+      ? availability.total
+      : availability.perCompetition[source.competition];
+  }
+  return availability.counts[countsKey(source, period)] ?? 0;
 }
 
 export class QuizGenerationError extends Error {
@@ -123,7 +231,8 @@ export interface GeneratedQuiz {
  * leaderboard.
  */
 export function generateQuiz(games: readonly Game[], config: QuizConfig): GeneratedQuiz {
-  const pool = filterBySource(eligibleGames(games), config.source);
+  const period = config.period ?? ALL_PERIOD;
+  const pool = filterByPeriod(filterBySource(eligibleGames(games), config.source), period);
   if (pool.length < config.questionCount) {
     throw new QuizGenerationError(
       `Only ${pool.length} eligible game${pool.length === 1 ? '' : 's'} available for this selection — need ${config.questionCount}.`,
@@ -133,9 +242,11 @@ export function generateQuiz(games: readonly Game[], config: QuizConfig): Genera
   }
 
   // Sort before sampling so the seed maps to the same questions regardless of
-  // the dataset's incoming row order.
+  // the dataset's incoming row order. The period is part of the seed so that
+  // the same handle drawn against two different splits gives two independent
+  // draws rather than correlated ones.
   const rng = createRng(
-    `${config.seed}:${config.mode}:${config.source.kind}:${config.questionCount}`,
+    `${config.seed}:${config.mode}:${config.source.kind}:${periodKey(period)}:${config.questionCount}`,
   );
 
   const picked =

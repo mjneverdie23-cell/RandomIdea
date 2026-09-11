@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDemoDataset } from '../data/demoDataset.ts';
 import { generateQuiz } from './generator.ts';
-import { MIXED_SOURCE } from './config.ts';
+import { ALL_PERIOD, MIXED_SOURCE } from './config.ts';
 import { describeSeriesRuns, groupIntoSeries, seriesKeyOf, seriesScoreBefore } from './series.ts';
 import type { Game, Side } from '../domain/types.ts';
 
@@ -99,6 +99,7 @@ describe('generateQuiz — matchup mode', () => {
     for (const questionCount of [10, 25, 50] as const) {
       const quiz = generateQuiz(dataset.games, {
         source: MIXED_SOURCE,
+        period: ALL_PERIOD,
         questionCount,
         mode: 'matchups',
         seed: `SERIES-${questionCount}`,
@@ -111,6 +112,7 @@ describe('generateQuiz — matchup mode', () => {
   it('emits each matchup contiguously and in game order', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
+        period: ALL_PERIOD,
       questionCount: 25,
       mode: 'matchups',
       seed: 'ORDER',
@@ -129,6 +131,7 @@ describe('generateQuiz — matchup mode', () => {
   it('reports how many matchups it covers', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
+        period: ALL_PERIOD,
       questionCount: 25,
       mode: 'matchups',
       seed: 'COUNT',
@@ -141,6 +144,7 @@ describe('generateQuiz — matchup mode', () => {
   it('serves multi-game series rather than only single games', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
+        period: ALL_PERIOD,
       questionCount: 50,
       mode: 'matchups',
       seed: 'MULTI',
@@ -152,6 +156,7 @@ describe('generateQuiz — matchup mode', () => {
   it('stays reproducible from its seed', () => {
     const config = {
       source: MIXED_SOURCE,
+        period: ALL_PERIOD,
       questionCount: 25,
       mode: 'matchups',
       seed: 'REPEAT',
@@ -166,6 +171,7 @@ describe('generateQuiz — random games mode', () => {
   it('returns exactly the requested number of distinct games', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
+        period: ALL_PERIOD,
       questionCount: 25,
       mode: 'games',
       seed: 'GAMES',
@@ -177,6 +183,7 @@ describe('generateQuiz — random games mode', () => {
   it('does not group questions into series', () => {
     const quiz = generateQuiz(dataset.games, {
       source: MIXED_SOURCE,
+        period: ALL_PERIOD,
       questionCount: 50,
       mode: 'games',
       seed: 'SCATTER',
@@ -190,7 +197,8 @@ describe('generateQuiz — random games mode', () => {
   });
 
   it('draws a different set than matchup mode for the same seed', () => {
-    const base = { source: MIXED_SOURCE, questionCount: 25, seed: 'SAME' } as const;
+    const base = { source: MIXED_SOURCE,
+        period: ALL_PERIOD, questionCount: 25, seed: 'SAME' } as const;
     const grouped = generateQuiz(dataset.games, { ...base, mode: 'matchups' });
     const scattered = generateQuiz(dataset.games, { ...base, mode: 'games' });
     expect(grouped.games.map((g) => g.gameId)).not.toEqual(
@@ -201,6 +209,7 @@ describe('generateQuiz — random games mode', () => {
   it('stays reproducible from its seed', () => {
     const config = {
       source: MIXED_SOURCE,
+        period: ALL_PERIOD,
       questionCount: 10,
       mode: 'games',
       seed: 'STABLE',

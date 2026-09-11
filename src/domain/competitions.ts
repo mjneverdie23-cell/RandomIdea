@@ -226,6 +226,10 @@ export function competitionShort(id: CompetitionId): string {
   return COMPETITION_BY_ID[id]?.short ?? id;
 }
 
+export function competitionScope(id: CompetitionId): 'regional' | 'international' {
+  return COMPETITION_BY_ID[id].scope;
+}
+
 export function competitionAccent(id: CompetitionId): string {
   return COMPETITION_BY_ID[id]?.accent ?? '#8aa0c8';
 }

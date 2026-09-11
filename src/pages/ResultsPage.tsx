@@ -10,7 +10,7 @@ import {
   type LeaderboardCategory,
 } from '../leaderboard/repository.ts';
 import { formatPercent, formatScore, formatSeconds } from '../lib/format.ts';
-import { MODE_LABEL, sourceKey, sourceLabel } from '../quiz/config.ts';
+import { MODE_LABEL, scopeLabel, sourceKey, sourceLabel } from '../quiz/config.ts';
 import { MAX_QUESTION_SCORE } from '../quiz/scoring.ts';
 import { useQuiz } from '../state/QuizContext.tsx';
 import { usePlayerName } from '../state/usePlayerName.ts';
@@ -45,7 +45,10 @@ export function ResultsPage() {
         bestStreak: summary.bestStreak,
         averageResponseMs: summary.averageResponseMs,
         sourceKey: sourceKey(state.config.source),
-        sourceLabel: sourceLabel(state.config.source),
+        // The period rides along in the label rather than the key, so existing
+        // leaderboard filters keep working while a row still says which meta
+        // was actually played.
+        sourceLabel: scopeLabel(state.config.source, state.config.period),
         mode: state.config.mode,
         date: new Date().toISOString(),
         seed: state.config.seed,
@@ -142,7 +145,7 @@ export function ResultsPage() {
           </span>
         )}
         <span className="dim results-seed num">
-          Seed {state.config.seed} · {sourceLabel(state.config.source)} ·{' '}
+          Seed {state.config.seed} · {scopeLabel(state.config.source, state.config.period)} ·{' '}
           {MODE_LABEL[state.config.mode]} · {summary.questionCount} questions
         </span>
       </div>

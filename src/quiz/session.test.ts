@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createQuizState, currentGame, quizReducer, summarize } from './session.ts';
 import { QUESTION_TIME_MS } from './scoring.ts';
-import { MIXED_SOURCE, type QuizConfig } from './config.ts';
+import { ALL_PERIOD, MIXED_SOURCE, type QuizConfig } from './config.ts';
 import type { CompetitionId, Game, Side } from '../domain/types.ts';
 
 const CONFIG: QuizConfig = {
   source: MIXED_SOURCE,
+  period: ALL_PERIOD,
   questionCount: 10,
   mode: 'matchups',
   seed: 'TEST',

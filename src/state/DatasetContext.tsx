@@ -90,6 +90,8 @@ const EMPTY_AVAILABILITY: Availability = {
     CompetitionId,
     number
   >,
+  seasons: [],
+  counts: {},
 };
 
 export function DatasetProvider({ children }: { children: ReactNode }) {

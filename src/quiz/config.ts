@@ -38,12 +38,66 @@ export function isQuizMode(value: string): value is QuizMode {
   return value === 'matchups' || value === 'games';
 }
 
+/**
+ * Which slice of history the questions come from.
+ *
+ * A whole year is a lot of meta to hold in your head — patches turn over, the
+ * pick pool rotates, and a Spring draft reads nothing like a Summer one. Being
+ * able to lock a run to a single split makes it a memory test of one meta
+ * rather than of four.
+ *
+ * `year` covers everything in that season, which is how international events
+ * are reached: Worlds and MSI carry no split in the source data, so they
+ * belong to their year and to no split within it.
+ */
+export type QuizPeriod =
+  | { kind: 'all' }
+  | { kind: 'year'; year: string }
+  | { kind: 'split'; year: string; split: string };
+
+export const ALL_PERIOD: QuizPeriod = { kind: 'all' };
+
 export interface QuizConfig {
   source: QuestionSource;
+  period: QuizPeriod;
   questionCount: QuestionCount;
   mode: QuizMode;
   /** Reproducibility handle — same seed + same dataset = same questions. */
   seed: string;
+}
+
+export function periodKey(period: QuizPeriod): string {
+  if (period.kind === 'all') return 'ALL';
+  if (period.kind === 'year') return period.year;
+  return `${period.year}|${period.split}`;
+}
+
+export function periodLabel(period: QuizPeriod): string {
+  if (period.kind === 'all') return 'All seasons';
+  if (period.kind === 'year') return period.year;
+  return `${period.year} ${period.split}`;
+}
+
+export function parsePeriodKey(key: string | null | undefined): QuizPeriod {
+  if (!key || key === 'ALL') return ALL_PERIOD;
+  const [year = '', split = ''] = key.split('|');
+  if (!/^\d{4}$/.test(year)) return ALL_PERIOD;
+  return split ? { kind: 'split', year, split } : { kind: 'year', year };
+}
+
+export function samePeriod(a: QuizPeriod, b: QuizPeriod): boolean {
+  return periodKey(a) === periodKey(b);
+}
+
+/**
+ * What a run was drawn from, in one string: `LCK · 2024 Summer`.
+ *
+ * Falls back to the source alone when the run spans every season, so the
+ * common case reads exactly as it did before periods existed.
+ */
+export function scopeLabel(source: QuestionSource, period: QuizPeriod = ALL_PERIOD): string {
+  const base = sourceLabel(source);
+  return period.kind === 'all' ? base : `${base} · ${periodLabel(period)}`;
 }
 
 export const MIXED_SOURCE: QuestionSource = { kind: 'mixed' };
