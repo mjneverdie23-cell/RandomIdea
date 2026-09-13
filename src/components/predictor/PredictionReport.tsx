@@ -375,6 +375,7 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
               {pick.player && <span className="lane-player">{pick.player}</span>}
             </div>
             <LaneRecords pick={pick} />
+            <LaneLastPlayed pick={pick} />
             {(pick.counters.length > 0 || pick.counteredBy.length > 0 || pick.synergy.length > 0) && (
               <div className="lane-edges">
                 <EdgeList label="counters" tone="good" champions={pick.counters} />
@@ -436,6 +437,68 @@ function LaneRecords({ pick }: { pick: PickLine }) {
         empty="none"
       />
     </div>
+  );
+}
+
+/**
+ * How long ago an outing was, in the coarsest unit that still says something.
+ *
+ * Exact dates are in the tooltip; the line itself wants "is this current or
+ * stale", which days and months answer better than a date does.
+ */
+function agoLabel(iso: string, now: number): string | null {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return null;
+  const days = Math.floor((now - at) / 86_400_000);
+  if (days < 0) return null;
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days}d ago`;
+  const months = Math.round(days / 30);
+  if (months < 18) return `${months}mo ago`;
+  return `${Math.round(days / 365)}y ago`;
+}
+
+/**
+ * The last time this pick was actually made.
+ *
+ * The records above say how often it has worked; this says when it was last
+ * reached for and how that went, which is the difference between a pocket pick
+ * a player keeps winning on and one they have not touched in a year.
+ */
+function LaneLastPlayed({ pick }: { pick: PickLine }) {
+  const last = pick.lastPlayed;
+  if (!last) return null;
+
+  const ago = agoLabel(last.date, Date.now());
+  const who = last.scope === 'team' ? `${pick.champion.name} last picked by the team` : 'Last played';
+  // At an international event the tournament label already carries the stage
+  // ("Worlds 2025 Quarterfinal"), so only add it when it says something new.
+  const stage =
+    last.stage && !last.tournament.toLowerCase().includes(last.stage.toLowerCase())
+      ? ` · ${last.stage}`
+      : '';
+  const detail =
+    `${who} at ${last.tournament}${stage}` +
+    ` vs ${last.opponent} on ${last.date.slice(0, 10)}` +
+    ` — ${last.won ? 'won' : 'lost'}`;
+
+  return (
+    <p className="lane-last" title={detail}>
+      <span className="lane-last-label">last</span>
+      <span className="lane-last-event">{last.tournament}</span>
+      {ago && <span className="dim">{ago}</span>}
+      <span className={`lane-last-result is-${last.won ? 'win' : 'loss'}`}>
+        {last.won ? 'won' : 'lost'}
+      </span>
+      {last.scope === 'team' && (
+        // The starter has no record on it, so this is the team's outing —
+        // possibly a different player entirely.
+        <span className="dim" title="the starter has no games on this champion">
+          team
+        </span>
+      )}
+    </p>
   );
 }
 

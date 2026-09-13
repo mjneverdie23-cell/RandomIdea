@@ -1028,3 +1028,83 @@ describe('predict — first-time picks', () => {
     expect(pick.note).toContain('prepared surprise');
   });
 });
+
+describe('last played on a pick line', () => {
+  const TOP = ROLES[0];
+  const AATROX = DRAFT_A[0]!;
+  const outing = (tournament: string, won: boolean, scope: 'player' | 'team') => ({
+    tournament,
+    stage: 'Regular Season',
+    date: '2026-08-01T00:00:00.000Z',
+    won,
+    opponent: 'Red Team',
+    scope,
+  });
+
+  it('carries the starter’s own last outing', () => {
+    const prediction = predict(
+      model({
+        ...rostered(),
+        lastPlayedByPlayer: new Map([
+          [anywhereKey(starter('Blue Team', TOP), TOP, AATROX.id), outing('LCK 2026 Summer', true, 'player')],
+        ]),
+      }),
+      input(),
+    );
+    const line = prediction.blue.picks[0]!;
+    expect(line.lastPlayed?.tournament).toBe('LCK 2026 Summer');
+    expect(line.lastPlayed?.won).toBe(true);
+    expect(line.lastPlayed?.scope).toBe('player');
+  });
+
+  it('falls back to the team when the starter has never played it', () => {
+    const prediction = predict(
+      model({
+        ...rostered(),
+        lastPlayedByTeam: new Map([
+          [anywhereKey('Blue Team', TOP, AATROX.id), outing('Worlds 2025', false, 'team')],
+        ]),
+      }),
+      input(),
+    );
+    const line = prediction.blue.picks[0]!;
+    expect(line.lastPlayed?.tournament).toBe('Worlds 2025');
+    expect(line.lastPlayed?.scope).toBe('team');
+  });
+
+  it('prefers the starter over the team when both exist', () => {
+    const prediction = predict(
+      model({
+        ...rostered(),
+        lastPlayedByPlayer: new Map([
+          [anywhereKey(starter('Blue Team', TOP), TOP, AATROX.id), outing('LCK 2026 Summer', true, 'player')],
+        ]),
+        lastPlayedByTeam: new Map([
+          [anywhereKey('Blue Team', TOP, AATROX.id), outing('Worlds 2025', false, 'team')],
+        ]),
+      }),
+      input(),
+    );
+    expect(prediction.blue.picks[0]!.lastPlayed?.tournament).toBe('LCK 2026 Summer');
+  });
+
+  it('is null when nobody has ever picked it', () => {
+    const prediction = predict(model(rostered()), input());
+    expect(prediction.blue.picks[0]!.lastPlayed).toBeNull();
+  });
+
+  it('scores nothing — it is reported only', () => {
+    const base = predict(model(rostered()), input());
+    const withLast = predict(
+      model({
+        ...rostered(),
+        lastPlayedByPlayer: new Map([
+          [anywhereKey(starter('Blue Team', TOP), TOP, AATROX.id), outing('LCK 2026 Summer', false, 'player')],
+        ]),
+      }),
+      input(),
+    );
+    expect(withLast.margin).toBe(base.margin);
+    expect(withLast.blue.total).toBe(base.blue.total);
+  });
+});

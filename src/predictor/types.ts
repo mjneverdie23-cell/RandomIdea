@@ -43,6 +43,32 @@ export interface ClassAffinity {
   profileGames: number;
 }
 
+/**
+ * The most recent game this champion was actually picked in.
+ *
+ * The split and career records say how often a pick has worked; this says when
+ * it was last reached for and how that one went. A 60% career record reads
+ * differently when the last outing was a Worlds quarter-final loss three days
+ * ago than when it was a regular-season win last spring.
+ *
+ * Read from the imported games only, and from the same cut-off-scoped window as
+ * every other term, so it can never reference a game after the one being
+ * predicted.
+ */
+export interface LastPlayed {
+  /** The event, e.g. `LCK 2026 Summer`. */
+  tournament: string;
+  /** Stage inside it, e.g. `Playoffs — Semifinal`. */
+  stage: string;
+  /** ISO-8601 date of that game. */
+  date: string;
+  won: boolean;
+  /** Who it was played against. */
+  opponent: string;
+  /** Whose outing this was — the starter, or the team when no player matched. */
+  scope: 'player' | 'team';
+}
+
 /** Whether a champion gets better or worse the longer the game runs. */
 export type ChampionScaling = 'late' | 'balanced' | 'early';
 
@@ -200,6 +226,10 @@ export interface PredictorModel {
   /** Same, keyed by team — used only when the roster is unknown. */
   teamSplitRecord: Map<string, WinLoss>;
   teamCareerRecord: Map<string, WinLoss>;
+  /** `player|role|championId` -> the most recent time they played it. */
+  lastPlayedByPlayer: Map<string, LastPlayed>;
+  /** Same keyed by team, so an unknown roster still gets an answer. */
+  lastPlayedByTeam: Map<string, LastPlayed>;
   /** `season|split` the scoped data ends in, or `null` when empty. */
   /** Split key (`season|split`) each player and team is currently in. */
   currentSplitOf: Map<string, string>;
@@ -292,6 +322,8 @@ export interface PickLine {
   scaling: ScalingRead | null;
   /** How usual this pick is for the starter; `null` below the profile floor. */
   classAffinity: ClassAffinity | null;
+  /** The last time this pick was actually made; `null` when never. */
+  lastPlayed: LastPlayed | null;
   counters: Champion[];
   counteredBy: Champion[];
   synergy: Champion[];

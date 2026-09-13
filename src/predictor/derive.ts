@@ -37,6 +37,7 @@ import type {
   ChampionScaling,
   ClassProfile,
   EarlyGoldProfile,
+  LastPlayed,
   PredictorModel,
   ScalingRead,
   StandingRow,
@@ -156,16 +157,41 @@ function buildChampionRecords(
   playerCareer: Map<string, WinLoss>;
   teamSplit: Map<string, WinLoss>;
   teamCareer: Map<string, WinLoss>;
+  playerLast: Map<string, LastPlayed>;
+  teamLast: Map<string, LastPlayed>;
 } {
   const playerSplit = new Map<string, WinLoss>();
   const playerCareer = new Map<string, WinLoss>();
   const teamSplit = new Map<string, WinLoss>();
   const teamCareer = new Map<string, WinLoss>();
+  const playerLast = new Map<string, LastPlayed>();
+  const teamLast = new Map<string, LastPlayed>();
+
+  /**
+   * Keep the newest outing per key.
+   *
+   * Compared on the timestamp rather than trusting iteration order: the scoped
+   * array happens to be newest-first, but nothing here should break quietly if
+   * that ever changes.
+   */
+  const keepLatest = (
+    map: Map<string, LastPlayed>,
+    key: string,
+    at: number,
+    entry: LastPlayed,
+  ): void => {
+    if (!Number.isFinite(at)) return;
+    const held = map.get(key);
+    if (held && Date.parse(held.date) >= at) return;
+    map.set(key, entry);
+  };
 
   for (const game of games) {
     const splitKey = splitKeyOf(game);
+    const at = Date.parse(game.date);
     for (const side of [game.blue, game.red] as const) {
       const won = game.winner === side.side;
+      const opponent = (side.side === 'blue' ? game.red : game.blue).teamName;
       const teamInSplit = splits.get(splitSubject('team', side.teamName)) === splitKey;
       for (const player of side.players) {
         const { role, champion, playerName } = player;
@@ -177,10 +203,20 @@ function buildChampionRecords(
           bump(playerSplit, playerKey, won);
         }
         if (teamInSplit) bump(teamSplit, teamKey, won);
+
+        const outing = {
+          tournament: game.tournamentLabel,
+          stage: game.stage.label,
+          date: game.date,
+          won,
+          opponent,
+        };
+        keepLatest(playerLast, playerKey, at, { ...outing, scope: 'player' });
+        keepLatest(teamLast, teamKey, at, { ...outing, scope: 'team' });
       }
     }
   }
-  return { playerSplit, playerCareer, teamSplit, teamCareer };
+  return { playerSplit, playerCareer, teamSplit, teamCareer, playerLast, teamLast };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1156,6 +1192,8 @@ export function buildPredictorModel(
     playerCareerRecord: records.playerCareer,
     teamSplitRecord: records.teamSplit,
     teamCareerRecord: records.teamCareer,
+    lastPlayedByPlayer: records.playerLast,
+    lastPlayedByTeam: records.teamLast,
     currentSplitOf: splits,
     metaByRole,
     pickRateByRole,
@@ -1200,6 +1238,8 @@ export function emptyPredictorModel(): PredictorModel {
     playerCareerRecord: new Map(),
     teamSplitRecord: new Map(),
     teamCareerRecord: new Map(),
+    lastPlayedByPlayer: new Map(),
+    lastPlayedByTeam: new Map(),
     currentSplitOf: new Map(),
     metaByRole,
     pickRateByRole,

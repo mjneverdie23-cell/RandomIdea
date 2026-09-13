@@ -926,6 +926,43 @@
   letter-spacing: 0.02em;
 }
 
+/* When this pick was last actually made. Sits under the record chips as a
+   quieter line — it is recency, not a verdict — with the result the only part
+   carrying colour. */
+.lane-last {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  margin: 0;
+  font-size: 0.72rem;
+  cursor: help;
+}
+
+.lane-last-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.lane-last-event {
+  color: var(--text-dim);
+}
+
+.lane-last-result {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.lane-last-result.is-win {
+  color: var(--green);
+}
+
+.lane-last-result.is-loss {
+  color: var(--red);
+}
+
 .lane-edges {
   display: flex;
   flex-wrap: wrap;

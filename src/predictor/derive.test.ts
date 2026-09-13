@@ -30,6 +30,7 @@ interface GameSpec {
   competition?: Game['competition'];
   season?: string;
   split?: string;
+  tournamentLabel?: string;
   patch?: string;
   /** Starter names in role order; defaults to `<team>-<role>`. */
   bluePlayers?: string[];
@@ -96,7 +97,7 @@ function makeGame(spec: GameSpec): Game {
     gameId: spec.id,
     competition: spec.competition ?? 'LCK',
     sourceLeague: spec.competition ?? 'LCK',
-    tournamentLabel: 'Test',
+    tournamentLabel: spec.tournamentLabel ?? 'Test',
     season: spec.season ?? '2026',
     split: spec.split ?? 'Spring',
     date: new Date(START + spec.day * DAY + (spec.hour ?? 0) * 3600_000).toISOString(),
@@ -1002,5 +1003,94 @@ describe('deriveClassProfiles', () => {
     // skipped, so a missing champion cannot silently shrink a profile's total.
     const profile = deriveClassProfiles(spam('f', 'Aatrox', 20)).get('star')!;
     expect(profile.games).toBe(20);
+  });
+});
+
+describe('last played', () => {
+  const KEY = anywhereKey('star', 'top', 'Aatrox');
+
+  /** One game where `star` pilots Aatrox top for the given team. */
+  const outing = (
+    id: string,
+    day: number,
+    winner: Side,
+    label: string,
+    team = 'A',
+    player = 'star',
+  ) =>
+    makeGame({
+      id,
+      blue: team,
+      red: 'B',
+      winner,
+      day,
+      tournamentLabel: label,
+      bluePlayers: [player, 'j', 'm', 'b', 's'],
+    });
+
+  it('reports the most recent outing, not the first seen', () => {
+    // Newest-first, the order the scoped array actually arrives in.
+    const model = buildPredictorModel(
+      [
+        outing('new', 40, 'red', 'LCK 2026 Summer'),
+        outing('mid', 20, 'blue', 'LCK 2026 Spring'),
+        outing('old', 1, 'blue', 'LCK 2025 Summer'),
+      ],
+      new Map(),
+    );
+    const last = model.lastPlayedByPlayer.get(KEY)!;
+    expect(last.tournament).toBe('LCK 2026 Summer');
+    expect(last.won).toBe(false);
+    expect(last.opponent).toBe('B');
+    expect(last.scope).toBe('player');
+  });
+
+  it('is unmoved by the order the games arrive in', () => {
+    const games = [
+      outing('old', 1, 'blue', 'LCK 2025 Summer'),
+      outing('new', 40, 'red', 'LCK 2026 Summer'),
+      outing('mid', 20, 'blue', 'LCK 2026 Spring'),
+    ];
+    const model = buildPredictorModel(games, new Map());
+    expect(model.lastPlayedByPlayer.get(KEY)!.tournament).toBe('LCK 2026 Summer');
+  });
+
+  it('records a win as a win', () => {
+    const model = buildPredictorModel([outing('w', 5, 'blue', 'LCK 2026 Spring')], new Map());
+    expect(model.lastPlayedByPlayer.get(KEY)!.won).toBe(true);
+  });
+
+  it('keeps a team entry even when the player changes', () => {
+    const model = buildPredictorModel(
+      [
+        outing('new', 40, 'blue', 'LCK 2026 Summer', 'A', 'rookie'),
+        outing('old', 1, 'red', 'LCK 2025 Summer', 'A', 'veteran'),
+      ],
+      new Map(),
+    );
+    // Each player keeps their own outing...
+    expect(model.lastPlayedByPlayer.get(anywhereKey('veteran', 'top', 'Aatrox'))!.won).toBe(false);
+    expect(model.lastPlayedByPlayer.get(anywhereKey('rookie', 'top', 'Aatrox'))!.won).toBe(true);
+    // ...and the team's is the newest of them, whoever played it.
+    const team = model.lastPlayedByTeam.get(anywhereKey('A', 'top', 'Aatrox'))!;
+    expect(team.tournament).toBe('LCK 2026 Summer');
+    expect(team.scope).toBe('team');
+  });
+
+  it('says nothing about a champion nobody has played', () => {
+    const model = buildPredictorModel([outing('a', 1, 'blue', 'LCK 2026 Spring')], new Map());
+    expect(model.lastPlayedByPlayer.get(anywhereKey('star', 'top', 'Yorick'))).toBeUndefined();
+  });
+
+  it('cannot see past the cutoff it was given', () => {
+    // buildPredictorModel only ever sees the scoped slice, so a later game
+    // simply is not in the array — this pins that the read follows the scope.
+    const all = [
+      outing('future', 40, 'red', 'LCK 2026 Summer'),
+      outing('past', 1, 'blue', 'LCK 2025 Summer'),
+    ];
+    const scoped = all.filter((game) => Date.parse(game.date) < START + 10 * DAY);
+    const model = buildPredictorModel(scoped, new Map());
+    expect(model.lastPlayedByPlayer.get(KEY)!.tournament).toBe('LCK 2025 Summer');
   });
 });

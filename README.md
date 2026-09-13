@@ -712,6 +712,17 @@ deliberately:
   not touched it this split reads differently from one who is 50% on it right
   now.
 
+  Under those, a **last played** line: the most recent game the pick was
+  actually made in, the event it happened at, how long ago, and whether it was
+  won or lost. The records say how often a pick has worked; this says when it
+  was last reached for and how that one went, which is the difference between a
+  pocket pick a player keeps winning on and one they have not touched in a
+  year. It prefers the starter's own outing and falls back to the team's —
+  marked `team` when it does, since that may have been a different player. Like
+  the split and career records it is read from the same cut-off-scoped window,
+  so it can never reference a game after the one being predicted, and like the
+  scaling and class labels it is **reported only** and scores nothing.
+
   With no record for that player, an **off-meta** champion is credited a full
   1.00: nobody first-times an off-meta pick on stage, so it is prepared and
   aimed at this opponent. A *meta* champion they simply have not been handed

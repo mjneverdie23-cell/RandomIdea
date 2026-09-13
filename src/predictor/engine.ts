@@ -41,6 +41,7 @@ import {
   type GoldTempoPoint,
   type EarlyGoldProfile,
   type ClassAffinity,
+  type LastPlayed,
   type Notice,
   type PickLine,
   type Prediction,
@@ -540,6 +541,26 @@ function classAffinityFor(
   };
 }
 
+/**
+ * The last time this pick was actually made, preferring the starter.
+ *
+ * Same ladder as the win rate: the player's own outing when there is one, the
+ * team's otherwise. Reported only — nothing here moves the score.
+ */
+function lastPlayedFor(
+  model: PredictorModel,
+  team: string,
+  role: Role,
+  champion: Champion,
+  player: string | null,
+): LastPlayed | null {
+  if (player) {
+    const own = model.lastPlayedByPlayer.get(anywhereKey(player, role, champion.id));
+    if (own) return own;
+  }
+  return model.lastPlayedByTeam.get(anywhereKey(team, role, champion.id)) ?? null;
+}
+
 function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput): SideScore {
   const own = input.champions.filter((c): c is Champion => c !== null);
   const against = opposing.champions.filter((c): c is Champion => c !== null);
@@ -573,6 +594,13 @@ function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput)
       meta,
       scaling: model.scalingByChampion.get(champion.id) ?? null,
       classAffinity: classAffinityFor(model, roster[role] ?? null, champion),
+      lastPlayed: lastPlayedFor(
+        model,
+        input.team,
+        role,
+        champion,
+        read.player ?? roster[role] ?? null,
+      ),
       ...edges,
     });
   });
