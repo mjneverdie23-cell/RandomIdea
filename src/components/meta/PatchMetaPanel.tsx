@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChampionArt } from '../ChampionArt.tsx';
 import { formatRate, type ChampionMetaEntry, type MetaIndex } from '../../meta/patchMeta.ts';
 import { ROLE_LABEL, type CompetitionId } from '../../domain/types.ts';
+import { archetypeLabel, archetypeOf } from '../../predictor/championArchetypes.ts';
 import { formatCount } from '../../lib/format.ts';
 
 type MetaTab = 'picked' | 'banned';
@@ -110,6 +111,7 @@ function MetaRow({
   max: number;
 }) {
   const rate = tab === 'picked' ? entry.pickRate : entry.banRate;
+  const archetype = entry.primaryRole ? archetypeOf(entry.primaryRole, entry.champion) : null;
   const width = max > 0 ? Math.max(4, (rate / max) * 100) : 0;
 
   return (
@@ -121,6 +123,9 @@ function MetaRow({
         <div className="meta-name-row">
           <span className="meta-name">{entry.champion.name}</span>
           {entry.primaryRole && <span className="meta-role">{ROLE_LABEL[entry.primaryRole]}</span>}
+          {/* The archetype is role-scoped, so it can only be stated once the
+              role is known — and only for pairs the table covers. */}
+          {archetype && <span className="meta-archetype">{archetypeLabel(archetype)}</span>}
         </div>
         <div className="meta-bar">
           <span

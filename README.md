@@ -456,6 +456,60 @@ fixed. By league it is mixed rather than uniform: LPL 59.4% → 60.3%, First Sta
 68.9% → 73.3%, MSI 63.4% → 64.8%, against LCK 66.9% → 65.2% and EWC 65.7% →
 65.1%.
 
+#### Draft archetypes, and each player's pool
+
+Riot's classes are blunt for reading a draft: they call Camille a Fighter
+whether she is split-pushing top or making picks from support, and they put
+Ziggs and Orianna in the same bucket when a Ziggs bot lane is a completely
+different plan from an Orianna mid. So there is a second, narrower taxonomy
+keyed on the **pair** — role plus champion — with four archetypes per role:
+
+| role | archetypes |
+| --- | --- |
+| **top** | split pusher · frontline · ranged top · bruiser |
+| **jungle** | ganker · tempo · carry · tank/support |
+| **mid** | mage · assassin · skirmisher · utility |
+| **bot** | mage bot · hypercarry · spellcaster · utility |
+| **support** | buff · tank/opener · utility · playmaking |
+
+It ships as `src/predictor/data/championArchetypes.json`, authored as role →
+archetype → champion ids because that is how the question is actually asked
+("which junglers are gankers?"). 251 pairs across 173 champions. Tests hold it
+honest: every id must exist in the champion table, no champion may be filed
+under two archetypes in the same role, and every archetype must have members.
+
+A pair the table does not cover — an off-role pick, or a champion added since —
+has **no** archetype, and everything downstream treats that as "no read" rather
+than guessing. In particular such a pick is never called off-type: unknown and
+unusual are different claims.
+
+From that, each player gets a **pool** per role: every champion they have
+drafted there with their record on it, and the archetype that pool is mostly
+made of. The per-lane breakdown states it under each pick:
+
+```
+Ornn     Siwoo       usually bruiser 35%  this is frontline
+Hwei     ShowMaker   usually mage 72%     as picked
+Rakan    BeryL       usually tank / opener 39%  this is playmaking
+```
+
+Hovering gives the arithmetic — `ShowMaker: 72% of 145 games on mage, from a
+pool of 16 champions`. Champions the table does not cover stay in the pool (they
+were still played) but are left out of the share arithmetic, so an uncovered
+pick cannot quietly tilt a player toward an archetype it was never assigned.
+
+Profiles are keyed per **(player, role)**, so a player who has swapped lanes
+gets a profile for each and neither pollutes the other. The pool is always
+reported; the *favourite* waits for **8 games** on the role, because the pool is
+an observation and the favourite is a claim.
+
+The patch-meta champion list carries the archetype too, next to the role.
+
+**Reported only.** Like the class version below it, it annotates the breakdown
+and never moves a score — there is a test pinning that it changes neither side's
+total. This taxonomy is sharper than Riot's classes, which is a reason to
+measure it before scoring it, not a reason to skip the measurement.
+
 #### What each player usually drafts
 
 Every pick carries a chip naming the champion's class — fighter, mage, assassin,

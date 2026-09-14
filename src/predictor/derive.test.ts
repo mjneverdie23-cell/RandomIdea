@@ -8,12 +8,15 @@ import {
   deriveMeta,
   MIN_CLASS_PROFILE,
   deriveClassProfiles,
+  deriveArchetypeProfiles,
+  MIN_ARCHETYPE_PROFILE,
   deriveEarlyGold,
   deriveScaling,
   latestSeason,
   streakOf,
 } from './derive.ts';
 import { anywhereKey, splitSubject } from './engine.ts';
+import { archetypeProfileKey } from './championArchetypes.ts';
 import { makeChampion } from '../domain/champions.ts';
 import { ROLES, type Game, type GoldDiffTrack, type Side } from '../domain/types.ts';
 
@@ -1092,5 +1095,105 @@ describe('last played', () => {
     const scoped = all.filter((game) => Date.parse(game.date) < START + 10 * DAY);
     const model = buildPredictorModel(scoped, new Map());
     expect(model.lastPlayedByPlayer.get(KEY)!.tournament).toBe('LCK 2025 Summer');
+  });
+});
+
+describe('archetype profiles', () => {
+  /** `n` games where the blue mid laner plays `champion`. */
+  const midGames = (champion: string, n: number, dayOffset = 0, player = 'star') =>
+    Array.from({ length: n }, (_, i) =>
+      makeGame({
+        id: `${champion}-${i + dayOffset}`,
+        blue: 'A',
+        red: 'B',
+        winner: i % 2 === 0 ? 'blue' : 'red',
+        day: dayOffset + i,
+        bluePlayers: ['t', 'j', player, 'b', 's'],
+        blueDraft: ['Aatrox', 'Viego', champion, 'Jinx', 'Thresh'],
+      }),
+    );
+
+  const profileOf = (games: Game[], player = 'star', role: 'mid' | 'top' = 'mid') =>
+    deriveArchetypeProfiles(games).get(archetypeProfileKey(player, role));
+
+  it('builds the pool from everything played on the role', () => {
+    const profile = profileOf([...midGames('Azir', 6), ...midGames('Zed', 4, 100)])!;
+    expect(profile.pool.map((entry) => entry.championId)).toEqual(['Azir', 'Zed']);
+    expect(profile.pool[0]!.games).toBe(6);
+    expect(profile.pool[1]!.games).toBe(4);
+    expect(profile.pool).toHaveLength(2);
+  });
+
+  it('records the win/loss behind each champion in the pool', () => {
+    const profile = profileOf(midGames('Azir', 6))!;
+    // Alternating winners, blue first, so three of six.
+    expect(profile.pool[0]!.wins).toBe(3);
+    expect(profile.pool[0]!.games).toBe(6);
+  });
+
+  it('names the most-drafted archetype as the favourite', () => {
+    const profile = profileOf([...midGames('Azir', 6), ...midGames('Orianna', 4, 100)])!;
+    expect(profile.favourite).toBe('mage');
+    expect(profile.shares.get('mage')).toBeCloseTo(1, 10);
+  });
+
+  it('picks the favourite across archetypes, not champions', () => {
+    // Six mage games spread over two champions still beats five assassin games
+    // on one, which a champion-level count would get wrong.
+    const profile = profileOf([
+      ...midGames('Azir', 3),
+      ...midGames('Orianna', 3, 50),
+      ...midGames('Zed', 5, 100),
+    ])!;
+    expect(profile.favourite).toBe('mage');
+    expect(profile.shares.get('mage')).toBeCloseTo(6 / 11, 10);
+    expect(profile.shares.get('assassin')).toBeCloseTo(5 / 11, 10);
+  });
+
+  it('withholds a favourite below the reporting floor', () => {
+    const thin = profileOf(midGames('Azir', MIN_ARCHETYPE_PROFILE - 1))!;
+    expect(thin.favourite).toBeNull();
+    // The pool is still reported — it is observation, not a claim.
+    expect(thin.pool).toHaveLength(1);
+
+    const enough = profileOf(midGames('Azir', MIN_ARCHETYPE_PROFILE))!;
+    expect(enough.favourite).toBe('mage');
+  });
+
+  it('keeps uncovered picks in the pool but out of the shares', () => {
+    // Ornn has no mid entry, so he is played but unclassified.
+    const profile = profileOf([...midGames('Azir', 8), ...midGames('Ornn', 4, 100)])!;
+    expect(profile.pool.map((e) => e.championId).sort()).toEqual(['Azir', 'Ornn']);
+    expect(profile.pool.find((e) => e.championId === 'Ornn')!.archetype).toBeNull();
+    // Shares are over covered games only, so Azir is still 100% of the read.
+    expect(profile.games).toBe(8);
+    expect(profile.shares.get('mage')).toBeCloseTo(1, 10);
+  });
+
+  it('keeps a player who swapped roles from polluting either profile', () => {
+    const games = [
+      ...midGames('Azir', 8),
+      ...Array.from({ length: 8 }, (_, i) =>
+        makeGame({
+          id: `top-${i}`,
+          blue: 'A',
+          red: 'B',
+          winner: 'blue',
+          day: 200 + i,
+          bluePlayers: ['star', 'j', 'm', 'b', 's'],
+          blueDraft: ['Ornn', 'Viego', 'Azir', 'Jinx', 'Thresh'],
+        }),
+      ),
+    ];
+    const profiles = deriveArchetypeProfiles(games);
+    expect(profiles.get(archetypeProfileKey('star', 'mid'))!.favourite).toBe('mage');
+    expect(profiles.get(archetypeProfileKey('star', 'top'))!.favourite).toBe('frontline');
+  });
+
+  it('gives each player their own profile', () => {
+    const games = [...midGames('Azir', 8), ...midGames('Zed', 8, 100, 'other')];
+    const profiles = deriveArchetypeProfiles(games);
+    expect(profiles.get(archetypeProfileKey('star', 'mid'))!.favourite).toBe('mage');
+    expect(profiles.get(archetypeProfileKey('other', 'mid'))!.favourite).toBe('assassin');
   });
 });

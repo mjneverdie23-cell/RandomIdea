@@ -34,12 +34,14 @@
 import { ROLES, type Champion, type Role, type Side } from '../domain/types.ts';
 import { relevantEdges } from './championGraph.ts';
 import { primaryClass } from './championClasses.ts';
+import { archetypeOf, archetypeProfileKey } from './championArchetypes.ts';
 import { lookupRating } from './ratings.ts';
 import {
   SERIES_TARGET,
   type GoldTempo,
   type GoldTempoPoint,
   type EarlyGoldProfile,
+  type ArchetypeAffinity,
   type ClassAffinity,
   type LastPlayed,
   type Notice,
@@ -561,6 +563,37 @@ function lastPlayedFor(
   return model.lastPlayedByTeam.get(anywhereKey(team, role, champion.id)) ?? null;
 }
 
+/**
+ * What the starter usually drafts in this lane, and where this pick sits.
+ *
+ * Reported only. The generic class version of this was measured as a scoring
+ * term and never helped; this taxonomy is sharper, but "sharper" is a reason to
+ * measure it before scoring it, not a reason to skip the measurement.
+ */
+function archetypeAffinityFor(
+  model: PredictorModel,
+  player: string | null,
+  role: Role,
+  champion: Champion,
+): ArchetypeAffinity | null {
+  if (!player) return null;
+  const profile = model.archetypeProfiles.get(archetypeProfileKey(player, role));
+  if (!profile || profile.favourite === null) return null;
+
+  const archetype = archetypeOf(role, champion);
+  return {
+    archetype,
+    favourite: profile.favourite,
+    favouriteShare: profile.shares.get(profile.favourite) ?? 0,
+    share: archetype ? (profile.shares.get(archetype) ?? 0) : 0,
+    // An uncovered pick is not "off-type" — it is unknown, and saying a player
+    // is off their usual because the table has a gap would be a lie.
+    offType: archetype !== null && archetype !== profile.favourite,
+    profileGames: profile.games,
+    poolSize: profile.pool.length,
+  };
+}
+
 function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput): SideScore {
   const own = input.champions.filter((c): c is Champion => c !== null);
   const against = opposing.champions.filter((c): c is Champion => c !== null);
@@ -594,6 +627,12 @@ function scoreSide(model: PredictorModel, input: SideInput, opposing: SideInput)
       meta,
       scaling: model.scalingByChampion.get(champion.id) ?? null,
       classAffinity: classAffinityFor(model, roster[role] ?? null, champion),
+      archetypeAffinity: archetypeAffinityFor(
+        model,
+        read.player ?? roster[role] ?? null,
+        role,
+        champion,
+      ),
       lastPlayed: lastPlayedFor(
         model,
         input.team,

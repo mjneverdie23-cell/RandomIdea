@@ -1,4 +1,5 @@
 import { ChampionArt } from '../ChampionArt.tsx';
+import { archetypeLabel } from '../../predictor/championArchetypes.ts';
 import { ROLE_SHORT, type Side } from '../../domain/types.ts';
 import type {
   ChampionScaling,
@@ -374,6 +375,7 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
               <span className="dim">{scopeLabel(pick)}</span>
               {pick.player && <span className="lane-player">{pick.player}</span>}
             </div>
+            <LaneArchetype pick={pick} />
             <LaneRecords pick={pick} />
             <LaneLastPlayed pick={pick} />
             {(pick.counters.length > 0 || pick.counteredBy.length > 0 || pick.synergy.length > 0) && (
@@ -437,6 +439,41 @@ function LaneRecords({ pick }: { pick: PickLine }) {
         empty="none"
       />
     </div>
+  );
+}
+
+/**
+ * What the starter usually drafts in this lane, and what this pick is.
+ *
+ * The line reads `usually a mage · this is an assassin` when the two differ and
+ * collapses to `usually a mage — as picked` when they agree, because the
+ * interesting case is the mismatch and repeating the word twice buries it.
+ */
+function LaneArchetype({ pick }: { pick: PickLine }) {
+  const affinity = pick.archetypeAffinity;
+  if (!affinity) return null;
+
+  const favourite = archetypeLabel(affinity.favourite);
+  const pct = (value: number) => `${Math.round(value * 100)}%`;
+  const who = pick.player ?? 'this player';
+  const detail =
+    `${who}: ${pct(affinity.favouriteShare)} of ${affinity.profileGames} games on ` +
+    `${favourite}, from a pool of ${affinity.poolSize} champions` +
+    (affinity.archetype
+      ? ` · ${pct(affinity.share)} on ${archetypeLabel(affinity.archetype)}`
+      : ' · this champion has no archetype in the table for this role');
+
+  return (
+    <p className="lane-archetype" title={detail}>
+      <span className="lane-archetype-label">usually</span>
+      <span className="lane-archetype-fav">{favourite}</span>
+      <span className="dim">{pct(affinity.favouriteShare)}</span>
+      {affinity.archetype === null ? null : affinity.offType ? (
+        <span className="lane-archetype-pick is-off">this is {archetypeLabel(affinity.archetype)}</span>
+      ) : (
+        <span className="lane-archetype-pick">as picked</span>
+      )}
+    </p>
   );
 }
 

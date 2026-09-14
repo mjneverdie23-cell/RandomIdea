@@ -1,0 +1,100 @@
+{
+  "_comment": [
+    "Role-scoped draft archetypes. Keyed role -> archetype -> champion ids.",
+    "",
+    "A champion is a different thing in different lanes — Camille top is a split",
+    "pusher, Camille support is a playmaker — so this is keyed on the pair, not",
+    "on the champion alone. A champion with no entry for the role it was played",
+    "in simply has no archetype, which the UI renders as nothing.",
+    "",
+    "This is a statement about how a champion is drafted, not something match",
+    "results reveal, so it is authored rather than derived. Edit freely: the",
+    "lists are the source of truth and nothing else hardcodes a champion name."
+  ],
+  "top": {
+    "splitPusher": [
+      "Fiora", "Camille", "Jax", "Tryndamere", "Yorick", "Nasus", "Singed", "Olaf", "Trundle"
+    ],
+    "frontline": [
+      "Ornn", "Sion", "Malphite", "Maokai", "Shen", "Poppy", "KSante", "Zac", "Chogath",
+      "DrMundo", "Rammus", "TahmKench", "Galio"
+    ],
+    "rangedTop": [
+      "Jayce", "Kennen", "Gnar", "Quinn", "Teemo", "Vayne", "Kayle", "Heimerdinger",
+      "Varus", "Vladimir", "Ryze"
+    ],
+    "bruiser": [
+      "Aatrox", "Renekton", "Darius", "Garen", "Sett", "Irelia", "Riven", "Gwen", "Kled",
+      "Illaoi", "Volibear", "Urgot", "Mordekaiser", "Warwick", "Rumble", "Ambessa",
+      "Gragas", "Yone", "Yasuo", "Pantheon", "MonkeyKing", "Shyvana", "Sylas", "Aurora",
+      "Akali", "Swain", "Gangplank", "Kayn"
+    ]
+  },
+  "jungle": {
+    "ganker": [
+      "LeeSin", "Elise", "Nocturne", "XinZhao", "JarvanIV", "Rengar", "Khazix", "Shaco",
+      "Warwick", "Vi", "Pantheon", "Nidalee", "RekSai", "MonkeyKing", "Fiddlesticks"
+    ],
+    "tempo": [
+      "Karthus", "Hecarim", "Lillia", "Udyr", "Nunu", "Shyvana", "Volibear", "Olaf",
+      "Taliyah"
+    ],
+    "carry": [
+      "Graves", "Kayn", "Viego", "Kindred", "MasterYi", "Evelynn", "Belveth", "Diana",
+      "Ekko", "Briar", "Talon", "Qiyana", "Naafiri"
+    ],
+    "tank": [
+      "Sejuani", "Zac", "Maokai", "Amumu", "Rammus", "Ivern", "Skarner", "Poppy",
+      "Trundle", "Gragas", "Sion"
+    ]
+  },
+  "mid": {
+    "mage": [
+      "Azir", "Orianna", "Syndra", "Viktor", "Ahri", "Anivia", "Cassiopeia", "Lissandra",
+      "Ryze", "Taliyah", "Veigar", "Xerath", "Zoe", "Hwei", "Vex", "Neeko", "Swain",
+      "Malzahar", "Vladimir", "Annie", "Brand", "Karthus", "AurelionSol", "Mel",
+      "Seraphine", "Lux", "Ziggs", "Corki", "TwistedFate", "Heimerdinger", "Velkoz"
+    ],
+    "assassin": [
+      "Zed", "Katarina", "Talon", "Qiyana", "Fizz", "Leblanc", "Akali", "Ekko",
+      "Naafiri", "Kassadin", "Diana", "Locke", "Evelynn"
+    ],
+    "skirmisher": [
+      "Yasuo", "Yone", "Irelia", "Sylas", "Ambessa", "Akshan", "Jayce", "Aurora",
+      "Tristana", "Pantheon", "Gragas"
+    ],
+    "utility": ["Galio", "Zilean", "Karma", "Lulu", "Morgana"]
+  },
+  "bot": {
+    "mageBot": [
+      "Ziggs", "Swain", "Seraphine", "Veigar", "Heimerdinger", "Karthus", "Cassiopeia",
+      "Brand", "Hwei", "Corki", "Syndra"
+    ],
+    "hypercarry": [
+      "Jinx", "Aphelios", "Kaisa", "Zeri", "Twitch", "Vayne", "KogMaw", "Smolder",
+      "Nilah", "Tristana", "Yunara", "Xayah"
+    ],
+    "spellcaster": [
+      "Ezreal", "Jhin", "Varus", "Lucian", "Samira", "MissFortune", "Draven", "Akshan"
+    ],
+    "utility": ["Ashe", "Sivir", "Senna", "Kalista", "Caitlyn"]
+  },
+  "support": {
+    "buff": [
+      "Lulu", "Janna", "Soraka", "Nami", "Sona", "Milio", "Yuumi", "Seraphine", "Karma",
+      "Renata", "Taric", "Ivern"
+    ],
+    "tankOpener": [
+      "Leona", "Nautilus", "Alistar", "Braum", "Rell", "Maokai", "Galio", "TahmKench",
+      "Poppy", "Shen", "Amumu", "Zac"
+    ],
+    "utility": [
+      "Morgana", "Zyra", "Zilean", "Bard", "Lux", "Xerath", "Velkoz", "Neeko", "Hwei",
+      "Senna"
+    ],
+    "playmaking": [
+      "Pyke", "Camille", "Thresh", "Rakan", "Blitzcrank", "Shaco", "Swain", "Brand",
+      "Pantheon", "Sett", "Elise", "Naafiri"
+    ]
+  }
+}

@@ -32,10 +32,13 @@ import {
 } from '../domain/types.ts';
 import { anywhereKey, splitSubject } from './engine.ts';
 import { primaryClass, type ChampionClass } from './championClasses.ts';
+import { archetypeOf, archetypeProfileKey, type Archetype } from './championArchetypes.ts';
 import type {
   GoldTempo,
+  ArchetypeProfile,
   ChampionScaling,
   ClassProfile,
+  PoolEntry,
   EarlyGoldProfile,
   LastPlayed,
   PredictorModel,
@@ -950,6 +953,108 @@ export function deriveClassProfiles(games: readonly Game[]): Map<string, ClassPr
 }
 
 /* ------------------------------------------------------------------ */
+/* Player champion pools and archetypes                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Games on a role before a player's archetype profile is worth reporting.
+ *
+ * Lower than `MIN_CLASS_PROFILE` on purpose. That profile spreads a player's
+ * games across six broad Riot classes; this one spreads them across four
+ * role-scoped archetypes, so the same number of games gives a much sharper
+ * read — and unlike the class profile it is keyed per role, which already
+ * removes the noise of a player who has swapped lanes.
+ */
+export const MIN_ARCHETYPE_PROFILE = 8;
+
+/**
+ * Each player's champion pool in each role, and what they reach for most.
+ *
+ * Two things come out of the same pass. The **pool** is every champion the
+ * player has drafted on that role with their record on it — a scouting list.
+ * The **favourite** is the archetype that pool is mostly made of, which is the
+ * one-line version: Faker reads as a mage, Canyon as a carry jungler.
+ *
+ * Champions the archetype table does not cover are kept in the pool — they were
+ * still played — but left out of the share arithmetic, so an uncovered pick
+ * cannot quietly tilt a player toward an archetype it was never assigned.
+ *
+ * Reported only, like the class profile it sits beside.
+ */
+export function deriveArchetypeProfiles(
+  games: readonly Game[],
+): Map<string, ArchetypeProfile> {
+  interface Bucket {
+    player: string;
+    role: Role;
+    perChampion: Map<string, PoolEntry>;
+    perArchetype: Map<Archetype, number>;
+    covered: number;
+  }
+  const buckets = new Map<string, Bucket>();
+
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      const won = game.winner === side.side;
+      for (const player of side.players) {
+        if (!player.playerName) continue;
+        const { role, champion } = player;
+        const key = archetypeProfileKey(player.playerName, role);
+        let bucket = buckets.get(key);
+        if (!bucket) {
+          bucket = {
+            player: player.playerName,
+            role,
+            perChampion: new Map(),
+            perArchetype: new Map(),
+            covered: 0,
+          };
+          buckets.set(key, bucket);
+        }
+
+        const archetype = archetypeOf(role, champion);
+        const entry = bucket.perChampion.get(champion.id);
+        if (entry) {
+          entry.games += 1;
+          if (won) entry.wins += 1;
+        } else {
+          bucket.perChampion.set(champion.id, {
+            championId: champion.id,
+            championName: champion.name,
+            games: 1,
+            wins: won ? 1 : 0,
+            archetype,
+          });
+        }
+        if (archetype) {
+          bucket.perArchetype.set(archetype, (bucket.perArchetype.get(archetype) ?? 0) + 1);
+          bucket.covered += 1;
+        }
+      }
+    }
+  }
+
+  const profiles = new Map<string, ArchetypeProfile>();
+  for (const [key, bucket] of buckets) {
+    const ranked = [...bucket.perArchetype.entries()].sort((a, b) => b[1] - a[1]);
+    const pool = [...bucket.perChampion.values()].sort(
+      (a, b) => b.games - a.games || a.championName.localeCompare(b.championName),
+    );
+    profiles.set(key, {
+      player: bucket.player,
+      role: bucket.role,
+      games: bucket.covered,
+      pool,
+      shares: new Map(ranked.map(([archetype, n]) => [archetype, n / bucket.covered])),
+      // The pool is always reported; the favourite is the claim, so it waits
+      // for enough games to be worth making.
+      favourite: bucket.covered >= MIN_ARCHETYPE_PROFILE ? (ranked[0]?.[0] ?? null) : null,
+    });
+  }
+  return profiles;
+}
+
+/* ------------------------------------------------------------------ */
 /* Early gold window                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -1209,6 +1314,7 @@ export function buildPredictorModel(
     earlyGold: deriveEarlyGold(formGames),
     // Class preference is a durable habit, so it reads all scoped history.
     classProfiles: deriveClassProfiles(games),
+    archetypeProfiles: deriveArchetypeProfiles(games),
     standingsByCompetition,
     standingsOverall,
     formSeason,
@@ -1254,6 +1360,7 @@ export function emptyPredictorModel(): PredictorModel {
     goldTempo: new Map(),
     earlyGold: new Map(),
     classProfiles: new Map(),
+    archetypeProfiles: new Map(),
     standingsByCompetition: new Map(),
     standingsOverall: new Map(),
     formSeason: null,

@@ -24,6 +24,7 @@ import {
   seriesWinProbability,
 } from './engine.ts';
 import { emptyPredictorModel } from './derive.ts';
+import { archetypeProfileKey } from './championArchetypes.ts';
 import { makeChampion } from '../domain/champions.ts';
 import { ROLES, type Champion, type Role } from '../domain/types.ts';
 import type { GoldTempo, PredictionInput, PredictorModel, TeamBehavior, WinLoss } from './types.ts';
@@ -1106,5 +1107,93 @@ describe('last played on a pick line', () => {
     );
     expect(withLast.margin).toBe(base.margin);
     expect(withLast.blue.total).toBe(base.blue.total);
+  });
+});
+
+describe('archetype affinity on a pick line', () => {
+  const MID = 'mid' as const;
+  const AZIR = champ('Azir');
+  const ZED = champ('Zed');
+  const ORNN = champ('Ornn');
+
+  const profile = (
+    favourite: 'mage' | 'assassin' | null,
+    shares: [string, number][],
+    games = 20,
+    poolSize = 6,
+  ) =>
+    new Map([
+      [
+        archetypeProfileKey(starter('Blue Team', MID), MID),
+        {
+          player: starter('Blue Team', MID),
+          role: MID,
+          games,
+          pool: Array.from({ length: poolSize }, (_, i) => ({
+            championId: `C${i}`,
+            championName: `C${i}`,
+            games: 1,
+            wins: 1,
+            archetype: null,
+          })),
+          shares: new Map(shares as [never, number][]),
+          favourite: favourite as never,
+        },
+      ],
+    ]);
+
+  const lineFor = (champions: Champion[], profiles: PredictorModel['archetypeProfiles']) =>
+    predict(
+      model({ ...rostered(), archetypeProfiles: profiles }),
+      input({
+        blue: { competition: 'LCK', team: 'Blue Team', champions, motivation: 'normal' },
+      }),
+    ).blue.picks.find((p) => p.role === MID)!;
+
+  const draftWithMid = (mid: Champion) =>
+    DRAFT_A.map((c, i) => (i === 2 ? mid : c));
+
+  it('reports the favourite and marks a matching pick as usual', () => {
+    const line = lineFor(draftWithMid(AZIR), profile('mage', [['mage', 0.7], ['assassin', 0.3]]));
+    expect(line.archetypeAffinity?.favourite).toBe('mage');
+    expect(line.archetypeAffinity?.archetype).toBe('mage');
+    expect(line.archetypeAffinity?.offType).toBe(false);
+    expect(line.archetypeAffinity?.favouriteShare).toBeCloseTo(0.7, 10);
+  });
+
+  it('marks a pick outside the usual archetype', () => {
+    const line = lineFor(draftWithMid(ZED), profile('mage', [['mage', 0.7], ['assassin', 0.3]]));
+    expect(line.archetypeAffinity?.archetype).toBe('assassin');
+    expect(line.archetypeAffinity?.offType).toBe(true);
+    expect(line.archetypeAffinity?.share).toBeCloseTo(0.3, 10);
+  });
+
+  it('does not call an uncovered pick off-type', () => {
+    // Ornn has no mid entry. "Unknown" and "unusual" are different claims and
+    // the second one would be a lie.
+    const line = lineFor(draftWithMid(ORNN), profile('mage', [['mage', 1]]));
+    expect(line.archetypeAffinity?.archetype).toBeNull();
+    expect(line.archetypeAffinity?.offType).toBe(false);
+    expect(line.archetypeAffinity?.share).toBe(0);
+  });
+
+  it('says nothing when the player has no profile', () => {
+    const line = lineFor(draftWithMid(AZIR), new Map());
+    expect(line.archetypeAffinity).toBeNull();
+  });
+
+  it('says nothing when the profile has no favourite yet', () => {
+    const line = lineFor(draftWithMid(AZIR), profile(null, [['mage', 1]]));
+    expect(line.archetypeAffinity).toBeNull();
+  });
+
+  it('scores nothing — it is reported only', () => {
+    const base = predict(model(rostered()), input());
+    const withAffinity = predict(
+      model({ ...rostered(), archetypeProfiles: profile('assassin', [['assassin', 0.9]]) }),
+      input(),
+    );
+    expect(withAffinity.margin).toBe(base.margin);
+    expect(withAffinity.blue.total).toBe(base.blue.total);
   });
 });

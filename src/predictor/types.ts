@@ -8,6 +8,7 @@
  */
 
 import type { ChampionClass } from './championClasses.ts';
+import type { Archetype } from './championArchetypes.ts';
 import type {
   Champion,
   CompetitionId,
@@ -28,6 +29,53 @@ export interface ClassProfile {
   shares: Map<ChampionClass, number>;
   /** The player's most-played classes, in order. */
   favourites: ChampionClass[];
+}
+
+/** One champion in a player's pool, with how often they have played it. */
+export interface PoolEntry {
+  championId: string;
+  championName: string;
+  games: number;
+  wins: number;
+  archetype: Archetype | null;
+}
+
+/**
+ * Everything a player has drafted in their role, and what it adds up to.
+ *
+ * Built per (player, role) rather than per player: the archetypes are
+ * role-scoped, so a player who has games in two roles gets a profile for each
+ * and neither is polluted by the other.
+ */
+export interface ArchetypeProfile {
+  player: string;
+  role: Role;
+  /** Games behind the profile, counting only picks the table covers. */
+  games: number;
+  /** Every champion played in this role, most-played first. */
+  pool: PoolEntry[];
+  /** Archetype -> share of this player's covered games, most-played first. */
+  shares: Map<Archetype, number>;
+  /** What this player reaches for most. `null` below the reporting floor. */
+  favourite: Archetype | null;
+}
+
+/** How a single pick sits against what the player usually drafts in that role. */
+export interface ArchetypeAffinity {
+  /** The archetype this pick plays as, or `null` when the table has no entry. */
+  archetype: Archetype | null;
+  /** The player's most-drafted archetype in this role. */
+  favourite: Archetype;
+  /** Share of the player's games spent on `favourite`. */
+  favouriteShare: number;
+  /** Share spent on `archetype`; zero when they have never drafted it. */
+  share: number;
+  /** True when this pick is not the player's most-drafted archetype. */
+  offType: boolean;
+  /** Games behind the profile, so a thin read can be discounted. */
+  profileGames: number;
+  /** Distinct champions this player has on this role. */
+  poolSize: number;
 }
 
 /** How a single pick sits against the player's usual classes. */
@@ -255,6 +303,8 @@ export interface PredictorModel {
   earlyGold: Map<string, EarlyGoldProfile>;
   /** What each player usually drafts, by champion class. */
   classProfiles: Map<string, ClassProfile>;
+  /** Champion pool and favourite archetype, keyed `player|role`. */
+  archetypeProfiles: Map<string, ArchetypeProfile>;
   standingsByCompetition: Map<CompetitionId, Map<string, StandingRow>>;
   standingsOverall: Map<string, StandingRow>;
   /** Season the standings and behaviour reads describe. */
@@ -322,6 +372,9 @@ export interface PickLine {
   scaling: ScalingRead | null;
   /** How usual this pick is for the starter; `null` below the profile floor. */
   classAffinity: ClassAffinity | null;
+  /** The starter's favourite archetype in this role, and how this pick sits
+   *  against it. `null` until they have enough games on the role. */
+  archetypeAffinity: ArchetypeAffinity | null;
   /** The last time this pick was actually made; `null` when never. */
   lastPlayed: LastPlayed | null;
   counters: Champion[];

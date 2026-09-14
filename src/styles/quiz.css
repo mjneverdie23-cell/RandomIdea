@@ -500,6 +500,17 @@
   flex: none;
 }
 
+/* How the champion is drafted in that role — one shade quieter than the role
+   itself, which is the harder fact. */
+.meta-archetype {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--violet);
+  opacity: 0.75;
+  flex: none;
+}
+
 .meta-bar {
   height: 4px;
   border-radius: 99px;

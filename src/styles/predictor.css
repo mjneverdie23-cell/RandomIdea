@@ -926,6 +926,39 @@
   letter-spacing: 0.02em;
 }
 
+/* What the starter usually drafts in this lane. Sits directly under the title
+   row, above the records, because it describes the player rather than the
+   result. Only a mismatch carries colour. */
+.lane-archetype {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  margin: 0;
+  font-size: 0.72rem;
+  cursor: help;
+}
+
+.lane-archetype-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.lane-archetype-fav {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.lane-archetype-pick {
+  color: var(--text-faint);
+}
+
+.lane-archetype-pick.is-off {
+  color: var(--violet);
+}
+
 /* When this pick was last actually made. Sits under the record chips as a
    quieter line — it is recency, not a verdict — with the result the only part
    carrying colour. */
