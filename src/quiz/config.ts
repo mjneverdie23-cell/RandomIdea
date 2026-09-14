@@ -2,7 +2,7 @@
  * Quiz configuration: what the setup screen produces and the engine consumes.
  */
 
-import { COMPETITION_IDS, competitionShort } from '../domain/competitions.ts';
+import { QUIZ_COMPETITION_IDS, competitionShort } from '../domain/competitions.ts';
 import type { CompetitionId } from '../domain/types.ts';
 
 export const QUESTION_COUNTS = [10, 25, 50] as const;
@@ -112,7 +112,7 @@ export function sourceLabel(source: QuestionSource): string {
 
 export function parseSourceKey(key: string | null | undefined): QuestionSource {
   if (!key || key === 'MIXED') return MIXED_SOURCE;
-  const match = COMPETITION_IDS.find((id) => id === key);
+  const match = QUIZ_COMPETITION_IDS.find((id) => id === key);
   return match ? { kind: 'single', competition: match } : MIXED_SOURCE;
 }
 

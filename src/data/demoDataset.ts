@@ -38,6 +38,22 @@ const LCK_TEAMS: RosterTemplate[] = [
   { team: 'OKSavingsBank BRION', players: ['Morgan', 'Willer', 'Karis', 'Teddy', 'Pollu'] },
 ];
 
+/**
+ * LCK Challengers rosters.
+ *
+ * Deliberately distinct player names from `LCK_TEAMS`: the interesting case for
+ * the predictor is a player whose record lives mostly down here, and sharing
+ * names with the senior squads would hide exactly that.
+ */
+const LCK_CL_TEAMS: RosterTemplate[] = [
+  { team: 'T1 Challengers', players: ['Poby', 'Hetel', 'Ryun', 'Smash', 'Rekkz'] },
+  { team: 'Gen.G Challengers', players: ['Frank', 'Sponge', 'Yoonsu', 'Hyubin', 'Bull'] },
+  { team: 'Hanwha Life Challengers', players: ['Dudu', 'Grizzly', 'Calix', 'Leo', 'Lifer'] },
+  { team: 'Dplus KIA Challengers', players: ['Rhino', 'Jungjae', 'Pungyeon', 'Taeyoon', 'Moham'] },
+  { team: 'KT Rolster Challengers', players: ['Hoya', 'Yeonsung', 'Rookieinho', 'Envyy', 'Bible'] },
+  { team: 'BNK FearX Youth', players: ['Soboro', 'Lonely', 'Jiwoong', 'Taeyeon', 'Execute'] },
+];
+
 const LPL_TEAMS: RosterTemplate[] = [
   { team: 'Bilibili Gaming', players: ['Bin', 'Xun', 'knight', 'Elk', 'ON'] },
   { team: 'JD Gaming', players: ['Xiaoxu', 'Junjia', 'Hongq', 'GALA', 'Vampire'] },
@@ -184,6 +200,18 @@ function buildPlans(): EventPlan[] {
 
   return [
     regional('LCK', LCK_TEAMS),
+    {
+      // Predictor-only, so these games never become quiz questions — but the
+      // demo should still exercise the path, since the whole point of carrying
+      // the Challengers League is a rookie whose top-flight record is thin.
+      league: 'LCK CL',
+      year: 2025,
+      pool: LCK_CL_TEAMS,
+      blocks: [
+        { split: 'Winter', playoffs: 0, startDay: 5, endDay: 45, series: 18, bestOf: 3 },
+        { split: 'Summer', playoffs: 0, startDay: 151, endDay: 204, series: 18, bestOf: 3 },
+      ],
+    },
     regional('LPL', LPL_TEAMS),
     regional('LEC', LEC_TEAMS),
     regional('LCS', LCS_TEAMS),

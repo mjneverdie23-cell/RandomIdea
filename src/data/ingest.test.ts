@@ -156,11 +156,17 @@ describe('ingestRows', () => {
   it('drops games from competitions outside the configured set', () => {
     const result = ingest([
       ...gameRows({ gameId: 'KEEP', league: 'LEC' }),
-      ...gameRows({ gameId: 'DROP', league: 'LCK CL' }),
+      ...gameRows({ gameId: 'DROP', league: 'LCK CL Academy' }),
       ...gameRows({ gameId: 'DROP2', league: 'PCS' }),
     ]);
     expect(result.games.map((g) => g.gameId)).toEqual(['KEEP']);
     expect(result.stats.rejectedByCompetition).toBe(2);
+  });
+
+  it('imports LCK CL, which the predictor uses and the quiz does not', () => {
+    const result = ingest(gameRows({ gameId: 'CL', league: 'LCK CL' }));
+    expect(result.games.map((g) => g.competition)).toEqual(['LCK_CL']);
+    expect(result.stats.rejectedByCompetition).toBe(0);
   });
 
   it('drops games with an incomplete draft and reports why', () => {

@@ -18,7 +18,11 @@ import {
   splitGamesByYear,
 } from '../data/years.ts';
 import { refreshDataDragonVersion } from '../domain/champions.ts';
-import { COMPETITION_IDS, competitionShort } from '../domain/competitions.ts';
+import {
+  COMPETITION_IDS,
+  QUIZ_COMPETITION_IDS,
+  competitionShort,
+} from '../domain/competitions.ts';
 import type { CompetitionId } from '../domain/types.ts';
 import { MetaIndex } from '../meta/patchMeta.ts';
 import { computeAvailability, type Availability } from '../quiz/generator.ts';
@@ -86,7 +90,7 @@ const DatasetContext = createContext<DatasetContextValue | null>(null);
 // the one-file change `competitions.ts` promises.
 const EMPTY_AVAILABILITY: Availability = {
   total: 0,
-  perCompetition: Object.fromEntries(COMPETITION_IDS.map((id) => [id, 0])) as Record<
+  perCompetition: Object.fromEntries(QUIZ_COMPETITION_IDS.map((id) => [id, 0])) as Record<
     CompetitionId,
     number
   >,

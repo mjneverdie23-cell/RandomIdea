@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isEligibleLeague, normalizeLeagueString, resolveCompetition } from './competitions.ts';
+import {
+  COMPETITION_IDS,
+  QUIZ_COMPETITION_IDS,
+  isEligibleLeague,
+  isQuizCompetition,
+  normalizeLeagueString,
+  resolveCompetition,
+} from './competitions.ts';
 
 describe('normalizeLeagueString', () => {
   it('uppercases and collapses punctuation and whitespace', () => {
@@ -40,11 +47,35 @@ describe('resolveCompetition', () => {
   });
 
   it('rejects academy, challenger and development leagues', () => {
-    expect(resolveCompetition('LCK CL')).toBeNull();
     expect(resolveCompetition('LDL')).toBeNull();
     expect(resolveCompetition('NACL')).toBeNull();
     expect(resolveCompetition('LCS Academy')).toBeNull();
     expect(resolveCompetition('LPL Challengers')).toBeNull();
+  });
+
+  it('resolves LCK CL, the one configured league the exclusions would catch', () => {
+    // Carried for the predictor only — see `quiz: false` in the registry.
+    for (const raw of ['LCK CL', 'lck cl', 'LCK-CL', 'LCK Challengers League']) {
+      expect(resolveCompetition(raw)).toBe('LCK_CL');
+    }
+    expect(isQuizCompetition('LCK_CL')).toBe(false);
+    expect(QUIZ_COMPETITION_IDS).not.toContain('LCK_CL');
+    expect(COMPETITION_IDS).toContain('LCK_CL');
+  });
+
+  it('lets the exclusions keep working around it', () => {
+    // The override is an EXACT alias match, so anything decorated still falls
+    // through to the exclusion list.
+    expect(resolveCompetition('LCK CL Academy')).toBeNull();
+    expect(resolveCompetition('LCK CL Qualifiers')).toBeNull();
+    expect(resolveCompetition('LCK AS')).toBeNull();
+  });
+
+  it('keeps every other competition quizzed', () => {
+    for (const id of COMPETITION_IDS) {
+      if (id === 'LCK_CL') continue;
+      expect(isQuizCompetition(id)).toBe(true);
+    }
   });
 
   it('resolves LCP, including its long name and season noise', () => {

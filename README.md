@@ -18,7 +18,8 @@ and nothing hidden.
 
 Games come from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)
 match-data CSVs, filtered to nine competitions: **LCK, LEC, LCS, LPL, LCP,
-Worlds, First Stand, MSI, EWC**.
+Worlds, First Stand, MSI, EWC** — plus **LCK CL**, which is imported for the
+Predictor alone and never appears as a quiz question.
 
 ---
 
@@ -52,7 +53,7 @@ Riot's CDN until you download it locally with `npm run assets`.
    its own season. Nothing is uploaded anywhere.
 
 The import report tells you exactly what happened: rows read, games kept, how
-many were dropped for being outside the nine competitions, how many had
+many were dropped for being outside the configured competitions, how many had
 incomplete drafts, and which seasons the file contributed to.
 
 ### Seasons
@@ -106,12 +107,36 @@ several aliases — see `COLUMN_ALIASES` in `src/data/oracleSchema.ts`.
 `src/domain/competitions.ts` is the single source of truth. Each competition
 carries display metadata, an accent color, alias list and optional regex
 patterns; a global exclusion list keeps academy/challenger/development leagues
-out (`LCK CL`, `LDL`, `NACL`, `LCS Academy`, …).
+out (`LDL`, `NACL`, `LCS Academy`, `LCK CL Academy`, …).
 
 Matching is done on a normalized league string, so `WLDs`, `Worlds`,
 `worlds 2024` and `World Championship` all resolve to the same competition.
 Adding or removing a competition is a one-file change — no UI component
 hardcodes a league name.
+
+**Predictor-only competitions.** A competition can set `quiz: false`, which
+means its games are imported and feed the Predictor but never become a quiz
+question, are never offered as a quiz source, and never reach the leaderboard.
+**LCK CL** is the one that does. The Challengers League is where LCK academy
+rosters play, so it is the record of what a player did before promotion —
+exactly what you want when the Predictor is asked about a rookie whose
+top-flight history is three games long. As quiz questions those games are a
+different proposition: unfamiliar teams, unfamiliar players, and a standard of
+play that does not test the same read.
+
+One door enforces it. `checkEligibility` in `src/quiz/generator.ts` rejects
+predictor-only competitions, and everything that asks "can this be a question"
+— the quiz, blind mode, the dashboard's featured draft — goes through it.
+Surfaces that list leagues read `QUIZ_COMPETITIONS`; surfaces about the data
+itself (import, the Data page, the Predictor) read `COMPETITIONS`.
+
+LCK CL also needs `overridesExclusions: true`, because `\bCL\b` and
+`\bCHALLENGERS?\b` in the exclusion list were written to keep exactly this
+league out. The override applies only to an **exact** alias match, so `LCK CL`
+resolves while `LCK CL Academy` and `LCK CL Qualifiers` are still thrown out.
+
+Note that its games do join the meta pool, which is global rather than
+per-league — the same way LPL games already inform a read on an LEC draft.
 
 **PCS is deliberately not an alias for LCP.** LCP was formed in 2025 out of the
 PCS and LCO regions, so treating PCS as an old name would match how `EU LCS` and
@@ -1032,7 +1057,7 @@ initials for the rest of the run, which reads as art randomly failing.
 ## Demo data
 
 With no CSV imported, the app generates a synthetic dataset (~1,100 games across
-all nine competitions, ten patches, a full season calendar). **The games are
+every configured competition, ten patches, a full season calendar). **The games are
 invented.** Team names are real organizations and player names are drawn from
 real regional player pools so the draft reads naturally, but the rosters are
 illustrative and none of the results happened. Every such game is flagged

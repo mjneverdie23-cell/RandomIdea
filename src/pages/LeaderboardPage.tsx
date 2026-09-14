@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { COMPETITIONS } from '../domain/competitions.ts';
+import { QUIZ_COMPETITIONS } from '../domain/competitions.ts';
 import {
   categoryKey,
   filterEntries,
@@ -201,7 +201,7 @@ export function LeaderboardPage() {
             >
               Mixed
             </FilterChip>
-            {COMPETITIONS.map((competition) => (
+            {QUIZ_COMPETITIONS.map((competition) => (
               <FilterChip
                 key={competition.id}
                 active={filters.sourceKey === competition.id}

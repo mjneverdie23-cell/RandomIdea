@@ -94,7 +94,8 @@ export type CompetitionId =
   | 'WORLDS'
   | 'MSI'
   | 'FIRST_STAND'
-  | 'EWC';
+  | 'EWC'
+  | 'LCK_CL';
 
 export type SeriesFormat = 'BO1' | 'BO3' | 'BO5' | 'UNKNOWN';
 

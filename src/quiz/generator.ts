@@ -10,7 +10,11 @@
  * complete, both teams named, a real winner, a usable date.
  */
 
-import { COMPETITION_IDS, competitionScope } from '../domain/competitions.ts';
+import {
+  QUIZ_COMPETITION_IDS,
+  competitionScope,
+  isQuizCompetition,
+} from '../domain/competitions.ts';
 import { compareYears, yearOf } from '../data/years.ts';
 import { ROLES, type CompetitionId, type Game } from '../domain/types.ts';
 import { createRng, type Rng } from './rng.ts';
@@ -33,6 +37,13 @@ export interface EligibilityResult {
 }
 
 export function checkEligibility(game: Game): EligibilityResult {
+  // Predictor-only competitions are filtered here rather than at import, so
+  // their games still reach the model. Everything that asks "can this be a
+  // question" — the quiz, blind mode, the featured draft on the dashboard —
+  // comes through this one door.
+  if (!isQuizCompetition(game.competition)) {
+    return { eligible: false, reason: 'competition is not quizzed' };
+  }
   for (const team of [game.blue, game.red]) {
     if (!team.teamName.trim()) return { eligible: false, reason: 'missing team name' };
     if (team.players.length !== ROLES.length) {
@@ -134,7 +145,7 @@ export function countsKey(source: QuestionSource, period: QuizPeriod): string {
 
 export function computeAvailability(games: readonly Game[]): Availability {
   const perCompetition = Object.fromEntries(
-    COMPETITION_IDS.map((id) => [id, 0]),
+    QUIZ_COMPETITION_IDS.map((id) => [id, 0]),
   ) as Record<CompetitionId, number>;
   const counts: Record<string, number> = {};
   // Splits are ordered by when they were actually played, so Spring lands

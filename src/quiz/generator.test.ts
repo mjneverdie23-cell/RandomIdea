@@ -4,13 +4,18 @@ import {
   availableFor,
   checkEligibility,
   computeAvailability,
+  eligibleGames,
   filterByPeriod,
   filterBySource,
   generateQuiz,
   QuizGenerationError,
 } from './generator.ts';
 import { compareYears, yearOf } from '../data/years.ts';
-import { COMPETITION_IDS, competitionScope } from '../domain/competitions.ts';
+import {
+  COMPETITION_IDS,
+  competitionScope,
+  isQuizCompetition,
+} from '../domain/competitions.ts';
 import { ALL_PERIOD, MIXED_SOURCE, type QuizPeriod } from './config.ts';
 import { createRng, hashSeed } from './rng.ts';
 import type { Game } from '../domain/types.ts';
@@ -38,13 +43,33 @@ describe('demo dataset', () => {
     expect(again.games.map((g) => g.gameId)).toEqual(dataset.games.map((g) => g.gameId));
   });
 
-  it('gives every game a complete, quiz-eligible draft', () => {
+  it('gives every game a complete draft', () => {
     for (const game of dataset.games) {
-      expect(checkEligibility(game).eligible).toBe(true);
       expect(game.blue.players).toHaveLength(5);
       expect(game.red.players).toHaveLength(5);
       expect(game.blue.bans).toHaveLength(5);
     }
+  });
+
+  it('makes every quizzed game eligible', () => {
+    for (const game of dataset.games) {
+      if (!isQuizCompetition(game.competition)) continue;
+      expect(checkEligibility(game).eligible).toBe(true);
+    }
+  });
+
+  it('carries predictor-only games that the quiz will not ask about', () => {
+    // LCK CL is imported for the predictor's benefit and must never become a
+    // question. If this ever finds nothing, the demo data stopped exercising
+    // the predictor-only path and the guard below is vacuous.
+    const predictorOnly = dataset.games.filter((g) => !isQuizCompetition(g.competition));
+    expect(predictorOnly.length).toBeGreaterThan(0);
+    for (const game of predictorOnly) {
+      expect(checkEligibility(game).reason).toBe('competition is not quizzed');
+    }
+    expect(eligibleGames(dataset.games)).toHaveLength(
+      dataset.games.length - predictorOnly.length,
+    );
   });
 
   it('never repeats a champion inside a single game', () => {
@@ -196,7 +221,10 @@ describe('period filtering', () => {
     for (const season of availability.seasons) {
       for (const source of [MIXED_SOURCE, { kind: 'single' as const, competition: 'LCK' as const }]) {
         const period = { kind: 'year' as const, year: season.year };
-        const filtered = filterByPeriod(filterBySource(dataset.games, source), period);
+        const filtered = filterByPeriod(
+          filterBySource(eligibleGames(dataset.games), source),
+          period,
+        );
         expect(availableFor(availability, source, period)).toBe(filtered.length);
       }
     }
@@ -268,7 +296,10 @@ describe('period filtering', () => {
 describe('computeAvailability', () => {
   it('counts eligible games overall and per competition', () => {
     const availability = computeAvailability(dataset.games);
-    expect(availability.total).toBe(dataset.games.length);
+    // Predictor-only competitions are not in the quiz pool, so the total is
+    // the eligible count rather than every loaded game.
+    expect(availability.total).toBe(eligibleGames(dataset.games).length);
+    expect(availability.total).toBeLessThan(dataset.games.length);
     expect(availableFor(availability, MIXED_SOURCE)).toBe(availability.total);
     expect(availableFor(availability, { kind: 'single', competition: 'LCK' })).toBe(
       availability.perCompetition.LCK,

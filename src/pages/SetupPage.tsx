@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { COMPETITIONS } from '../domain/competitions.ts';
+import { QUIZ_COMPETITIONS } from '../domain/competitions.ts';
 import { formatCount } from '../lib/format.ts';
 import {
   ALL_PERIOD,
@@ -48,7 +48,7 @@ export function SetupPage() {
   // season, and the season counts reflect the chosen competition.
   const competitionRows = useMemo(
     () =>
-      COMPETITIONS.map((competition) => ({
+      QUIZ_COMPETITIONS.map((competition) => ({
         ...competition,
         count: availableFor(availability, { kind: 'single', competition: competition.id }, period),
         // All-time count, which decides whether the chip is selectable at all.

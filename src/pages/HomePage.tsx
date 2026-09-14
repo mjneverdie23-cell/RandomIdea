@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DraftBoard } from '../components/draft/DraftBoard.tsx';
 import { GameContextBar } from '../components/GameContextBar.tsx';
-import { COMPETITIONS, competitionShort } from '../domain/competitions.ts';
+import { QUIZ_COMPETITIONS, competitionShort } from '../domain/competitions.ts';
 import { toPrompt } from '../domain/types.ts';
 import { leaderboardRepository, personalBest, rankEntries } from '../leaderboard/repository.ts';
 import type { LeaderboardEntry } from '../leaderboard/repository.ts';
@@ -84,7 +84,9 @@ export function HomePage() {
 
           <dl className="hero-facts">
             <div>
-              <dt>Games loaded</dt>
+              {/* The quiz pool, not the import count — predictor-only
+                  competitions are loaded but never asked about. */}
+              <dt>Games to play</dt>
               <dd className="num">{availability.total.toLocaleString()}</dd>
             </div>
             <div>
@@ -212,7 +214,7 @@ export function HomePage() {
           </div>
           <div className="panel-pad">
             <div className="comp-bars">
-              {COMPETITIONS.map((competition) => {
+              {QUIZ_COMPETITIONS.map((competition) => {
                 const count = availability.perCompetition[competition.id];
                 const share = availability.total ? (count / availability.total) * 100 : 0;
                 return (

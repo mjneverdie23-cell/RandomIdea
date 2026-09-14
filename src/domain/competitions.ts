@@ -24,6 +24,25 @@ export interface CompetitionDefinition {
   short: string;
   /** `league` / `region` for regional leagues, `international` for the rest. */
   scope: 'regional' | 'international';
+  /**
+   * Whether this competition's games may become quiz questions.
+   *
+   * Defaults to true. `false` means the games are imported and reach the
+   * predictor — where more history is simply more evidence — but never appear
+   * as a question, are never offered as a quiz source, and never reach the
+   * leaderboard. A development league is useful for scouting a player's
+   * champion history and a poor test of whether *you* can read a draft.
+   */
+  quiz?: boolean;
+  /**
+   * Resolve this competition's exact aliases ahead of `GLOBAL_EXCLUSIONS`.
+   *
+   * The exclusion list is a set of heuristics for keeping feeder leagues out.
+   * A competition that is deliberately configured is not a heuristic, so it
+   * wins — but only on an exact alias match, so `LCK CL` resolves while
+   * `LCK CL Academy` is still thrown out by `\bACADEMY\b`.
+   */
+  overridesExclusions?: boolean;
   /** CSS color token used for accenting this competition in the UI. */
   accent: string;
   /**
@@ -146,6 +165,26 @@ export const COMPETITIONS: CompetitionDefinition[] = [
     accent: '#7ce07c',
     aliases: ['EWC', 'ESPORTS WORLD CUP', 'ESPORT WORLD CUP', 'EWC LOL'],
   },
+  {
+    id: 'LCK_CL',
+    label: 'LCK Challengers League',
+    short: 'LCK CL',
+    scope: 'regional',
+    accent: '#8fb4ff',
+    // Predictor only. The Challengers League is where LCK academy rosters
+    // play, and its games are the record of what a player did before their
+    // promotion — genuinely useful when the predictor is asked about a rookie
+    // whose LCK history is three games long. As quiz questions they are a
+    // different thing entirely: unfamiliar teams, unfamiliar players, and a
+    // standard of play that does not test the same read.
+    //
+    // It sits behind `overridesExclusions` because `\bCL\b` and
+    // `\bCHALLENGERS?\b` in the exclusion list were written to keep exactly
+    // this league out, and both still apply to everything else.
+    quiz: false,
+    overridesExclusions: true,
+    aliases: ['LCK CL', 'LCKCL', 'LCK CHALLENGERS LEAGUE', 'LCK CHALLENGERS'],
+  },
 ];
 
 export const COMPETITION_BY_ID: Record<CompetitionId, CompetitionDefinition> = Object.fromEntries(
@@ -153,6 +192,23 @@ export const COMPETITION_BY_ID: Record<CompetitionId, CompetitionDefinition> = O
 ) as Record<CompetitionId, CompetitionDefinition>;
 
 export const COMPETITION_IDS: CompetitionId[] = COMPETITIONS.map((c) => c.id);
+
+/**
+ * The competitions the quiz draws on — everything except predictor-only ones.
+ *
+ * Use these wherever the surface is the quiz (setup chips, the eligible pool,
+ * leaderboard filters). Use `COMPETITIONS` where the surface is the data
+ * itself: importing, the Data page, and the predictor.
+ */
+export const QUIZ_COMPETITIONS: CompetitionDefinition[] = COMPETITIONS.filter(
+  (c) => c.quiz !== false,
+);
+export const QUIZ_COMPETITION_IDS: CompetitionId[] = QUIZ_COMPETITIONS.map((c) => c.id);
+
+/** False for competitions that are imported for the predictor but never quizzed. */
+export function isQuizCompetition(id: CompetitionId): boolean {
+  return COMPETITION_BY_ID[id]?.quiz !== false;
+}
 
 /**
  * Uppercase, strip punctuation/diacritics, collapse whitespace.
@@ -180,9 +236,13 @@ function stripSeasonNoise(normalized: string): string {
 }
 
 const aliasIndex = new Map<string, CompetitionId>();
+/** Aliases allowed to resolve before the exclusion list is consulted. */
+const privilegedAliases = new Map<string, CompetitionId>();
 for (const comp of COMPETITIONS) {
   for (const alias of comp.aliases) {
-    aliasIndex.set(normalizeLeagueString(alias), comp.id);
+    const key = normalizeLeagueString(alias);
+    aliasIndex.set(key, comp.id);
+    if (comp.overridesExclusions) privilegedAliases.set(key, comp.id);
   }
 }
 
@@ -194,6 +254,13 @@ export function resolveCompetition(rawLeague: string | null | undefined): Compet
   if (!rawLeague) return null;
   const normalized = normalizeLeagueString(rawLeague);
   if (!normalized) return null;
+
+  // An exact alias on a competition that claims precedence beats the exclusion
+  // heuristics — that is the only way `LCK CL` survives `\bCL\b`. Exact only,
+  // so `LCK CL Academy` still falls through to the exclusions below.
+  const privileged = privilegedAliases.get(normalized);
+  if (privileged) return privileged;
+
   if (GLOBAL_EXCLUSIONS.some((rx) => rx.test(normalized))) return null;
 
   const direct = aliasIndex.get(normalized);
