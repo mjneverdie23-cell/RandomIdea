@@ -183,7 +183,11 @@ export const COMPETITIONS: CompetitionDefinition[] = [
     // this league out, and both still apply to everything else.
     quiz: false,
     overridesExclusions: true,
-    aliases: ['LCK CL', 'LCKCL', 'LCK CHALLENGERS LEAGUE', 'LCK CHALLENGERS'],
+    // `LCKC` is what Oracle's Elixir actually writes — the spaced `LCK CL`
+    // spelling is what the league is called everywhere else, and shipping only
+    // that meant the competition resolved for nobody's real export. The rest
+    // are older and third-party spellings.
+    aliases: ['LCKC', 'LCK CL', 'LCKCL', 'LCK CHALLENGERS LEAGUE', 'LCK CHALLENGERS'],
   },
 ];
 

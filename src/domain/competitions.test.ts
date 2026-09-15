@@ -55,7 +55,9 @@ describe('resolveCompetition', () => {
 
   it('resolves LCK CL, the one configured league the exclusions would catch', () => {
     // Carried for the predictor only — see `quiz: false` in the registry.
-    for (const raw of ['LCK CL', 'lck cl', 'LCK-CL', 'LCK Challengers League']) {
+    // `LCKC` first: that is the spelling Oracle's Elixir actually ships, and
+    // leaving it out meant the competition resolved for nobody's real export.
+    for (const raw of ['LCKC', 'lckc', 'LCK CL', 'lck cl', 'LCK-CL', 'LCK Challengers League']) {
       expect(resolveCompetition(raw)).toBe('LCK_CL');
     }
     expect(isQuizCompetition('LCK_CL')).toBe(false);
