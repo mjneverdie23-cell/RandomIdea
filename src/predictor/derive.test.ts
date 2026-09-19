@@ -8,6 +8,7 @@ import {
   deriveMeta,
   MIN_CLASS_PROFILE,
   deriveClassProfiles,
+  currentSplits,
   deriveArchetypeProfiles,
   MIN_ARCHETYPE_PROFILE,
   deriveEarlyGold,
@@ -15,7 +16,7 @@ import {
   latestSeason,
   streakOf,
 } from './derive.ts';
-import { anywhereKey, splitSubject } from './engine.ts';
+import { anywhereKey, splitLabel, splitSubject } from './engine.ts';
 import { archetypeProfileKey } from './championArchetypes.ts';
 import { makeChampion } from '../domain/champions.ts';
 import { ROLES, type Game, type GoldDiffTrack, type Side } from '../domain/types.ts';
@@ -32,7 +33,8 @@ interface GameSpec {
   gameNumber?: number;
   competition?: Game['competition'];
   season?: string;
-  split?: string;
+  /** `null` means an event with no split of its own, like Worlds. */
+  split?: string | null;
   tournamentLabel?: string;
   patch?: string;
   /** Starter names in role order; defaults to `<team>-<role>`. */
@@ -102,7 +104,7 @@ function makeGame(spec: GameSpec): Game {
     sourceLeague: spec.competition ?? 'LCK',
     tournamentLabel: spec.tournamentLabel ?? 'Test',
     season: spec.season ?? '2026',
-    split: spec.split ?? 'Spring',
+    split: spec.split === undefined ? 'Spring' : spec.split,
     date: new Date(START + spec.day * DAY + (spec.hour ?? 0) * 3600_000).toISOString(),
     patch: spec.patch ?? '16.01',
     stage: { kind: 'regular', label: 'Regular Season', elimination: false },
@@ -1195,5 +1197,47 @@ describe('archetype profiles', () => {
     const profiles = deriveArchetypeProfiles(games);
     expect(profiles.get(archetypeProfileKey('star', 'mid'))!.favourite).toBe('mage');
     expect(profiles.get(archetypeProfileKey('other', 'mid'))!.favourite).toBe('assassin');
+  });
+});
+
+describe('current split when the newest game has none', () => {
+  // A player finishes LPL Split 3, then goes to Worlds. Worlds carries no
+  // split in the source data, and used to become their "current split".
+  const games = [
+    makeGame({
+      id: 'worlds', blue: 'A', red: 'B', winner: 'blue', day: 20,
+      competition: 'WORLDS', split: null,
+      bluePlayers: ['t', 'j', 'm', 'star', 's'],
+      blueDraft: ['Aatrox', 'Viego', 'Azir', 'Ezreal', 'Thresh'],
+    }),
+    makeGame({
+      id: 'split3b', blue: 'A', red: 'B', winner: 'red', day: 10, split: 'Split 3',
+      bluePlayers: ['t', 'j', 'm', 'star', 's'],
+      blueDraft: ['Aatrox', 'Viego', 'Azir', 'Kalista', 'Thresh'],
+    }),
+    makeGame({
+      id: 'split3a', blue: 'A', red: 'B', winner: 'blue', day: 5, split: 'Split 3',
+      bluePlayers: ['t', 'j', 'm', 'star', 's'],
+      blueDraft: ['Aatrox', 'Viego', 'Azir', 'Kalista', 'Thresh'],
+    }),
+  ];
+
+  it('leaves the player in the last split they actually played', () => {
+    const splits = currentSplits(games);
+    // `2026|` renders as the bare season, so the lane claimed "2026 not picked
+    // yet" about a champion picked days earlier.
+    expect(splitLabel(splits.get(splitSubject('player', 'star')))).toBe('Split 3');
+    expect(splitLabel(splits.get(splitSubject('team', 'A')))).toBe('Split 3');
+  });
+
+  it('keeps the split record that belongs to it', () => {
+    const model = buildPredictorModel(games, new Map());
+    const record = model.playerSplitRecord.get(anywhereKey('star', 'bot', 'Kalista'));
+    expect(record).toEqual({ games: 2, wins: 1 });
+  });
+
+  it('still reports nothing for a player who has only played split-less events', () => {
+    const onlyWorlds = [games[0]!];
+    expect(currentSplits(onlyWorlds).get(splitSubject('player', 'star'))).toBeUndefined();
   });
 });

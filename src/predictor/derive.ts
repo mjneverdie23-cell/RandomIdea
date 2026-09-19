@@ -120,6 +120,17 @@ export function currentSplits(games: readonly Game[]): Map<string, string> {
   const splits = new Map<string, string>();
 
   for (const game of games) {
+    // An international event is not a split, so it cannot BE a player's
+    // current one. Letting it set the key put everyone at Worlds or MSI into
+    // a `2026|` bucket that only other split-less games fall into, which
+    // emptied their split record for the duration of the event: the lane read
+    // "2026 not picked yet" next to a last-played line saying the champion had
+    // been picked days earlier, and every win-rate base quietly fell back to
+    // career at exactly the moment the predictor gets used most.
+    //
+    // Skipping them leaves the player in the last split they really played —
+    // their regional one — which is what "this split" is asking about.
+    if (!game.split) continue;
     const at = Date.parse(game.date);
     const key = splitKeyOf(game);
     for (const side of [game.blue, game.red] as const) {

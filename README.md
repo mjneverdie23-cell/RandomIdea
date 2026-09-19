@@ -781,6 +781,17 @@ deliberately:
   0% or 100% and nothing in between, which would let a single result overwrite
   a career's worth of evidence.
 
+  **An international event is not a split, and cannot become one.** Worlds, MSI,
+  First Stand and EWC carry no split in the source data, so a player who is at
+  one stays in the last split they actually played — their regional one. Letting
+  the event set the key instead put them in a season-only bucket that nothing
+  but other split-less games fell into, which emptied their split record for the
+  whole tournament: the lane read *"2026 not picked yet"* directly above a
+  last-played line saying the champion had been picked days earlier, and the
+  win-rate base quietly fell back to career for the entire field. Measured on a
+  real export, 142 of 329 tracked players and teams were in that state during
+  Worlds 2025.
+
   When both records exist they are **averaged**. Career already contains the
   split games, so the mean is a 50/50 blend that leans on recent form without
   letting it erase what came before: a player who is 1-3 on a champion this
