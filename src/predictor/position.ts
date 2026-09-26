@@ -1,19 +1,26 @@
 /**
- * Position sizing: how much of a bankroll a prediction justifies risking.
+ * Position sizing for a match priced in cents: a share of a team pays $1 if it
+ * wins, so a 40¢ price is the market saying 40%.
  *
- * Three questions, answered in the order a disciplined bettor asks them:
+ * Four questions, answered in the order a disciplined trader asks them:
  *
- *   1. Is the price sane?      Strip the bookmaker's margin out of the two odds
- *                              and see what the market actually believes.
- *   2. What is it worth?       Turn the model's read — plus the user's own, if
- *                              they give one — into a probability, then into a
- *                              fair price and the worst price still worth taking.
- *   3. How much?               Fractional Kelly on that probability, capped, and
- *                              nothing at all below a minimum edge.
+ *   1. Is the price sane?   The two prices for one match add up to 100¢, or a
+ *                           little more (the spread). Under 100¢ is a typo.
+ *   2. What is it worth?    The model's probability, blended with how sure the
+ *                           user says they are, is the fair price. The most
+ *                           worth paying is that minus a safety margin.
+ *   3. How much do we trust it?
+ *                           Conviction: whether the model and the user both see
+ *                           value at this price, how much data the draft rests
+ *                           on, and how far the estimate sits from the market.
+ *   4. How much?            Quarter Kelly times conviction, never more than 5%
+ *                           of the bankroll times the same conviction.
  *
- * The one decision here that matters more than the arithmetic is the first
- * input: **the probability the predictor displays is not the probability this
- * module stakes on.** The report's logistic scale (`PROB_SCALE`, 2.0) is
+ * Nothing here is a setting. The size comes out of the inputs.
+ *
+ * The one decision that matters more than the arithmetic is the model input:
+ * **the probability the predictor displays is not the probability this module
+ * stakes on.** The report's logistic scale (`PROB_SCALE`, 2.0) is
  * overconfident. Measured on 3,692 games from March 2025 to September 2026:
  *
  *   report says   favourite actually won
@@ -33,12 +40,14 @@
  * is the calibration a staking decision should be tuned to. It is also the
  * slightly more conservative of the two.
  *
- * Pure: no I/O, no React. Probabilities are always for the blue side unless a
- * name says otherwise.
+ * Pure: no I/O, no React. Probabilities and prices are fractions of $1 (0.40
+ * is 40¢), for the blue side unless a name says otherwise.
  */
 
 import { seriesWinProbability } from './engine.ts';
 import type { Prediction } from './types.ts';
+
+export type Side = 'blue' | 'red';
 
 /* ------------------------------------------------------------------ */
 /* Calibration                                                         */
@@ -71,7 +80,7 @@ export function stakingGameProb(margin: number): number {
   return clamp(sigmoid(margin / STAKING_SCALE), 1 - MAX_GAME_PROB, MAX_GAME_PROB);
 }
 
-/** Which result the odds are for. */
+/** Which result the prices are for. */
 export type Market = 'series' | 'game';
 
 /**
@@ -90,98 +99,107 @@ export function modelProbability(prediction: Prediction, market: Market): number
 }
 
 /**
- * Combine the model with the user's own read.
+ * Combine the model with how sure the user is.
  *
  * Averaged in log-odds, not in percentages: 90% and 50% should meet nearer 75%
  * than a naive 70%, because the distance from 50 to 90 is much larger in
  * evidence terms than it looks on a percentage scale.
  *
- * Equal weight by default. The user's read is the only channel for what the
- * model cannot see — a roster swap the morning of the match, a patch the
- * export has not caught up with, a player known to be ill — so it should be
- * able to move the number substantially. It should not be able to replace it.
+ * Equal weight. The user is the only channel for what the model cannot see — a
+ * roster swap the morning of the match, a patch the export has not caught up
+ * with, a player known to be ill — so they should be able to move the number
+ * substantially. They should not be able to replace it: people who say "90%
+ * sure" are right far less often than 90% of the time.
  */
-export function blend(model: number, read: number | null, readWeight = 0.5): number {
-  if (read === null) return model;
+export function blend(model: number, user: number | null, userWeight = 0.5): number {
+  if (user === null) return model;
   const m = clamp(model, PROB_FLOOR, PROB_CEIL);
-  const r = clamp(read, PROB_FLOOR, PROB_CEIL);
-  return sigmoid((1 - readWeight) * logit(m) + readWeight * logit(r));
+  const u = clamp(user, PROB_FLOOR, PROB_CEIL);
+  return sigmoid((1 - userWeight) * logit(m) + userWeight * logit(u));
 }
 
 /* ------------------------------------------------------------------ */
-/* Odds                                                                */
+/* Inputs                                                              */
 /* ------------------------------------------------------------------ */
 
 /**
- * Read odds as bookmakers write them, returned as decimal odds.
+ * Read a price in cents, returned as a fraction of $1.
  *
- *   decimal     2.10         -> 2.10
- *   American    +150 / -200  -> 2.50 / 1.50   (a sign is required)
- *   fractional  5/2          -> 3.50
+ *   40, 40¢, 40c   -> 0.40
+ *   62.5           -> 0.625
+ *   0.40, $0.40    -> 0.40   (under 1, or with a $, is read as dollars)
  *
- * A bare number is always decimal. That makes `150` a decimal 150.0 rather than
- * a guess at American +150 — the parsed value is shown back to the user, which
- * is a better answer to ambiguity than a heuristic that is silently wrong.
+ * Anything at or past 100¢, or at or below zero, is not a price for a side
+ * that can still lose.
  */
-export function parseOdds(raw: string): number | null {
-  const text = raw.trim().replace(',', '.');
+export function parseCents(raw: string): number | null {
+  let text = raw.trim().replace(',', '.').replace(/\s+/g, '');
   if (!text) return null;
-
-  const fraction = text.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
-  if (fraction) {
-    const num = Number(fraction[1]);
-    const den = Number(fraction[2]);
-    return den > 0 && num > 0 ? 1 + num / den : null;
-  }
-
-  if (/^[+-]/.test(text)) {
-    const american = Number(text);
-    if (!Number.isFinite(american) || Math.abs(american) < 100) return null;
-    return american > 0 ? 1 + american / 100 : 1 + 100 / -american;
-  }
-
-  const decimal = Number(text);
-  return Number.isFinite(decimal) && decimal > 1 ? decimal : null;
-}
-
-export type MarketQuality = 'arbitrage' | 'tight' | 'normal' | 'high' | 'very high';
-
-/** What a two-way price says once the bookmaker's cut is taken out. */
-export interface MarketRead {
-  /** 1 / odds for each side — probability with the margin still in. */
-  implied: [blue: number, red: number];
-  /** How far the implied probabilities overshoot 100%. The bookmaker's cut. */
-  overround: number;
-  /** Implied probabilities scaled back to sum to 1 — the market's actual view. */
-  fair: [blue: number, red: number];
-  quality: MarketQuality;
+  const dollars = text.startsWith('$');
+  text = text.replace(/^\$/, '').replace(/(¢|c)$/i, '');
+  if (!/^\d*\.?\d+$/.test(text)) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const price = dollars || value < 1 ? value : value / 100;
+  return price > 0 && price < 1 ? price : null;
 }
 
 /**
- * Margin bands for a two-way esports market.
- *
- * Sharp books run major-league match winners at 3–5%; recreational books at
- * 6–8%; anything past 10% is a price that needs a large edge just to break
- * even. Below zero the two sides sum to under 100%, which on a single book is
- * almost always a typo and across two books is an arbitrage — both worth
- * stopping for.
+ * How sure the user is that their pick wins, as a fraction: 50 to 100 percent.
+ * Under 50 would mean they think the other team wins, which is the other pick.
  */
-export function marketQuality(overround: number): MarketQuality {
-  if (overround < 0) return 'arbitrage';
-  if (overround <= 0.04) return 'tight';
-  if (overround <= 0.07) return 'normal';
-  if (overround <= 0.12) return 'high';
-  return 'very high';
+export function parseSureness(raw: string): number | null {
+  const text = raw.trim().replace(',', '.').replace(/%$/, '').trim();
+  if (!text || !/^\d*\.?\d+$/.test(text)) return null;
+  const value = Number(text);
+  return value >= 50 && value <= 100 ? value / 100 : null;
 }
 
-export function readMarket(oddsBlue: number, oddsRed: number): MarketRead {
-  const implied: [number, number] = [1 / oddsBlue, 1 / oddsRed];
-  const total = implied[0] + implied[1];
+/** The user's probability that blue wins, from their pick and sureness. */
+export function userProbability(pick: Side | null, sureness: number | null): number | null {
+  if (pick === null || sureness === null) return null;
+  return pick === 'blue' ? sureness : 1 - sureness;
+}
+
+/* ------------------------------------------------------------------ */
+/* Market                                                              */
+/* ------------------------------------------------------------------ */
+
+export type SpreadQuality = 'crossed' | 'tight' | 'normal' | 'wide';
+
+export interface MarketRead {
+  /** The two prices, one of them possibly assumed. */
+  prices: [blue: number, red: number];
+  /** How far the two prices overshoot $1. The cost of crossing both sides. */
+  spread: number;
+  /** Prices scaled back to sum to $1 — the market's actual view. */
+  fair: [blue: number, red: number];
+  quality: SpreadQuality;
+}
+
+/**
+ * Spread bands for a two-way match market in cents.
+ *
+ * A liquid major-league match trades 1–2¢ wide; a thin one 3–5¢; past that the
+ * price on screen may not be one anyone will fill. Under 100¢ the two sides
+ * can't both be real prices — one of them is a typo.
+ */
+export function spreadQuality(spread: number): SpreadQuality {
+  // Float noise: 40¢ + 60¢ must read as exactly 100¢.
+  const cents = Math.round(spread * 1000) / 10;
+  if (cents < 0) return 'crossed';
+  if (cents <= 2) return 'tight';
+  if (cents <= 5) return 'normal';
+  return 'wide';
+}
+
+export function readMarket(priceBlue: number, priceRed: number): MarketRead {
+  const total = priceBlue + priceRed;
   return {
-    implied,
-    overround: total - 1,
-    fair: [implied[0] / total, implied[1] / total],
-    quality: marketQuality(total - 1),
+    prices: [priceBlue, priceRed],
+    spread: total - 1,
+    fair: [priceBlue / total, priceRed / total],
+    quality: spreadQuality(total - 1),
   };
 }
 
@@ -190,310 +208,269 @@ export function readMarket(oddsBlue: number, oddsRed: number): MarketRead {
 /* ------------------------------------------------------------------ */
 
 /**
- * Full Kelly: the bankroll fraction that maximises long-run growth *if* the
- * probability is exactly right. Negative means the bet has negative value.
+ * Full Kelly for a share bought at `price` that pays $1: the bankroll fraction
+ * that maximises long-run growth *if* `p` is exactly right. Negative means the
+ * share is worth less than it costs.
  */
-export function kellyFraction(p: number, odds: number): number {
-  return (p * odds - 1) / (odds - 1);
-}
-
-export type RiskProfileId = 'cautious' | 'standard' | 'aggressive';
-
-export interface RiskProfile {
-  label: string;
-  /** Share of full Kelly actually staked. */
-  kelly: number;
-  /** Hard ceiling on a single position, as a share of bankroll. */
-  cap: number;
-  /** Expected value per unit staked below which there is no position. */
-  minEdge: number;
-  blurb: string;
+export function kellyFraction(p: number, price: number): number {
+  return (p - price) / (1 - price);
 }
 
 /**
- * Nobody serious stakes full Kelly on an estimated probability.
+ * The safety margin, in cents per share, a price must sit under the estimate.
+ *
+ * Measured in cents rather than as a return because the model's error is in
+ * probability: a 3-point miss costs the same 3¢ whether the share is 30¢ or
+ * 70¢. Anything thinner than this is inside the model's own noise.
+ */
+export const MIN_EDGE = 0.03;
+
+/**
+ * Share of full Kelly staked at full conviction.
  *
  * Full Kelly is optimal only when the probability is known. Ours is estimated
  * by a model that is right about 64% of the time, and over-betting a noisy
  * edge costs far more growth than under-betting it — at twice full Kelly the
- * expected growth rate is zero. Fractional Kelly is the standard hedge against
- * that, and the minimum edge keeps model noise from being mistaken for value:
- * a 1% "edge" on a model this size is inside its error bars.
- *
- * There is deliberately no full-Kelly profile. The full figure is shown for
- * reference, not offered as a setting.
+ * expected growth rate is zero. A quarter keeps about half the growth for a
+ * small fraction of the swings.
  */
-export const RISK_PROFILES: Record<RiskProfileId, RiskProfile> = {
-  cautious: {
-    label: 'Cautious',
-    kelly: 0.125,
-    cap: 0.01,
-    minEdge: 0.05,
-    blurb: '⅛ Kelly, 1% cap, needs 5% edge',
-  },
-  standard: {
-    label: 'Standard',
-    kelly: 0.25,
-    cap: 0.025,
-    minEdge: 0.03,
-    blurb: '¼ Kelly, 2.5% cap, needs 3% edge',
-  },
-  aggressive: {
-    label: 'Aggressive',
-    kelly: 0.5,
-    cap: 0.05,
-    minEdge: 0.02,
-    blurb: '½ Kelly, 5% cap, needs 2% edge',
-  },
-};
+export const BASE_KELLY = 0.25;
 
-export const DEFAULT_PROFILE: RiskProfileId = 'standard';
+/** The most of a bankroll one position may take, at full conviction. */
+export const MAX_STAKE = 0.05;
 
-/** Everything the calculator knows about one side. */
-export interface SideAssessment {
-  side: 'blue' | 'red';
-  /** Decimal odds offered, when entered. */
-  odds: number | null;
-  /** 1 / odds, margin included. */
-  implied: number | null;
-  /** The market's view with the margin removed; needs both prices. */
-  marketFair: number | null;
-  /** Calibrated model probability. */
-  model: number;
-  /** The user's read, when they gave one. */
-  read: number | null;
-  /** What the sizing actually uses: model and read combined, then bounded. */
-  estimate: number;
-  /** The price at which this side is break-even: 1 / estimate. */
-  fairOdds: number;
-  /** The worst price still worth taking under the chosen profile. */
-  minOdds: number;
-  /** Expected profit per unit staked at the offered odds. */
-  ev: number | null;
-  /** Estimate minus the market's fair probability, in probability units. */
-  edgeVsMarket: number | null;
-  /** Full Kelly at the offered odds, for reference. */
-  fullKelly: number | null;
-  /** The share of bankroll to stake; zero when there is no position. */
-  stakeFraction: number;
-  /** `stakeFraction` of the bankroll, or `null` without a bankroll. */
-  stake: number | null;
-  /** Whether the profile's cap, rather than Kelly, set the size. */
-  capped: boolean;
-  verdict: 'value' | 'thin' | 'no value' | 'no odds';
-}
-
-export type WarningTone = 'danger' | 'caution' | 'info';
-
-export interface PositionWarning {
-  tone: WarningTone;
-  text: string;
-}
-
-export interface PositionInput {
-  bankroll: number | null;
-  oddsBlue: number | null;
-  oddsRed: number | null;
-  /** Calibrated model probability that blue takes the market. */
-  modelBlue: number;
-  /** The user's own probability that blue takes it, or `null`. */
-  readBlue: number | null;
-  profile: RiskProfileId;
-  /** Lanes across both drafts whose win rate rests on under `THIN_RECORD_GAMES`. */
-  thinLanes?: number;
-}
-
-/** Why nothing is being sized, when that is the answer. */
-export type SizingBlock = 'no market' | 'arbitrage' | 'far from market';
-
-export interface PositionAssessment {
-  profile: RiskProfile;
-  market: MarketRead | null;
-  /** Points between the estimate and the market's no-vig view; `null` without both prices. */
-  distance: number | null;
-  /** Share of the profile's normal size kept after the distance taper. */
-  taper: number;
-  /** Set when the inputs, not the match, decide that there is no position. */
-  blocked: SizingBlock | null;
-  blue: SideAssessment;
-  red: SideAssessment;
-  /** The side worth taking, or `null` when neither is. */
-  pick: SideAssessment | null;
-  warnings: PositionWarning[];
-}
-
-/** Model and read disagreeing by more than this is worth saying out loud. */
-export const READ_DISAGREEMENT = 0.2;
+/** What each doubt about the estimate does to the size. */
+export const DOUBT_FACTOR = 0.5;
 
 /**
  * How far from the market an estimate may sit before the size is cut, and
  * before nothing is sized at all.
  *
  * A liquid major-league market is the best estimate of the result available —
- * it aggregates every model, every scout and every bettor willing to put money
- * behind a view. A public model's value is in small, systematic deviations
- * from it, never in large ones. So distance from the market is treated as
- * evidence *against* the estimate:
+ * it aggregates every model, every scout and every trader willing to put money
+ * behind a view. A model's value is in small, systematic deviations from it,
+ * never in large ones. So distance from the market is treated as evidence
+ * *against* the estimate:
  *
- *   under 15 points   full size for the profile
+ *   under 15 points   full size
  *   15 to 25 points   size tapers linearly to zero
  *   over 25 points    nothing is sized — check the inputs
  *
  * Past 25 points the explanation is almost always mundane: the series score
- * was not updated, the price is for the series while the market is set to
- * the game (or the reverse), a price was typed onto the wrong team, or the
- * model is leaning on a handful of 0-for-3 records. Treated like the
- * arbitrage check: a sanity test on the inputs, not a view on the match.
+ * was not updated, the price is for the series while the market is set to the
+ * game (or the reverse), a price was typed onto the wrong team, the model is
+ * leaning on a handful of 0-for-3 records — or the user is far surer than
+ * anyone should be.
  */
 export const MARKET_TAPER_FROM = 0.15;
 export const MARKET_STOP_AT = 0.25;
 
 /** A lane's win rate resting on fewer games than this is noise, not a record. */
 export const THIN_RECORD_GAMES = 5;
-/** Thin lanes, across both drafts, before the model's read deserves a warning. */
+/** Thin lanes, across both drafts, before the model's read is doubted. */
 export const THIN_MODEL_LANES = 4;
 
-/** The share of the profile's size kept at a given distance from the market. */
+/** The share of the size kept at a given distance from the market. */
 export function marketTaper(distance: number): number {
   if (distance <= MARKET_TAPER_FROM) return 1;
   if (distance >= MARKET_STOP_AT) return 0;
   return (MARKET_STOP_AT - distance) / (MARKET_STOP_AT - MARKET_TAPER_FROM);
 }
 
-export function assessPosition(input: PositionInput): PositionAssessment {
-  const profile = RISK_PROFILES[input.profile];
-  const bankroll = input.bankroll !== null && input.bankroll > 0 ? input.bankroll : null;
+/**
+ * How much the estimate is trusted on one side, 0 to 1. The size is Kelly
+ * scaled by this, and so is the cap.
+ */
+export interface Conviction {
+  /**
+   * 1 when every source consulted sees value at this price; halved when the
+   * model and the user split — one says the share is cheap, the other doesn't.
+   */
+  agreement: number;
+  /** 1, or halved when the draft rests on thin records. */
+  data: number;
+  /** 1 down to 0 as the estimate moves from 15 to 25 points off the market. */
+  market: number;
+  value: number;
+}
 
-  const estimateBlue = clamp(blend(input.modelBlue, input.readBlue), PROB_FLOOR, PROB_CEIL);
-  const market =
-    input.oddsBlue !== null && input.oddsRed !== null
-      ? readMarket(input.oddsBlue, input.oddsRed)
-      : null;
+/** Everything the calculator knows about one side. */
+export interface SideAssessment {
+  side: Side;
+  /** The price used: entered, or assumed as 100¢ minus the other side. */
+  price: number | null;
+  assumed: boolean;
+  /** The market's view with the spread removed. */
+  marketFair: number | null;
+  /** Calibrated model probability. */
+  model: number;
+  /** The user's probability, when they picked a winner and said how sure. */
+  user: number | null;
+  /** What the sizing uses: model and user blended, then bounded. The fair price. */
+  estimate: number;
+  /** The most worth paying: fair price minus the safety margin. */
+  maxPrice: number;
+  /** Estimate minus price, in dollars per share. */
+  edge: number | null;
+  /** Expected profit per dollar spent at the price. */
+  ev: number | null;
+  /** Full Kelly at the price, for reference. */
+  fullKelly: number | null;
+  /** Whether the price clears the safety margin. */
+  value: boolean;
+  conviction: Conviction;
+  /** The share of the bankroll to put on; zero when there is no position. */
+  stakeFraction: number;
+  /** `stakeFraction` of the bankroll, or `null` without a bankroll. */
+  stake: number | null;
+  /** Whether the cap, rather than Kelly, set the size. */
+  capped: boolean;
+}
+
+export interface PositionInput {
+  bankroll: number | null;
+  priceBlue: number | null;
+  priceRed: number | null;
+  /** Calibrated model probability that blue takes the market. */
+  modelBlue: number;
+  /** The user's probability that blue takes it, or `null`. */
+  userBlue: number | null;
+  /** Lanes across both drafts whose win rate rests on under `THIN_RECORD_GAMES`. */
+  thinLanes?: number;
+}
+
+/** The single answer the calculator gives. */
+export type Decision =
+  | { kind: 'no price' }
+  | { kind: 'crossed'; total: number }
+  | { kind: 'too far'; distance: number }
+  | { kind: 'buy'; side: Side }
+  | { kind: 'pass'; closest: Side };
+
+export interface PositionAssessment {
+  market: MarketRead | null;
+  /** Points between the estimate and the market's view; `null` without a price. */
+  distance: number | null;
+  blue: SideAssessment;
+  red: SideAssessment;
+  decision: Decision;
+  /** Short reasons the size is what it is, most important first. */
+  notes: string[];
+}
+
+const cents = (p: number) => `${Math.round(p * 100)}¢`;
+
+export function assessPosition(input: PositionInput): PositionAssessment {
+  const bankroll = input.bankroll !== null && input.bankroll > 0 ? input.bankroll : null;
+  const estimateBlue = clamp(blend(input.modelBlue, input.userBlue), PROB_FLOOR, PROB_CEIL);
+
+  // One price is enough: the other side of a two-way market is its complement.
+  const priceBlue = input.priceBlue ?? (input.priceRed === null ? null : 1 - input.priceRed);
+  const priceRed = input.priceRed ?? (input.priceBlue === null ? null : 1 - input.priceBlue);
+  const market = priceBlue !== null && priceRed !== null ? readMarket(priceBlue, priceRed) : null;
 
   // Distance is the same from either side of a two-way market.
   const distance = market ? Math.abs(estimateBlue - market.fair[0]) : null;
-  const taper = distance === null ? 0 : marketTaper(distance);
-  const blocked: SizingBlock | null =
-    market === null
-      ? 'no market'
-      : market.quality === 'arbitrage'
-        ? 'arbitrage'
-        : taper === 0
-          ? 'far from market'
-          : null;
+  const marketFactor = distance === null ? 0 : marketTaper(distance);
+  const thin = (input.thinLanes ?? 0) >= THIN_MODEL_LANES;
+  const sane = market !== null && market.quality !== 'crossed' && marketFactor > 0;
 
-  const side = (which: 'blue' | 'red'): SideAssessment => {
+  const side = (which: Side): SideAssessment => {
     const isBlue = which === 'blue';
-    const odds = isBlue ? input.oddsBlue : input.oddsRed;
+    const price = isBlue ? priceBlue : priceRed;
     const estimate = isBlue ? estimateBlue : 1 - estimateBlue;
     const model = isBlue ? input.modelBlue : 1 - input.modelBlue;
-    const read = input.readBlue === null ? null : isBlue ? input.readBlue : 1 - input.readBlue;
+    const user = input.userBlue === null ? null : isBlue ? input.userBlue : 1 - input.userBlue;
     const marketFair = market ? market.fair[isBlue ? 0 : 1] : null;
+
+    // The model and the user each either see value at this price or don't.
+    // Only the blend is traded, but a split between them is a doubt.
+    const split =
+      user !== null && marketFair !== null && model > marketFair !== user > marketFair;
+    const conviction: Conviction = {
+      agreement: split ? DOUBT_FACTOR : 1,
+      data: thin ? DOUBT_FACTOR : 1,
+      market: marketFactor,
+      value: 0,
+    };
+    conviction.value = conviction.agreement * conviction.data * conviction.market;
 
     const base = {
       side: which,
-      odds,
-      implied: odds === null ? null : 1 / odds,
+      price,
+      assumed: price !== null && (isBlue ? input.priceBlue : input.priceRed) === null,
       marketFair,
       model,
-      read,
+      user,
       estimate,
-      fairOdds: 1 / estimate,
-      minOdds: (1 + profile.minEdge) / estimate,
-      edgeVsMarket: marketFair === null ? null : estimate - marketFair,
+      maxPrice: estimate - MIN_EDGE,
+      conviction,
     };
-    if (odds === null) {
+    if (price === null) {
       return {
         ...base,
+        edge: null,
         ev: null,
         fullKelly: null,
+        value: false,
         stakeFraction: 0,
         stake: null,
         capped: false,
-        verdict: 'no odds',
       };
     }
 
-    const ev = estimate * odds - 1;
-    const fullKelly = kellyFraction(estimate, odds);
-    const edge = ev >= profile.minEdge && fullKelly > 0;
-    // Value on paper is not a position while the inputs are in doubt.
-    const takes = edge && blocked === null;
-    const sized = takes ? profile.kelly * fullKelly : 0;
-    const stakeFraction = Math.min(sized, profile.cap) * (takes ? taper : 0);
+    const edge = estimate - price;
+    const fullKelly = kellyFraction(estimate, price);
+    // Rounded to a tenth of a cent so 79¢ against a 79¢ limit is not lost to float noise.
+    const value = Math.round(edge * 1000) >= Math.round(MIN_EDGE * 1000) && fullKelly > 0;
+    const takes = value && sane;
+    const kellySize = BASE_KELLY * fullKelly;
+    const stakeFraction = takes ? Math.min(kellySize, MAX_STAKE) * conviction.value : 0;
     return {
       ...base,
-      ev,
+      edge,
+      ev: estimate / price - 1,
       fullKelly,
+      value,
       stakeFraction,
       stake: bankroll === null ? null : Math.round(stakeFraction * bankroll * 100) / 100,
-      capped: takes && sized > profile.cap,
-      verdict: edge ? 'value' : ev > 0 ? 'thin' : 'no value',
+      capped: takes && kellySize > MAX_STAKE,
     };
   };
 
   const blue = side('blue');
   const red = side('red');
-  const candidates = blocked === null ? [blue, red].filter((s) => s.verdict === 'value') : [];
-  // Both sides can only show value when the book is under 100% — an
-  // arbitrage or a typo. Take the better one, and let the warning do the talking.
-  const pick = candidates.sort((a, b) => (b.ev ?? 0) - (a.ev ?? 0))[0] ?? null;
 
-  const warnings: PositionWarning[] = [];
-  if (market?.quality === 'arbitrage') {
-    warnings.push({
-      tone: 'danger',
-      text:
-        `The two prices imply ${((1 + market.overround) * 100).toFixed(1)}% in total — under 100%. ` +
-        'On one book that is almost always a typo; across two it is an arbitrage. Check the odds before anything else.',
-    });
-  } else if (market && (market.quality === 'high' || market.quality === 'very high')) {
-    warnings.push({
-      tone: 'caution',
-      text:
-        `The bookmaker is taking ${(market.overround * 100).toFixed(1)}%. ` +
-        'Sharp books price major-league matches at 3–5%; this one needs a much bigger edge to be worth anything.',
-    });
+  let decision: Decision;
+  if (market === null) decision = { kind: 'no price' };
+  else if (market.quality === 'crossed') decision = { kind: 'crossed', total: 1 + market.spread };
+  else if (marketFactor === 0) decision = { kind: 'too far', distance: distance! };
+  else {
+    // With the two prices summing to at least $1, at most one side can clear
+    // the margin.
+    const buy = [blue, red].find((s) => s.stakeFraction > 0);
+    decision = buy
+      ? { kind: 'buy', side: buy.side }
+      : { kind: 'pass', closest: (blue.edge ?? -1) >= (red.edge ?? -1) ? 'blue' : 'red' };
   }
 
-  if (input.readBlue !== null && Math.abs(input.readBlue - input.modelBlue) > READ_DISAGREEMENT) {
-    warnings.push({
-      tone: 'caution',
-      text:
-        `Your read and the model disagree by ${Math.round(Math.abs(input.readBlue - input.modelBlue) * 100)} points. ` +
-        'One of you knows something the other does not — worth being sure which before sizing on the blend.',
-    });
+  const notes: string[] = [];
+  if (decision.kind === 'buy') {
+    const s = decision.side === 'blue' ? blue : red;
+    if (s.conviction.agreement < 1) {
+      notes.push(
+        s.model > s.marketFair!
+          ? `halved — your pick says ${cents(s.price!)} is too much`
+          : `halved — the model says ${cents(s.price!)} is too much (it has ${cents(s.model)})`,
+      );
+    }
+    if (thin) notes.push(`halved — ${input.thinLanes} of 10 picks rest on under ${THIN_RECORD_GAMES} games`);
+    if (marketFactor < 1) {
+      notes.push(`cut to ${Math.round(marketFactor * 100)}% — ${Math.round(distance! * 100)} pts off the market`);
+    }
+    if (bankroll === null) notes.push('add a bankroll for the amount');
   }
+  if (market?.quality === 'wide') notes.push(`wide spread (${Math.round(market.spread * 100)}¢) — check the price fills`);
 
-  if (blocked === 'far from market' && distance !== null) {
-    warnings.push({
-      tone: 'danger',
-      text:
-        `The estimate and the market are ${Math.round(distance * 100)} points apart. That is not an edge — ` +
-        'it almost always means the series score, the market (series or game) or a price is entered wrong, ' +
-        `or the model is leaning on a few thin records. Nothing is sized past ${Math.round(MARKET_STOP_AT * 100)} points.`,
-    });
-  } else if (distance !== null && taper < 1) {
-    warnings.push({
-      tone: 'caution',
-      text:
-        `The estimate is ${Math.round(distance * 100)} points from the market, so the size is cut to ` +
-        `${Math.round(taper * 100)}% of normal. The further from a sharp market, the likelier you are the one who is wrong.`,
-    });
-  }
-
-  if ((input.thinLanes ?? 0) >= THIN_MODEL_LANES) {
-    warnings.push({
-      tone: 'caution',
-      text:
-        `${input.thinLanes} of the 10 lanes rest on fewer than ${THIN_RECORD_GAMES} games each, ` +
-        'so the model is reading this draft from very little.',
-    });
-  }
-
-  if (bankroll === null) {
-    warnings.push({ tone: 'info', text: 'Enter a bankroll to turn the stake into an amount.' });
-  }
-
-  return { profile, market, distance, taper, blocked, blue, red, pick, warnings };
+  return { market, distance, blue, red, decision, notes };
 }

@@ -1,19 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MARKET_STOP_AT,
+  BASE_KELLY,
   MAX_GAME_PROB,
+  MAX_STAKE,
+  MIN_EDGE,
   PROB_CEIL,
-  RISK_PROFILES,
   STAKING_SCALE,
   assessPosition,
   blend,
   kellyFraction,
-  marketQuality,
   marketTaper,
   modelProbability,
-  parseOdds,
+  parseCents,
+  parseSureness,
   readMarket,
+  spreadQuality,
   stakingGameProb,
+  userProbability,
   type PositionInput,
 } from './position.ts';
 import { seriesWinProbability } from './engine.ts';
@@ -25,66 +28,80 @@ const prediction = (margin: number, needBlue = 2, needRed = 2) =>
 
 const input = (over: Partial<PositionInput> = {}): PositionInput => ({
   bankroll: 1000,
-  oddsBlue: 2.0,
-  oddsRed: 2.0,
+  priceBlue: 0.5,
+  priceRed: 0.5,
   modelBlue: 0.5,
-  readBlue: null,
-  profile: 'standard',
+  userBlue: null,
   ...over,
 });
 
-describe('parseOdds', () => {
-  it('reads decimal odds', () => {
-    expect(parseOdds('2.10')).toBeCloseTo(2.1, 10);
-    expect(parseOdds(' 1.85 ')).toBeCloseTo(1.85, 10);
-    expect(parseOdds('1,95')).toBeCloseTo(1.95, 10); // European decimal comma
+describe('parseCents', () => {
+  it('reads cents however they are written', () => {
+    expect(parseCents('40')).toBeCloseTo(0.4, 10);
+    expect(parseCents('40¢')).toBeCloseTo(0.4, 10);
+    expect(parseCents('40c')).toBeCloseTo(0.4, 10);
+    expect(parseCents(' 40 c ')).toBeCloseTo(0.4, 10);
+    expect(parseCents('62.5')).toBeCloseTo(0.625, 10);
+    expect(parseCents('40,5')).toBeCloseTo(0.405, 10);
+    expect(parseCents('1')).toBeCloseTo(0.01, 10);
+    expect(parseCents('99.9')).toBeCloseTo(0.999, 10);
   });
 
-  it('reads American odds, which need a sign', () => {
-    expect(parseOdds('+150')).toBeCloseTo(2.5, 10);
-    expect(parseOdds('-200')).toBeCloseTo(1.5, 10);
-    expect(parseOdds('+100')).toBeCloseTo(2.0, 10);
-    expect(parseOdds('-100')).toBeCloseTo(2.0, 10);
+  it('reads a price under 1, or with a dollar sign, as dollars', () => {
+    expect(parseCents('0.40')).toBeCloseTo(0.4, 10);
+    expect(parseCents('$0.40')).toBeCloseTo(0.4, 10);
+    expect(parseCents('.4')).toBeCloseTo(0.4, 10);
   });
 
-  it('reads fractional odds', () => {
-    expect(parseOdds('5/2')).toBeCloseTo(3.5, 10);
-    expect(parseOdds('1/4')).toBeCloseTo(1.25, 10);
-  });
-
-  it('treats a bare number as decimal rather than guessing', () => {
-    expect(parseOdds('150')).toBe(150);
-  });
-
-  it('refuses prices that pay nothing or are malformed', () => {
-    for (const bad of ['', '1', '1.0', '0.8', 'abc', '+99', '-50', '0/2', '3/0']) {
-      expect(parseOdds(bad)).toBeNull();
+  it('refuses anything that is not a price for a side that can still lose', () => {
+    for (const bad of ['', '0', '100', '120', '-5', 'abc', '$1', '40%', '4O']) {
+      expect(parseCents(bad)).toBeNull();
     }
   });
 });
 
+describe('sureness', () => {
+  it('reads 50 to 100 percent', () => {
+    expect(parseSureness('90')).toBeCloseTo(0.9, 10);
+    expect(parseSureness('90%')).toBeCloseTo(0.9, 10);
+    expect(parseSureness('72.5')).toBeCloseTo(0.725, 10);
+    expect(parseSureness('50')).toBeCloseTo(0.5, 10);
+    expect(parseSureness('100')).toBe(1);
+  });
+
+  it('refuses under 50 — that is a pick for the other team', () => {
+    for (const bad of ['49', '101', '', 'abc', '-60']) expect(parseSureness(bad)).toBeNull();
+  });
+
+  it('turns a pick and a sureness into blue’s probability', () => {
+    expect(userProbability('blue', 0.9)).toBeCloseTo(0.9, 10);
+    expect(userProbability('red', 0.9)).toBeCloseTo(0.1, 10);
+    expect(userProbability(null, 0.9)).toBeNull();
+    expect(userProbability('blue', null)).toBeNull();
+  });
+});
+
 describe('reading the market', () => {
-  it('strips an even margin out of a symmetric price', () => {
-    const m = readMarket(1.9, 1.9);
-    expect(m.implied[0]).toBeCloseTo(1 / 1.9, 10);
-    expect(m.overround).toBeCloseTo(2 / 1.9 - 1, 10);
-    expect(m.fair[0]).toBeCloseTo(0.5, 10);
-    expect(m.fair[1]).toBeCloseTo(0.5, 10);
+  it('reads two prices that sum to $1 as the market’s view', () => {
+    const m = readMarket(0.4, 0.6);
+    expect(m.spread).toBeCloseTo(0, 10);
+    expect(m.fair[0]).toBeCloseTo(0.4, 10);
+    expect(m.quality).toBe('tight');
+  });
+
+  it('takes the spread out proportionally', () => {
+    const m = readMarket(0.42, 0.61);
+    expect(m.spread).toBeCloseTo(0.03, 10);
+    expect(m.fair[0]).toBeCloseTo(0.42 / 1.03, 10);
+    expect(m.fair[0] + m.fair[1]).toBeCloseTo(1, 10);
     expect(m.quality).toBe('normal');
   });
 
-  it('keeps the market view proportional when the margin is removed', () => {
-    const m = readMarket(1.5, 2.6);
-    expect(m.fair[0] + m.fair[1]).toBeCloseTo(1, 10);
-    expect(m.fair[0] / m.fair[1]).toBeCloseTo(m.implied[0] / m.implied[1], 10);
-  });
-
-  it('grades the margin', () => {
-    expect(marketQuality(-0.01)).toBe('arbitrage');
-    expect(marketQuality(0.03)).toBe('tight');
-    expect(marketQuality(0.06)).toBe('normal');
-    expect(marketQuality(0.1)).toBe('high');
-    expect(marketQuality(0.15)).toBe('very high');
+  it('grades the spread', () => {
+    expect(readMarket(0.45, 0.5).quality).toBe('crossed');
+    expect(readMarket(0.51, 0.51).quality).toBe('tight');
+    expect(spreadQuality(0.05)).toBe('normal');
+    expect(readMarket(0.5, 0.58).quality).toBe('wide');
   });
 });
 
@@ -124,7 +141,7 @@ describe('the staking probability', () => {
 });
 
 describe('blend', () => {
-  it('returns the model untouched without a read', () => {
+  it('returns the model untouched without the user', () => {
     expect(blend(0.62, null)).toBe(0.62);
   });
 
@@ -139,186 +156,176 @@ describe('blend', () => {
   });
 });
 
-describe('kelly', () => {
-  it('matches the textbook fraction', () => {
-    expect(kellyFraction(0.55, 2)).toBeCloseTo(0.1, 10);
-    expect(kellyFraction(0.5, 2)).toBeCloseTo(0, 10);
-    expect(kellyFraction(0.4, 2)).toBeLessThan(0);
+describe('kelly for a share that pays $1', () => {
+  it('is the edge over what is left to win', () => {
+    expect(kellyFraction(0.6, 0.5)).toBeCloseTo(0.2, 10);
+    expect(kellyFraction(0.7, 0.6)).toBeCloseTo(0.25, 10);
+    expect(kellyFraction(0.5, 0.5)).toBeCloseTo(0, 10);
+    expect(kellyFraction(0.4, 0.5)).toBeLessThan(0);
   });
 });
 
 describe('assessPosition', () => {
-  it('passes on a fair price', () => {
+  it('passes at a fair price', () => {
     const a = assessPosition(input());
-    expect(a.pick).toBeNull();
-    expect(a.blue.verdict).toBe('no value');
+    expect(a.decision.kind).toBe('pass');
     expect(a.blue.stakeFraction).toBe(0);
-    expect(a.blue.stake).toBe(0);
+    expect(a.red.stakeFraction).toBe(0);
   });
 
-  it('sizes a clear edge at a quarter Kelly', () => {
-    // 60% at evens: EV +20%, full Kelly 20%, a quarter is 5% — above the cap.
-    const a = assessPosition(input({ modelBlue: 0.6, oddsRed: 1.8 }));
-    expect(a.pick?.side).toBe('blue');
-    expect(a.blue.ev).toBeCloseTo(0.2, 10);
-    expect(a.blue.fullKelly).toBeCloseTo(0.2, 10);
-    expect(a.blue.stakeFraction).toBeCloseTo(RISK_PROFILES.standard.cap, 10);
+  it('sizes a clear edge, and the cap binds before quarter Kelly does', () => {
+    const a = assessPosition(input({ modelBlue: 0.7, priceBlue: 0.6, priceRed: 0.4 }));
+    expect(a.decision).toEqual({ kind: 'buy', side: 'blue' });
+    expect(a.blue.edge).toBeCloseTo(0.1, 10);
+    expect(a.blue.fullKelly).toBeCloseTo(0.25, 10);
+    // Quarter Kelly would be 6.25%; one position never takes more than 5%.
+    expect(a.blue.stakeFraction).toBeCloseTo(MAX_STAKE, 10);
+    expect(a.blue.stake).toBe(50);
     expect(a.blue.capped).toBe(true);
-    expect(a.blue.stake).toBe(25);
+    expect(a.notes).toEqual([]);
   });
 
-  it('uses Kelly rather than the cap when Kelly is smaller', () => {
-    // 54% at 2.0: EV 8%, full Kelly 8%, a quarter is 2% — under the 2.5% cap.
-    const a = assessPosition(input({ modelBlue: 0.54, oddsRed: 1.8 }));
-    expect(a.blue.stakeFraction).toBeCloseTo(0.02, 10);
+  it('stakes quarter Kelly under the cap', () => {
+    const a = assessPosition(input({ modelBlue: 0.58, priceBlue: 0.52, priceRed: 0.48 }));
+    // Edge 6¢ on a 52¢ share: full Kelly 12.5%, a quarter of it 3.125%.
+    expect(a.blue.stakeFraction).toBeCloseTo(BASE_KELLY * 0.125, 10);
+    expect(a.blue.stake).toBe(31.25);
     expect(a.blue.capped).toBe(false);
-    expect(a.blue.stake).toBe(20);
   });
 
-  it('refuses an edge too thin to beat model error', () => {
-    // 51% at evens is +2% EV — positive, but under standard's 3% bar.
-    const a = assessPosition(input({ modelBlue: 0.51, oddsRed: 1.9 }));
-    expect(a.blue.ev).toBeCloseTo(0.02, 10);
-    expect(a.blue.verdict).toBe('thin');
-    expect(a.pick).toBeNull();
-    // ...which the aggressive profile, needing only 2%, will take.
-    const b = assessPosition(input({ modelBlue: 0.51, oddsRed: 1.9, profile: 'aggressive' }));
-    expect(b.pick?.side).toBe('blue');
+  it('refuses an edge thinner than the safety margin', () => {
+    const a = assessPosition(input({ modelBlue: 0.54, priceBlue: 0.52, priceRed: 0.48 }));
+    expect(a.decision).toEqual({ kind: 'pass', closest: 'blue' });
+    expect(a.blue.value).toBe(false);
+    expect(a.blue.maxPrice).toBeCloseTo(0.54 - MIN_EDGE, 10);
   });
 
-  it('prices the fair and minimum odds from the estimate', () => {
-    const a = assessPosition(input({ modelBlue: 0.6 }));
-    expect(a.blue.fairOdds).toBeCloseTo(1 / 0.6, 10);
-    expect(a.blue.minOdds).toBeCloseTo(1.03 / 0.6, 10);
-    // At exactly the minimum odds the edge is exactly the requirement.
-    const at = assessPosition(input({ modelBlue: 0.6, oddsBlue: 1.03 / 0.6, oddsRed: 2.2 }));
-    expect(at.market?.quality).not.toBe('arbitrage');
-    expect(at.blue.ev).toBeCloseTo(RISK_PROFILES.standard.minEdge, 10);
+  it('takes a price sitting exactly on the limit', () => {
+    const a = assessPosition(input({ modelBlue: 0.55, priceBlue: 0.52, priceRed: 0.48 }));
+    expect(a.blue.value).toBe(true);
+    expect(a.blue.stakeFraction).toBeCloseTo(BASE_KELLY * (0.03 / 0.48), 10);
   });
 
-  it('can recommend the underdog', () => {
-    // Model says 45% on red, market offers 2.6 (38%): real value on the dog.
-    const a = assessPosition(input({ modelBlue: 0.55, oddsBlue: 1.5, oddsRed: 2.6 }));
-    expect(a.pick?.side).toBe('red');
-    expect(a.red.ev).toBeCloseTo(0.45 * 2.6 - 1, 10);
+  it('fills in the other side from one price', () => {
+    const one = assessPosition(input({ modelBlue: 0.7, priceBlue: 0.6, priceRed: null }));
+    expect(one.red.price).toBeCloseTo(0.4, 10);
+    expect(one.red.assumed).toBe(true);
+    expect(one.blue.assumed).toBe(false);
+    expect(one.decision).toEqual({ kind: 'buy', side: 'blue' });
+
+    const other = assessPosition(input({ modelBlue: 0.7, priceBlue: null, priceRed: 0.4 }));
+    expect(other.blue.price).toBeCloseTo(0.6, 10);
+    expect(other.blue.assumed).toBe(true);
   });
 
-  it('is symmetric under swapping the sides', () => {
-    const a = assessPosition(input({ modelBlue: 0.6, oddsBlue: 1.9, oddsRed: 2.1, readBlue: 0.65 }));
-    const b = assessPosition(input({ modelBlue: 0.4, oddsBlue: 2.1, oddsRed: 1.9, readBlue: 0.35 }));
-    expect(a.blue.estimate).toBeCloseTo(b.red.estimate, 10);
-    expect(a.blue.stakeFraction).toBeCloseTo(b.red.stakeFraction, 10);
-    expect(a.pick?.side).toBe('blue');
-    expect(b.pick?.side).toBe('red');
+  it('gives the fair price and the limit before any price is in', () => {
+    const a = assessPosition(input({ modelBlue: 0.7, priceBlue: null, priceRed: null }));
+    expect(a.decision.kind).toBe('no price');
+    expect(a.blue.estimate).toBeCloseTo(0.7, 10);
+    expect(a.blue.maxPrice).toBeCloseTo(0.67, 10);
+    expect(a.red.maxPrice).toBeCloseTo(0.27, 10);
+    expect(a.blue.stakeFraction).toBe(0);
   });
 
-  it('lets the read move the estimate', () => {
-    const model = assessPosition(input({ modelBlue: 0.55, oddsRed: 1.8 }));
-    const withRead = assessPosition(input({ modelBlue: 0.55, readBlue: 0.7, oddsRed: 1.8 }));
-    expect(withRead.blue.estimate).toBeGreaterThan(model.blue.estimate);
-    expect(withRead.blue.read).toBe(0.7);
-    expect(withRead.red.read).toBeCloseTo(0.3, 10);
+  it('buys an underdog priced under its chance', () => {
+    const a = assessPosition(input({ modelBlue: 0.45, priceBlue: 0.35, priceRed: 0.67 }));
+    expect(a.decision).toEqual({ kind: 'buy', side: 'blue' });
+    expect(a.blue.stakeFraction).toBeCloseTo(BASE_KELLY * (0.1 / 0.65), 10);
+    expect(a.blue.stake).toBe(38.46);
   });
 
-  it('bounds the estimate however confident the inputs are', () => {
-    const a = assessPosition(input({ modelBlue: 0.99, readBlue: 0.99 }));
+  it('is symmetric in the sides', () => {
+    const a = assessPosition(input({ modelBlue: 0.7, priceBlue: 0.6, priceRed: 0.4 }));
+    const b = assessPosition(input({ modelBlue: 0.3, priceBlue: 0.4, priceRed: 0.6 }));
+    expect(b.decision).toEqual({ kind: 'buy', side: 'red' });
+    expect(b.red.stakeFraction).toBeCloseTo(a.blue.stakeFraction, 10);
+  });
+
+  it('bounds the estimate however sure the user is', () => {
+    const a = assessPosition(input({ modelBlue: 0.85, userBlue: 1 }));
     expect(a.blue.estimate).toBeLessThanOrEqual(PROB_CEIL);
   });
+});
 
-  it('stakes exactly the profile cap when Kelly would go further', () => {
-    // 58% at 2.2 with the market 14 points away: inside the band, and a full
-    // Kelly of 23% that every profile's fraction pushes past its cap.
-    for (const profile of ['cautious', 'standard', 'aggressive'] as const) {
-      const a = assessPosition(input({ modelBlue: 0.58, oddsBlue: 2.2, oddsRed: 1.7, profile }));
-      expect(a.taper).toBe(1);
-      expect(a.blue.capped).toBe(true);
-      expect(a.blue.stakeFraction).toBeCloseTo(RISK_PROFILES[profile].cap, 10);
-    }
+describe('how sure the user is', () => {
+  const base = { modelBlue: 0.56, priceBlue: 0.52, priceRed: 0.48 };
+
+  it('moves the estimate and with it the size', () => {
+    const alone = assessPosition(input(base));
+    const fairlySure = assessPosition(input({ ...base, userBlue: 0.6 }));
+    const verySure = assessPosition(input({ ...base, userBlue: 0.7 }));
+
+    expect(fairlySure.blue.estimate).toBeCloseTo(blend(0.56, 0.6), 10);
+    expect(alone.blue.stakeFraction).toBeLessThan(fairlySure.blue.stakeFraction);
+    expect(fairlySure.blue.stakeFraction).toBeLessThan(verySure.blue.stakeFraction);
+    expect(verySure.blue.stakeFraction).toBeCloseTo(MAX_STAKE, 10);
+    expect(verySure.blue.conviction.agreement).toBe(1);
   });
 
-  it('prices one side but sizes nothing until both are in', () => {
-    // A market can't be validated from one side: no margin, no sanity check.
-    const a = assessPosition(input({ modelBlue: 0.6, oddsRed: null }));
-    expect(a.market).toBeNull();
-    expect(a.blocked).toBe('no market');
-    expect(a.blue.ev).toBeCloseTo(0.2, 10); // still shown
-    expect(a.blue.stakeFraction).toBe(0);
-    expect(a.red.verdict).toBe('no odds');
-    expect(a.pick).toBeNull();
+  it('halves the size when only the user sees value', () => {
+    // Model has blue 58% at 52¢; the user is 70% sure red wins. The blend puts
+    // red's value at 57¢ against a 48¢ price — but the model alone says red is
+    // not worth 48¢.
+    const a = assessPosition(input({ modelBlue: 0.58, priceBlue: 0.52, priceRed: 0.48, userBlue: 0.3 }));
+    expect(a.decision).toEqual({ kind: 'buy', side: 'red' });
+    expect(a.red.conviction.agreement).toBe(0.5);
+    const full = BASE_KELLY * kellyFraction(a.red.estimate, 0.48);
+    expect(a.red.stakeFraction).toBeCloseTo(0.5 * Math.min(full, MAX_STAKE), 10);
+    expect(a.notes[0]).toMatch(/the model says 48¢ is too much/);
   });
 
-  it('gives a fraction but no amount without a bankroll', () => {
-    const a = assessPosition(input({ modelBlue: 0.6, oddsRed: 1.8, bankroll: null }));
-    expect(a.blue.stakeFraction).toBeGreaterThan(0);
-    expect(a.blue.stake).toBeNull();
-    expect(a.warnings.some((w) => w.tone === 'info')).toBe(true);
+  it('halves the size when only the model sees value', () => {
+    // Model says blue at 62% against 52¢; the user is only 51% sure — under the price.
+    const a = assessPosition(input({ modelBlue: 0.62, priceBlue: 0.52, priceRed: 0.48, userBlue: 0.51 }));
+    expect(a.decision).toEqual({ kind: 'buy', side: 'blue' });
+    expect(a.blue.conviction.agreement).toBe(0.5);
+    expect(a.notes[0]).toMatch(/your pick says 52¢ is too much/);
   });
 });
 
-describe('warnings', () => {
-  const texts = (a: ReturnType<typeof assessPosition>) => a.warnings.map((w) => w.text).join(' ');
-
-  it('stops on a book under 100%', () => {
-    const a = assessPosition(input({ oddsBlue: 2.2, oddsRed: 2.2 }));
-    expect(a.market?.quality).toBe('arbitrage');
-    expect(a.warnings[0]?.tone).toBe('danger');
+describe('conviction', () => {
+  it('halves the size on a draft with thin records', () => {
+    const a = assessPosition(input({ modelBlue: 0.7, priceBlue: 0.6, priceRed: 0.4, thinLanes: 6 }));
+    expect(a.blue.conviction.data).toBe(0.5);
+    expect(a.blue.stakeFraction).toBeCloseTo(MAX_STAKE / 2, 10);
+    expect(a.notes.join(' ')).toMatch(/6 of 10 picks/);
   });
 
-  it('flags a heavy margin', () => {
-    const a = assessPosition(input({ oddsBlue: 1.7, oddsRed: 1.7 }));
-    expect(texts(a)).toMatch(/bookmaker is taking/);
-  });
-
-  it('flags a read that fights the model', () => {
-    const a = assessPosition(input({ modelBlue: 0.4, readBlue: 0.75 }));
-    expect(texts(a)).toMatch(/disagree by 35 points/);
-  });
-
-  it('flags a model reading the draft from very little', () => {
-    const a = assessPosition(input({ thinLanes: 6 }));
-    expect(texts(a)).toMatch(/6 of the 10 lanes rest on fewer than 5 games/);
-  });
-});
-
-describe('distance from the market', () => {
-  it('keeps full size near the market and tapers to nothing', () => {
-    expect(marketTaper(0.05)).toBe(1);
+  it('tapers from 15 points off the market to nothing at 25', () => {
+    expect(marketTaper(0.1)).toBe(1);
     expect(marketTaper(0.15)).toBe(1);
     expect(marketTaper(0.2)).toBeCloseTo(0.5, 10);
     expect(marketTaper(0.25)).toBe(0);
     expect(marketTaper(0.4)).toBe(0);
+
+    const a = assessPosition(input({ modelBlue: 0.72, priceBlue: 0.52, priceRed: 0.48 }));
+    expect(a.distance).toBeCloseTo(0.2, 10);
+    expect(a.blue.stakeFraction).toBeCloseTo(MAX_STAKE * 0.5, 10);
+    expect(a.notes.join(' ')).toMatch(/cut to 50%/);
   });
 
-  it('cuts the size inside the band, and says so', () => {
-    // 64% against a no-vig 44%: 20 points out, half size.
-    const a = assessPosition(input({ modelBlue: 0.64, oddsBlue: 2.2, oddsRed: 1.7 }));
-    expect(a.distance).toBeCloseTo(0.2, 1);
-    expect(a.taper).toBeGreaterThan(0);
-    expect(a.taper).toBeLessThan(1);
-    expect(a.pick?.side).toBe('blue');
-    const full = Math.min(0.25 * a.blue.fullKelly!, RISK_PROFILES.standard.cap);
-    expect(a.blue.stakeFraction).toBeCloseTo(full * a.taper, 10);
-    expect(a.warnings.map((w) => w.text).join(' ')).toMatch(/cut to \d+% of normal/);
-  });
-
-  it('refuses to size an estimate that far from a sharp market', () => {
-    // The case that surfaced this rule, from a real LCK draft: the model had
-    // T1 at 4% for the series, the price had them at 60%. A +123% "edge" at
-    // the full cap was on offer. It is an input problem, not a bet.
-    const a = assessPosition(input({ modelBlue: 0.043, oddsBlue: 1.6, oddsRed: 2.35 }));
-    expect(a.distance!).toBeGreaterThan(MARKET_STOP_AT);
-    expect(a.blocked).toBe('far from market');
-    expect(a.pick).toBeNull();
-    expect(a.blue.stakeFraction).toBe(0);
+  it('refuses to size a gap that is an input error, not an edge', () => {
+    // The real case that exposed this: the model 4% on T1 for the series,
+    // the market 60¢. The model is not 55 points smarter than the market.
+    const a = assessPosition(input({ modelBlue: 0.043, priceBlue: 0.6, priceRed: 0.4 }));
+    expect(a.decision.kind).toBe('too far');
+    expect(a.red.value).toBe(true);
     expect(a.red.stakeFraction).toBe(0);
-    // The value is still shown, so the user can see why it was refused.
-    expect(a.red.verdict).toBe('value');
-    expect(a.warnings[0]?.tone).toBe('danger');
-    expect(a.warnings[0]?.text).toMatch(/points apart/);
+    expect(a.blue.stakeFraction).toBe(0);
   });
 
-  it('checks the arbitrage before the distance', () => {
-    const a = assessPosition(input({ modelBlue: 0.9, oddsBlue: 2.2, oddsRed: 2.2 }));
-    expect(a.blocked).toBe('arbitrage');
+  it('checks the prices before anything else', () => {
+    const a = assessPosition(input({ modelBlue: 0.9, priceBlue: 0.45, priceRed: 0.5 }));
+    expect(a.decision).toEqual({ kind: 'crossed', total: expect.closeTo(0.95, 10) });
+    expect(a.blue.stakeFraction).toBe(0);
+  });
+
+  it('says so when there is no bankroll or the spread is wide', () => {
+    const a = assessPosition(input({ modelBlue: 0.7, priceBlue: 0.6, priceRed: 0.4, bankroll: null }));
+    expect(a.blue.stake).toBeNull();
+    expect(a.notes).toContain('add a bankroll for the amount');
+
+    const wide = assessPosition(input({ priceBlue: 0.5, priceRed: 0.58 }));
+    expect(wide.notes.join(' ')).toMatch(/wide spread \(8¢\)/);
   });
 });

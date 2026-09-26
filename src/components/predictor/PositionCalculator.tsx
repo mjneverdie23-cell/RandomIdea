@@ -1,68 +1,65 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  DEFAULT_PROFILE,
+  BASE_KELLY,
   MARKET_STOP_AT,
-  RISK_PROFILES,
+  MARKET_TAPER_FROM,
+  MAX_STAKE,
+  MIN_EDGE,
   THIN_RECORD_GAMES,
   assessPosition,
   modelProbability,
-  parseOdds,
+  parseCents,
+  parseSureness,
+  userProbability,
   type Market,
-  type MarketQuality,
-  type RiskProfileId,
+  type PositionAssessment,
+  type Side,
   type SideAssessment,
 } from '../../predictor/position.ts';
 import type { Prediction, SeriesLength } from '../../predictor/types.ts';
 import { readTabScoped, writeTabScoped } from '../../storage/tabScoped.ts';
 
 /**
- * Bankroll and risk appetite belong to the person, not the match, so they are
- * shared across tabs. Everything about the price belongs to one match.
+ * The bankroll belongs to the person, not the match, so it is shared across
+ * tabs. Everything about the price and the pick belongs to one match.
  */
 const PREFS_KEY = 'draftcall.position.prefs.v1';
-const MATCH_KEY = 'draftcall.position.match.v1';
-
-interface Prefs {
-  bankroll: string;
-  profile: RiskProfileId;
-}
+// v1 held decimal odds; reading "1.60" back as 1.6¢ would be a silent disaster.
+const MATCH_KEY = 'draftcall.position.match.v2';
 
 interface MatchState {
-  /** `blue|red` the odds were entered for. */
+  /** `blue|red` the prices were entered for. */
   teams: string;
   market: Market;
-  oddsBlue: string;
-  oddsRed: string;
-  useRead: boolean;
-  /** The user's read on blue, in whole percent. */
-  readBlue: number | null;
+  priceBlue: string;
+  priceRed: string;
+  /** The team the user says wins — by name, so it survives a side swap. */
+  pick: string;
+  /** How sure they are, in percent, as typed. */
+  sure: string;
 }
 
-function loadPrefs(): Prefs {
+function loadBankroll(): string {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<Prefs>;
-      return {
-        bankroll: typeof parsed.bankroll === 'string' ? parsed.bankroll : '',
-        profile:
-          parsed.profile && parsed.profile in RISK_PROFILES ? parsed.profile : DEFAULT_PROFILE,
-      };
+      const parsed = JSON.parse(raw) as { bankroll?: unknown };
+      if (typeof parsed.bankroll === 'string') return parsed.bankroll;
     }
   } catch {
-    // Storage is a convenience; fall through to defaults.
+    // Storage is a convenience; fall through to empty.
   }
-  return { bankroll: '', profile: DEFAULT_PROFILE };
+  return '';
 }
 
 /**
  * The saved price for this matchup, and nothing else's.
  *
- * Odds typed for yesterday's series must never size today's — that is the
+ * A price typed for yesterday's series must never size today's — that is the
  * single most expensive mistake a sizing tool can make quietly. So a stored
  * price is only reused when it was entered for these two teams. If they are
- * the same two teams with the sides swapped, the prices and the read travel
- * with their teams rather than staying on the wrong side.
+ * the same two teams with the sides swapped, the prices travel with their
+ * teams rather than staying on the wrong side.
  */
 function loadMatch(teams: string): MatchState {
   let stored: MatchState | null = null;
@@ -75,39 +72,35 @@ function loadMatch(teams: string): MatchState {
   const fresh: MatchState = {
     teams,
     market: stored?.market === 'game' ? 'game' : 'series',
-    oddsBlue: '',
-    oddsRed: '',
-    useRead: false,
-    readBlue: null,
+    priceBlue: '',
+    priceRed: '',
+    pick: '',
+    sure: '',
   };
   if (!stored) return fresh;
   if (stored.teams === teams) return stored;
 
   const [a = '', b = ''] = stored.teams.split('|');
   if (`${b}|${a}` === teams) {
-    return {
-      ...stored,
-      teams,
-      oddsBlue: stored.oddsRed,
-      oddsRed: stored.oddsBlue,
-      readBlue: stored.readBlue === null ? null : 100 - stored.readBlue,
-    };
+    return { ...stored, teams, priceBlue: stored.priceRed, priceRed: stored.priceBlue };
   }
   return fresh;
 }
 
 const pct = (p: number, digits = 1) => `${(p * 100).toFixed(digits)}%`;
-const signedPct = (p: number) => `${p >= 0 ? '+' : '−'}${Math.abs(p * 100).toFixed(1)}%`;
 const money = (x: number) =>
   x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const QUALITY_LABEL: Record<MarketQuality, string> = {
-  arbitrage: 'under 100% — check the prices',
-  tight: 'tight',
-  normal: 'normal',
-  high: 'high',
-  'very high': 'very high',
+/** A price as the market writes it: whole cents, or a tenth when that is what was typed. */
+const cents = (p: number) => {
+  const v = Math.round(p * 1000) / 10;
+  return `${Number.isInteger(v) ? v : v.toFixed(1)}¢`;
 };
+/** A probability quoted as a price: whole cents are all the precision the model has. */
+const fair = (p: number) => `${Math.round(p * 100)}¢`;
+/** A limit is rounded down: never quote a ceiling the edge does not actually clear. */
+const limit = (p: number) => `${Math.max(0, Math.floor(p * 100 + 1e-6))}¢`;
+const signedCents = (p: number) => `${p >= 0 ? '+' : '−'}${Math.abs(Math.round(p * 1000) / 10)}¢`;
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 interface Props {
   prediction: Prediction;
@@ -118,8 +111,9 @@ interface Props {
 
 export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength }: Props) {
   const teams = `${blueTeam}|${redTeam}`;
-  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [bankrollRaw, setBankrollRaw] = useState(loadBankroll);
   const [match, setMatch] = useState<MatchState>(() => loadMatch(teams));
+  const sureRef = useRef<HTMLInputElement>(null);
 
   // Re-key on a new matchup during render rather than in an effect, so there
   // is never a frame where the new teams are shown against the old prices.
@@ -131,11 +125,11 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
 
   useEffect(() => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ bankroll: bankrollRaw }));
     } catch {
       // Not persisting is fine.
     }
-  }, [prefs]);
+  }, [bankrollRaw]);
   useEffect(() => writeTabScoped(MATCH_KEY, JSON.stringify(match)), [match]);
 
   // A best-of-one's series is its game; offering both would be noise.
@@ -143,9 +137,12 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
   const modelBlue = modelProbability(prediction, market);
   const reportBlue = market === 'series' ? prediction.seriesProbBlue : prediction.gameProbBlue;
 
-  const oddsBlue = parseOdds(match.oddsBlue);
-  const oddsRed = parseOdds(match.oddsRed);
-  const bankroll = Number(prefs.bankroll.replace(/[, ]/g, ''));
+  const priceBlue = parseCents(match.priceBlue);
+  const priceRed = parseCents(match.priceRed);
+  const sure = parseSureness(match.sure);
+  const pickSide: Side | null =
+    match.pick === blueTeam ? 'blue' : match.pick === redTeam ? 'red' : null;
+  const bankroll = Number(bankrollRaw.replace(/[, $]/g, ''));
 
   /**
    * Lanes whose win rate rests on almost nothing: no record at all, or a record
@@ -167,27 +164,95 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
     if (modelBlue === null) return null;
     return assessPosition({
       bankroll: Number.isFinite(bankroll) && bankroll > 0 ? bankroll : null,
-      oddsBlue,
-      oddsRed,
+      priceBlue,
+      priceRed,
       modelBlue,
-      readBlue: match.useRead && match.readBlue !== null ? match.readBlue / 100 : null,
-      profile: prefs.profile,
+      userBlue: userProbability(pickSide, sure),
       thinLanes,
     });
-  }, [modelBlue, bankroll, oddsBlue, oddsRed, match.useRead, match.readBlue, prefs.profile, thinLanes]);
+  }, [modelBlue, bankroll, priceBlue, priceRed, pickSide, sure, thinLanes]);
 
   const update = (patch: Partial<MatchState>) => setMatch((m) => ({ ...m, ...patch }));
-  const nameOf = (side: 'blue' | 'red') => (side === 'blue' ? blueTeam : redTeam);
+  const nameOf = (side: Side) => (side === 'blue' ? blueTeam : redTeam);
+
+  const choose = (side: Side) => {
+    if (pickSide === side) {
+      update({ pick: '' });
+      return;
+    }
+    update({ pick: nameOf(side) });
+    // The next thing anyone does after picking is say how sure — save the click.
+    sureRef.current?.focus();
+  };
+
+  const sureInvalid = match.sure.trim() !== '' && sure === null;
 
   return (
     <section className="panel position-panel" aria-label="Position calculator">
       <div className="panel-header">
         <h2>Position calculator</h2>
-        <span className="dim">{RISK_PROFILES[prefs.profile].blurb}</span>
+        <span className="dim">Sized by the model · never over {pct(MAX_STAKE, 0)} of bankroll</span>
       </div>
 
       <div className="position-body">
         <div className="position-inputs">
+          <div className="field position-field-pick">
+            <span className="field-label">Who wins {market === 'series' ? 'the series' : 'this game'}?</span>
+            <div className="position-pick" role="group" aria-label="Who wins">
+              {(['blue', 'red'] as const).map((side) => (
+                <button
+                  key={side}
+                  id={`position-pick-${side}`}
+                  type="button"
+                  className={`position-pick-btn is-${side}`}
+                  aria-pressed={pickSide === side}
+                  title={nameOf(side)}
+                  onClick={() => choose(side)}
+                >
+                  {nameOf(side)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="field">
+            <span className="field-label">How sure?</span>
+            <span className="position-affix">
+              <input
+                id="position-sure"
+                ref={sureRef}
+                className={`input num${sureInvalid ? ' is-invalid' : ''}`}
+                inputMode="decimal"
+                placeholder="e.g. 70"
+                value={match.sure}
+                onChange={(e) => update({ sure: e.target.value })}
+                aria-invalid={sureInvalid}
+              />
+              <span aria-hidden="true">%</span>
+            </span>
+            {sureInvalid && <span className="field-hint position-hint is-error">50 to 100</span>}
+            {!sureInvalid && sure !== null && pickSide === null && (
+              <span className="field-hint position-hint">Pick who wins</span>
+            )}
+          </label>
+
+          {(['blue', 'red'] as const).map((side) => {
+            const raw = side === 'blue' ? match.priceBlue : match.priceRed;
+            const other = side === 'blue' ? priceRed : priceBlue;
+            return (
+              <PriceField
+                key={side}
+                id={`position-price-${side}`}
+                team={nameOf(side)}
+                tone={side}
+                raw={raw}
+                parsed={side === 'blue' ? priceBlue : priceRed}
+                complement={raw.trim() === '' && other !== null ? 1 - other : null}
+                onChange={(value) => update(side === 'blue' ? { priceBlue: value } : { priceRed: value })}
+              />
+            );
+          })}
+
           <label className="field">
             <span className="field-label">Bankroll</span>
             <input
@@ -195,214 +260,50 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
               className="input num"
               inputMode="decimal"
               placeholder="e.g. 1000"
-              value={prefs.bankroll}
-              onChange={(e) => setPrefs((p) => ({ ...p, bankroll: e.target.value }))}
+              value={bankrollRaw}
+              onChange={(e) => setBankrollRaw(e.target.value)}
             />
           </label>
 
-          <label className="field">
-            <span className="field-label">Market</span>
-            <select
-              id="position-market"
-              className="select"
-              value={market}
-              disabled={seriesLength === 'BO1'}
-              onChange={(e) => update({ market: e.target.value as Market })}
-            >
-              <option value="series">Series winner</option>
-              <option value="game">This game</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span className="field-label">Risk profile</span>
-            <select
-              id="position-profile"
-              className="select"
-              value={prefs.profile}
-              onChange={(e) => setPrefs((p) => ({ ...p, profile: e.target.value as RiskProfileId }))}
-            >
-              {(Object.keys(RISK_PROFILES) as RiskProfileId[]).map((id) => (
-                <option key={id} value={id}>
-                  {RISK_PROFILES[id].label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <OddsField
-            id="position-odds-blue"
-            team={blueTeam}
-            tone="blue"
-            raw={match.oddsBlue}
-            parsed={oddsBlue}
-            onChange={(oddsBlue) => update({ oddsBlue })}
-          />
-          <OddsField
-            id="position-odds-red"
-            team={redTeam}
-            tone="red"
-            raw={match.oddsRed}
-            parsed={oddsRed}
-            onChange={(oddsRed) => update({ oddsRed })}
-          />
+          {seriesLength !== 'BO1' && (
+            <div className="field">
+              <span className="field-label">Prices are for</span>
+              <div className="position-seg" role="group" aria-label="Prices are for">
+                {(['series', 'game'] as const).map((m) => (
+                  <button
+                    key={m}
+                    id={`position-market-${m}`}
+                    type="button"
+                    aria-pressed={market === m}
+                    onClick={() => update({ market: m })}
+                  >
+                    {m === 'series' ? 'Series' : 'Game'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {modelBlue !== null && (
-          <div className="position-read">
-            <label className="position-read-toggle">
-              <input
-                id="position-use-read"
-                type="checkbox"
-                checked={match.useRead}
-                onChange={(e) =>
-                  update({
-                    useRead: e.target.checked,
-                    // Start the slider on the model, so switching it on changes
-                    // nothing until the user actually moves it.
-                    readBlue: match.readBlue ?? Math.round(modelBlue * 100),
-                  })
-                }
-              />
-              <span>Add my own read</span>
-              <span className="dim">— for what the model can't see: a sub, a patch, a sick player</span>
-            </label>
-            {match.useRead && match.readBlue !== null && (
-              <div className="position-read-slider">
-                <span className="position-read-team is-blue">
-                  {blueTeam} <strong>{match.readBlue}%</strong>
-                </span>
-                <input
-                  id="position-read"
-                  type="range"
-                  min={5}
-                  max={95}
-                  step={1}
-                  value={match.readBlue}
-                  onChange={(e) => update({ readBlue: Number(e.target.value) })}
-                  aria-label={`How sure you are that ${blueTeam} wins`}
-                />
-                <span className="position-read-team is-red">
-                  <strong>{100 - match.readBlue}%</strong> {redTeam}
-                </span>
-                <span className="dim position-read-model">model {pct(modelBlue, 0)}</span>
-              </div>
-            )}
-          </div>
-        )}
-
         {assessment === null ? (
-          <p className="position-verdict is-info">
-            This series is already decided at this score. Switch the market to <em>This game</em>,
-            or there is nothing left to price.
-          </p>
+          <div className="position-call is-info" role="status">
+            <div className="position-call-row">
+              <span className="position-call-action">Series decided</span>
+            </div>
+            <div className="position-call-row is-sub">
+              <span>Nothing left to price on the series — switch the prices to Game.</span>
+            </div>
+          </div>
         ) : (
           <>
-            <Verdict assessment={assessment} nameOf={nameOf} />
-
-            <div className="position-table-wrap">
-              <table className="position-table">
-                <thead>
-                  <tr>
-                    <th />
-                    <th className="is-blue">{blueTeam}</th>
-                    <th className="is-red">{redTeam}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <Row label="Offered odds" a={assessment.blue} b={assessment.red} cell={(s) => s.odds?.toFixed(2)} />
-                  <Row
-                    label="Implied, margin in"
-                    a={assessment.blue}
-                    b={assessment.red}
-                    cell={(s) => (s.implied === null ? undefined : pct(s.implied))}
-                  />
-                  <Row
-                    label="Market, margin out"
-                    a={assessment.blue}
-                    b={assessment.red}
-                    cell={(s) => (s.marketFair === null ? undefined : pct(s.marketFair))}
-                  />
-                  <Row label="Model, calibrated" a={assessment.blue} b={assessment.red} cell={(s) => pct(s.model)} />
-                  {match.useRead && (
-                    <Row
-                      label="Your read"
-                      a={assessment.blue}
-                      b={assessment.red}
-                      cell={(s) => (s.read === null ? undefined : pct(s.read, 0))}
-                    />
-                  )}
-                  <Row
-                    label="Estimate"
-                    strong
-                    a={assessment.blue}
-                    b={assessment.red}
-                    cell={(s) => pct(s.estimate)}
-                  />
-                  <Row label="Fair odds" strong a={assessment.blue} b={assessment.red} cell={(s) => s.fairOdds.toFixed(2)} />
-                  <Row
-                    label={`Take it down to`}
-                    a={assessment.blue}
-                    b={assessment.red}
-                    cell={(s) => s.minOdds.toFixed(2)}
-                  />
-                  <Row
-                    label="Edge vs market"
-                    a={assessment.blue}
-                    b={assessment.red}
-                    cell={(s) => (s.edgeVsMarket === null ? undefined : signedPct(s.edgeVsMarket))}
-                  />
-                  <Row
-                    label="Expected value / unit"
-                    a={assessment.blue}
-                    b={assessment.red}
-                    cell={(s) => (s.ev === null ? undefined : signedPct(s.ev))}
-                    tone={(s) => (s.ev === null ? '' : s.ev > 0 ? 'is-pos' : 'is-neg')}
-                  />
-                  <Row
-                    label="Full Kelly (reference)"
-                    a={assessment.blue}
-                    b={assessment.red}
-                    cell={(s) => (s.fullKelly === null ? undefined : s.fullKelly > 0 ? pct(s.fullKelly) : '—')}
-                  />
-                  <tr className="position-stake-row">
-                    <th scope="row">Stake</th>
-                    {[assessment.blue, assessment.red].map((s) => (
-                      <td key={s.side}>
-                        <StakeCell side={s} blocked={assessment.blocked !== null} />
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {assessment.market && (
-              <p className={`position-market is-${assessment.market.quality.replace(' ', '-')}`}>
-                Bookmaker margin <strong>{signedPct(assessment.market.overround)}</strong> —{' '}
-                {QUALITY_LABEL[assessment.market.quality]}
-              </p>
-            )}
-
-            {assessment.warnings.length > 0 && (
-              <ul className="position-warnings">
-                {assessment.warnings.map((w) => (
-                  <li key={w.text} className={`is-${w.tone}`}>
-                    {w.text}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <p className="position-foot">
-              Staked on a re-calibrated probability, not the one in the report above — here{' '}
-              {blueTeam} is {pct(reportBlue)} in the report and {pct(assessment.blue.model)} for
-              staking. At the report&apos;s scale the favourite wins about 12 points less often than
-              stated once it says 80%+ (measured over 3,692 games), and Kelly bets hardest exactly
-              where a model is overconfident. The model calls the winner about 64% of the time. This
-              sizes one position: count anything you already have on this series against the cap, and
-              never stake money you can&apos;t afford to lose.
-            </p>
+            <Call assessment={assessment} nameOf={nameOf} />
+            <Workings
+              assessment={assessment}
+              blueTeam={blueTeam}
+              redTeam={redTeam}
+              reportBlue={reportBlue}
+              thinLanes={thinLanes}
+            />
           </>
         )}
       </div>
@@ -410,166 +311,227 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
   );
 }
 
-function OddsField({
+function PriceField({
   id,
   team,
   tone,
   raw,
   parsed,
+  complement,
   onChange,
 }: {
   id: string;
   team: string;
-  tone: 'blue' | 'red';
+  tone: Side;
   raw: string;
   parsed: number | null;
+  /** The other side's complement, shown and used when this one is left blank. */
+  complement: number | null;
   onChange: (value: string) => void;
 }) {
   const invalid = raw.trim() !== '' && parsed === null;
-  // Show how a non-decimal price was read, so `150` vs `+150` is never a guess.
-  const echo = parsed !== null && raw.trim() !== parsed.toFixed(2) ? `= ${parsed.toFixed(2)}` : null;
+  // Echo only a price typed in another form (0.40, $0.40), so it is never a guess.
+  const echo = parsed !== null && raw.trim().replace(/\s*(¢|c)$/i, '') !== cents(parsed).slice(0, -1);
   return (
     <label className="field">
-      <span className={`field-label position-odds-label is-${tone}`}>Odds · {team}</span>
-      <input
-        id={id}
-        className={`input num${invalid ? ' is-invalid' : ''}`}
-        placeholder="1.85, +150, 5/4"
-        value={raw}
-        onChange={(e) => onChange(e.target.value)}
-        aria-invalid={invalid}
-      />
-      <span className="field-hint position-odds-hint">
-        {invalid
-          ? 'Not a price — decimal (1.85), American (+150 / −200) or fractional (5/4)'
-          : parsed !== null
-            ? `${echo ? `${echo} · ` : ''}implies ${pct(1 / parsed)}`
-            : ' '}
+      <span className={`field-label position-price-label is-${tone}`} title={team}>
+        {team}
       </span>
+      <span className="position-affix">
+        <input
+          id={id}
+          className={`input num${invalid ? ' is-invalid' : ''}`}
+          inputMode="decimal"
+          placeholder={complement !== null ? `${cents(complement).slice(0, -1)} auto` : 'e.g. 40'}
+          value={raw}
+          onChange={(e) => onChange(e.target.value)}
+          aria-invalid={invalid}
+        />
+        <span aria-hidden="true">¢</span>
+      </span>
+      {invalid && <span className="field-hint position-hint is-error">Price in cents, 1 to 99</span>}
+      {echo && <span className="field-hint position-hint">= {cents(parsed)}</span>}
     </label>
   );
 }
 
-function Row({
-  label,
-  a,
-  b,
-  cell,
-  tone,
-  strong,
-}: {
-  label: string;
-  a: SideAssessment;
-  b: SideAssessment;
-  cell: (s: SideAssessment) => string | undefined;
-  tone?: (s: SideAssessment) => string;
-  strong?: boolean;
-}) {
-  return (
-    <tr className={strong ? 'is-strong' : undefined}>
-      <th scope="row">{label}</th>
-      {[a, b].map((s) => (
-        <td key={s.side} className={tone?.(s)}>
-          {cell(s) ?? <span className="dim">—</span>}
-        </td>
-      ))}
-    </tr>
-  );
-}
-
-function StakeCell({ side, blocked }: { side: SideAssessment; blocked: boolean }) {
-  if (side.verdict === 'no odds') return <span className="dim">no price</span>;
-  if (side.verdict !== 'value') {
-    return <span className={`position-tag is-${side.verdict.replace(' ', '-')}`}>{side.verdict}</span>;
-  }
-  // The numbers say value, but the inputs failed a sanity check — never dress
-  // that up as a recommendation.
-  if (blocked) return <span className="position-tag is-blocked">not sized</span>;
-  return (
-    <span className="position-stake">
-      <span className="position-tag is-value">value</span>
-      <strong>{pct(side.stakeFraction, 2)}</strong>
-      {side.stake !== null && <span>{money(side.stake)}</span>}
-      {side.capped && <span className="dim">capped</span>}
-    </span>
-  );
-}
-
-function Verdict({
+/**
+ * The answer, in the fewest words that carry it: what to do, how much, and the
+ * one price that matters. Everything else is in the workings below.
+ */
+function Call({
   assessment,
   nameOf,
 }: {
-  assessment: NonNullable<ReturnType<typeof assessPosition>>;
-  nameOf: (side: 'blue' | 'red') => string;
+  assessment: PositionAssessment;
+  nameOf: (side: Side) => string;
 }) {
-  const { pick, blue, red, profile, blocked, distance, taper } = assessment;
-  const priced = blue.odds !== null || red.odds !== null;
+  const { decision, blue, red, notes } = assessment;
+  const note = notes.length > 0 && <p className="position-call-note">{capitalise(notes.join(' · '))}</p>;
 
-  if (blocked === 'arbitrage') {
-    return (
-      <p className="position-verdict is-danger">
-        <strong>Check the odds first.</strong> These two prices can&apos;t both be right — nothing is
-        sized until they are.
-      </p>
-    );
+  switch (decision.kind) {
+    case 'buy': {
+      const s = decision.side === 'blue' ? blue : red;
+      return (
+        <div className="position-call is-buy" role="status">
+          <div className="position-call-row">
+            <span className="position-call-action">Buy {nameOf(s.side)}</span>
+            <span className="position-call-stake">
+              {s.stake !== null ? money(s.stake) : pct(s.stakeFraction)}
+            </span>
+          </div>
+          <div className="position-call-row is-sub">
+            <span>
+              at {cents(s.price!)} · worth it up to <strong>{limit(s.maxPrice)}</strong> · fair{' '}
+              {fair(s.estimate)}
+            </span>
+            <span>{pct(s.stakeFraction)} of bankroll</span>
+          </div>
+          {note}
+        </div>
+      );
+    }
+    case 'pass': {
+      const s = decision.closest === 'blue' ? blue : red;
+      return (
+        <div className="position-call is-pass" role="status">
+          <div className="position-call-row">
+            <span className="position-call-action">Pass</span>
+          </div>
+          <div className="position-call-row is-sub">
+            <span>
+              {nameOf(s.side)} at {cents(s.price!)} — worth it up to <strong>{limit(s.maxPrice)}</strong> · fair{' '}
+              {fair(s.estimate)}
+            </span>
+          </div>
+          {note}
+        </div>
+      );
+    }
+    case 'no price':
+      return (
+        <div className="position-call is-info" role="status">
+          <div className="position-call-row">
+            <span className="position-call-action">Fair price</span>
+            <span className="position-call-stake is-pair">
+              {nameOf('blue')} {fair(blue.estimate)} · {nameOf('red')} {fair(red.estimate)}
+            </span>
+          </div>
+          <div className="position-call-row is-sub">
+            <span>
+              Worth buying up to: {nameOf('blue')} <strong>{limit(blue.maxPrice)}</strong> ·{' '}
+              {nameOf('red')} <strong>{limit(red.maxPrice)}</strong>
+            </span>
+          </div>
+        </div>
+      );
+    case 'crossed':
+      return (
+        <div className="position-call is-danger" role="status">
+          <div className="position-call-row">
+            <span className="position-call-action">Check the prices</span>
+          </div>
+          <div className="position-call-row is-sub">
+            <span>
+              {cents(blue.price!)} + {cents(red.price!)} = {cents(decision.total)} — under 100¢, so one of them
+              is wrong.
+            </span>
+          </div>
+        </div>
+      );
+    case 'too far':
+      return (
+        <div className="position-call is-danger" role="status">
+          <div className="position-call-row">
+            <span className="position-call-action">Don&apos;t size</span>
+            <span className="position-call-stake">{Math.round(decision.distance * 100)} pts off</span>
+          </div>
+          <div className="position-call-row is-sub">
+            <span>
+              That gap is a wrong input, not an edge — check the series score and what the price is
+              for, or you&apos;re surer than you should be.
+            </span>
+          </div>
+        </div>
+      );
   }
+}
 
-  if (!priced) {
-    return (
-      <p className="position-verdict is-info">
-        <strong>Fair price:</strong> {nameOf('blue')} {blue.fairOdds.toFixed(2)} · {nameOf('red')}{' '}
-        {red.fairOdds.toFixed(2)}. Don&apos;t take less than {blue.minOdds.toFixed(2)} /{' '}
-        {red.minOdds.toFixed(2)}. Enter the current odds to size a position.
-      </p>
-    );
-  }
+/** The full working, folded away so it never slows the decision down. */
+function Workings({
+  assessment,
+  blueTeam,
+  redTeam,
+  reportBlue,
+  thinLanes,
+}: {
+  assessment: PositionAssessment;
+  blueTeam: string;
+  redTeam: string;
+  reportBlue: number;
+  thinLanes: number;
+}) {
+  const { blue, red, market } = assessment;
+  const hasUser = blue.user !== null;
+  const priced = market !== null;
+  const row = (label: string, cell: (s: SideAssessment) => string | null, strong = false) => (
+    <tr className={strong ? 'is-strong' : undefined}>
+      <th scope="row">{label}</th>
+      {[blue, red].map((s) => (
+        <td key={s.side}>{cell(s) ?? <span className="dim">—</span>}</td>
+      ))}
+    </tr>
+  );
 
-  if (blocked === 'no market') {
-    const missing = blue.odds === null ? nameOf('blue') : nameOf('red');
-    return (
-      <p className="position-verdict is-info">
-        <strong>Add {missing}&apos;s price too.</strong> A market can&apos;t be validated from one
-        side — the margin, and whether the price is even sane, need both. Fair price:{' '}
-        {nameOf('blue')} {blue.fairOdds.toFixed(2)} · {nameOf('red')} {red.fairOdds.toFixed(2)}.
-      </p>
-    );
-  }
-
-  if (blocked === 'far from market' && distance !== null) {
-    return (
-      <p className="position-verdict is-danger">
-        <strong>Check the inputs — {Math.round(distance * 100)} points from the market.</strong>{' '}
-        That gap is not an edge. Is the series score current, and is the market set to what the
-        price is for? Nothing is sized past {Math.round(MARKET_STOP_AT * 100)} points.
-      </p>
-    );
-  }
-
-  if (pick) {
-    return (
-      <p className="position-verdict is-bet">
-        <strong>
-          Back {nameOf(pick.side)} — risk {pct(pick.stakeFraction, 2)} of bankroll
-          {pick.stake !== null ? ` (${money(pick.stake)})` : ''}
-        </strong>{' '}
-        at {pick.odds!.toFixed(2)}, worth {signedPct(pick.ev!)} per unit. Still a position down to{' '}
-        {pick.minOdds.toFixed(2)}; fair is {pick.fairOdds.toFixed(2)}.
-        {taper < 1 && ` Cut to ${Math.round(taper * 100)}% of normal size for sitting ${Math.round((distance ?? 0) * 100)} points off the market.`}
-      </p>
-    );
-  }
-
-  // No position: explain it from the side that came closest.
-  const best = [blue, red]
-    .filter((s) => s.ev !== null)
-    .sort((a, b) => (b.ev ?? -Infinity) - (a.ev ?? -Infinity))[0]!;
   return (
-    <p className="position-verdict is-pass">
-      <strong>No position.</strong>{' '}
-      {best.verdict === 'thin'
-        ? `Best edge is ${signedPct(best.ev!)} on ${nameOf(best.side)} — below the ${pct(profile.minEdge, 0)} this profile needs to clear model error.`
-        : `Neither price beats fair value.`}{' '}
-      You&apos;d want {nameOf(best.side)} at {best.minOdds.toFixed(2)} or better.
-    </p>
+    <details className="position-details">
+      <summary>Show the working</summary>
+      <table className="position-table">
+        <thead>
+          <tr>
+            <th />
+            <th className="is-blue">{blueTeam}</th>
+            <th className="is-red">{redTeam}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {row('Price', (s) => (s.price === null ? null : `${cents(s.price)}${s.assumed ? ' auto' : ''}`))}
+          {priced && row('Market, spread out', (s) => (s.marketFair === null ? null : cents(s.marketFair)))}
+          {row('Model', (s) => cents(s.model))}
+          {hasUser && row('You', (s) => (s.user === null ? null : cents(s.user)))}
+          {row('Fair', (s) => cents(s.estimate), true)}
+          {row('Worth it up to', (s) => limit(s.maxPrice))}
+          {priced && row('Edge', (s) => (s.edge === null ? null : signedCents(s.edge)))}
+          {priced &&
+            row('Full Kelly', (s) => (s.fullKelly === null || s.fullKelly <= 0 ? null : pct(s.fullKelly)))}
+          {priced && row('Conviction', (s) => (s.value ? pct(s.conviction.value, 0) : null))}
+          {priced && row('Stake', (s) => (s.stakeFraction > 0 ? pct(s.stakeFraction) : null), true)}
+        </tbody>
+      </table>
+
+      {market && (
+        <p className="position-foot">
+          Spread {signedCents(market.spread)} ({market.quality}).
+        </p>
+      )}
+      <p className="position-foot">
+        <strong>How the size is set.</strong> A side is only bought {Math.round(MIN_EDGE * 100)}¢ or
+        more under its fair price. The stake is {pct(BASE_KELLY, 0)} of full Kelly
+        times conviction, capped at {pct(MAX_STAKE, 0)} times the same conviction. Conviction starts at
+        100% and is halved when you and the model split (one says the price is cheap, the other
+        doesn&apos;t), halved when 4+ picks rest on under {THIN_RECORD_GAMES} games (here {thinLanes}), and
+        tapers to nothing between {Math.round(MARKET_TAPER_FROM * 100)} and{' '}
+        {Math.round(MARKET_STOP_AT * 100)} points off the market. Your sureness counts half, the model
+        half.
+      </p>
+      <p className="position-foot">
+        The model here is re-calibrated, not the report&apos;s number — {blueTeam} is {pct(reportBlue)} in
+        the report and {pct(blue.model)} for staking. At the report&apos;s scale the favourite wins about
+        12 points less often than stated once it says 80%+ (3,692 games), and Kelly bets hardest exactly
+        where a model is overconfident. It calls the winner about 64% of the time. This sizes one
+        position: count anything already on this series against the cap, and never stake money you
+        can&apos;t afford to lose.
+      </p>
+    </details>
   );
 }

@@ -1045,60 +1045,58 @@ or regenerate the shipped table with
 
 ### Position calculator
 
-Under the report is a sizing tool for the matchup on the board. You enter a
-bankroll, the market (**Series winner** or **This game**; a BO1 is always the
-game), both teams' current odds, and optionally your own read. It returns the
-fair price for each side, the lowest odds still worth taking, the edge against
-the market, and how much of the bankroll to risk. The maths lives in
-`src/predictor/position.ts` and has no React in it.
+Under the report is a sizing tool for the matchup on the board, built for
+markets priced in cents: a share of a team pays $1 if it wins, so 40¢ is the
+market saying 40%. The maths lives in `src/predictor/position.ts` and has no
+React in it.
 
-**Odds** can be decimal (`1.85`, `1,85`), American (`+150`, `-200`) or
-fractional (`5/4`). A bare number is always read as decimal; American needs its
-sign. The book's margin is removed proportionally (each implied probability
-divided by their sum) to get the market's fair view, and the margin is graded
-tight / normal / high / very high. Two prices whose implied probabilities add
-up to less than 100% can't both be real, so the tool stops and asks you to check
-them.
+**Inputs.** Who you think wins (one click on the team) and how sure you are
+(50–100%), each team's price in cents, the bankroll, and whether the prices are
+for the series or this game (a BO1 is always the game). Prices take `40`, `40¢`,
+`62.5`, `0.40` or `$0.40`. One price is enough. A blank side is taken as 100¢
+minus the other and marked *auto*. The bankroll is remembered per browser. The
+pick, sureness and prices are kept per tab and per matchup. Swapping sides
+carries each price and the pick with its team, and a new matchup starts empty,
+so an old price is never applied to a new game.
+
+**Output.** A single call: **Buy {team} — amount**, with the price, the most
+it's worth paying and the fair price; or **Pass**, **Check the prices**, or
+**Don't size**. At most one short line says why the size was cut. The full
+working (market view, model, you, fair, limit, edge, Kelly, conviction) is
+folded under *Show the working*.
+
+**The size is decided by the model, not chosen.**
+
+1. *Fair price.* The model's probability and yours are averaged in log-odds,
+   half each. Your sureness moves the number a long way but can't replace it,
+   because people who say "90% sure" are right far less often than that.
+2. *Safety margin.* A side is only bought 3¢ or more under its fair price.
+   That margin is in cents rather than a return because the model's error is
+   in probability: a 3-point miss costs 3¢ whether the share costs 30¢ or 70¢.
+3. *Conviction.* This starts at 100%.
+   - It is halved when you and the model split, meaning one of you says the
+     price is cheap and the other doesn't.
+   - It is halved when four or more picks rest on fewer than five games of
+     record.
+   - It tapers to nothing between 15 and 25 points off the market. A liquid
+     market is the best estimate there is, and a gap that large is almost
+     always a stale series score, the wrong market, or a read that is surer
+     than it should be.
+4. *Stake.* A quarter of full Kelly, `(fair − price) / (1 − price)`, times
+   conviction. It is capped at 5% of the bankroll times the same conviction.
+
+Two real prices never add up to under 100¢. If they do, nothing is sized until
+they are fixed.
 
 **The staking probability is not the report's probability.** Measured over
 3,692 games (March 2025 onwards), the report's logistic scale (2.0) is
 overconfident at the top end. When it says 85% the favourite wins 72.5% of the
-time, and when it says 93% the favourite wins 77.1%. Kelly sizing bets hardest
-exactly where a model is overconfident, so the calculator re-maps the margin
-with the scale that minimises log-loss on the same games (`STAKING_SCALE = 3.75`,
-with 2026 alone giving 3.65). It uses log-loss rather than Brier because Kelly
-maximises expected log-wealth. The game probability is then clamped to 15–85%
-and turned into a series probability from the current score. The report itself
-is unchanged.
-
-**Your read** is optional. When it is on, it is blended with the model 50/50 in
-log-odds, and a warning appears if the two are more than 20 points apart.
-
-**Sizing** is fractional Kelly with a hard cap and a minimum edge, so model
-error has to be cleared before anything is risked:
-
-| Profile    | Kelly | Cap per position | Minimum expected value |
-|------------|-------|------------------|------------------------|
-| Cautious   | ⅛     | 1% of bankroll   | +5% per unit           |
-| Standard   | ¼     | 2.5%             | +3%                    |
-| Aggressive | ½     | 5%               | +2%                    |
-
-Full Kelly is shown for reference only and is never a profile.
-
-**Distance from the market is treated as an input error, not an edge.** Esports
-prices are sharp enough that a large gap almost always means the series score
-is stale, the wrong market is selected, or the draft rests on thin records. The
-stake is tapered linearly once the estimate is more than 15 points from the
-no-vig market, and nothing is sized past 25 points. Both prices are needed
-before anything is sized, since one price has no market to check against. A
-warning also appears when four or more of the ten picks rest on fewer than five
-games of record.
-
-The bankroll and profile are remembered per browser. The odds, market and read
-are kept per tab and per matchup: swapping sides carries each price with its
-team, and a different matchup starts empty so an old price is never applied to
-a new game. The calculator sizes one position; anything you already have on the
-same series counts against the cap.
+time, and when it says 93% the favourite wins 77.1%. Kelly bets hardest exactly
+where a model is overconfident, so the calculator re-maps the margin with the
+scale that minimises log-loss on the same games (`STAKING_SCALE = 3.75`, with
+2026 alone giving 3.65). It uses log-loss rather than Brier because Kelly
+maximises expected log-wealth. The game probability is clamped to 15–85% and
+carried to the series from the current score. The report itself is unchanged.
 
 ---
 

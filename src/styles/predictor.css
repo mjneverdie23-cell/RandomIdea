@@ -1475,114 +1475,217 @@
 .position-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   padding: 18px;
 }
 
 .position-inputs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 14px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px 14px;
   align-items: start;
 }
 
-.position-odds-label.is-blue {
+.position-field-pick {
+  grid-column: span 2;
+}
+
+.position-price-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-price-label.is-blue {
   color: var(--blue-bright);
 }
 
-.position-odds-label.is-red {
+.position-price-label.is-red {
   color: var(--red-bright);
 }
 
-.position-odds-hint {
+.position-hint {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  min-height: 1.2em;
+}
+
+.position-hint.is-error {
+  color: var(--red-bright);
 }
 
 .input.is-invalid {
   border-color: var(--red);
 }
 
-.position-read {
+/* An input with its unit inside the box: 70 %, 40 ¢. */
+.position-affix {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
-.position-read-toggle {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+.position-affix .input {
+  width: 100%;
+  padding-right: 28px;
+}
+
+.position-affix > span {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
   font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.position-pick,
+.position-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.position-pick-btn,
+.position-seg button {
+  min-width: 0;
+  padding: 10px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-deep);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.position-read-toggle input {
-  accent-color: var(--violet);
-  width: 16px;
-  height: 16px;
+.position-seg button {
+  font-size: 12px;
 }
 
-.position-read-slider {
-  display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  font-size: 0.85rem;
+.position-pick-btn:hover,
+.position-seg button:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
 }
 
-.position-read-slider input[type='range'] {
-  width: 100%;
-  accent-color: var(--violet);
-}
-
-.position-read-team.is-blue strong {
+.position-pick-btn.is-blue[aria-pressed='true'] {
+  border-color: var(--blue);
+  background: var(--blue-wash);
   color: var(--blue-bright);
 }
 
-.position-read-team.is-red strong {
+.position-pick-btn.is-red[aria-pressed='true'] {
+  border-color: var(--red);
+  background: var(--red-wash);
   color: var(--red-bright);
 }
 
-.position-read-model {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+.position-seg button[aria-pressed='true'] {
+  border-color: var(--violet);
+  background: color-mix(in srgb, var(--violet) 14%, transparent);
+  color: var(--text);
 }
 
-/* The one line that says what to do. Colour carries the decision; the words
-   carry the numbers, so nothing depends on colour alone. */
-.position-verdict {
-  margin: 0;
-  padding: 12px 14px;
+/* The answer. Colour carries the decision; the words carry the numbers, so
+   nothing depends on colour alone. */
+.position-call {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--line-strong);
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.position-verdict.is-bet {
-  border-color: color-mix(in srgb, var(--green) 55%, transparent);
-  background: color-mix(in srgb, var(--green) 10%, transparent);
-}
-
-.position-verdict.is-pass {
+  border-left-width: 4px;
   background: var(--panel-hover);
 }
 
-.position-verdict.is-info {
-  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+.position-call.is-buy {
+  border-color: color-mix(in srgb, var(--green) 55%, transparent);
+  border-left-color: var(--green);
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+}
+
+.position-call.is-info {
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  border-left-color: var(--blue);
   background: var(--blue-wash);
 }
 
-.position-verdict.is-danger {
-  border-color: var(--red);
+.position-call.is-danger {
+  border-color: color-mix(in srgb, var(--red) 55%, transparent);
+  border-left-color: var(--red);
   background: var(--red-wash);
 }
 
-.position-table-wrap {
-  overflow-x: auto;
+.position-call-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  flex-wrap: wrap;
+}
+
+.position-call-action {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.position-call.is-buy .position-call-action,
+.position-call.is-buy .position-call-stake {
+  color: var(--green);
+}
+
+.position-call.is-danger .position-call-action {
+  color: var(--red-bright);
+}
+
+.position-call-stake {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.position-call-stake.is-pair {
+  font-size: 1.2rem;
+}
+
+.position-call-row.is-sub {
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.position-call-row.is-sub strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.position-call-note {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--amber);
+}
+
+.position-details {
+  font-size: 0.85rem;
+}
+
+.position-details > summary {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  width: max-content;
+}
+
+.position-details[open] > summary {
+  margin-bottom: 10px;
 }
 
 .position-table {
@@ -1593,7 +1696,7 @@
 
 .position-table th,
 .position-table td {
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--line);
   text-align: right;
   white-space: nowrap;
@@ -1609,6 +1712,9 @@
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .position-table thead th.is-blue {
@@ -1629,101 +1735,19 @@
   font-weight: 600;
 }
 
-.position-table td.is-pos {
-  color: var(--green);
-}
-
-.position-table td.is-neg {
-  color: var(--text-faint);
-}
-
-.position-stake-row th,
-.position-stake-row td {
-  border-bottom: none;
-  padding-top: 10px;
-}
-
-.position-stake {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.position-tag {
-  font-family: var(--font-ui);
-  font-size: 0.66rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line-strong);
-  color: var(--text-dim);
-}
-
-.position-tag.is-value {
-  color: var(--green);
-  border-color: color-mix(in srgb, var(--green) 55%, transparent);
-}
-
-.position-tag.is-thin,
-.position-tag.is-blocked {
-  color: var(--amber);
-  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
-}
-
-.position-market {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--text-dim);
-}
-
-.position-market.is-high,
-.position-market.is-very-high {
-  color: var(--amber);
-}
-
-.position-market.is-arbitrage {
-  color: var(--red-bright);
-}
-
-.position-warnings {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 0.82rem;
-}
-
-.position-warnings li {
-  padding: 8px 12px;
-  border-left: 3px solid var(--line-strong);
-  background: var(--panel-hover);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.position-warnings li.is-danger {
-  border-left-color: var(--red);
-}
-
-.position-warnings li.is-caution {
-  border-left-color: var(--amber);
-}
-
-.position-warnings li.is-info {
-  border-left-color: var(--blue);
-}
-
 .position-foot {
-  margin: 0;
+  margin: 10px 0 0;
   font-size: 0.75rem;
   line-height: 1.55;
   color: var(--text-faint);
 }
 
-@media (max-width: 640px) {
-  .position-read-slider {
-    grid-template-columns: 1fr;
+.position-foot strong {
+  color: var(--text-dim);
+}
+
+@media (max-width: 420px) {
+  .position-field-pick {
+    grid-column: 1 / -1;
   }
 }
