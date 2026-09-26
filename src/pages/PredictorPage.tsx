@@ -4,6 +4,7 @@ import { useDataset } from '../state/DatasetContext.tsx';
 import { usePredictor } from '../state/PredictorContext.tsx';
 import { DraftComposer } from '../components/predictor/DraftComposer.tsx';
 import { PredictionReport } from '../components/predictor/PredictionReport.tsx';
+import { PositionCalculator } from '../components/predictor/PositionCalculator.tsx';
 import { MatchPaste } from '../components/predictor/MatchPaste.tsx';
 import { predict } from '../predictor/engine.ts';
 import { lookupRating } from '../predictor/ratings.ts';
@@ -326,15 +327,23 @@ export function PredictorPage() {
       </div>
 
       {prediction ? (
-        <PredictionReport
-          prediction={prediction}
-          blueTeam={blue.team ?? ''}
-          redTeam={red.team ?? ''}
-          showSweep={winRequirement === 'sweep'}
-          formSeason={model.formSeason}
-          ratingsLabel={ratings.label}
-          unratedTeams={unratedTeams}
-        />
+        <>
+          <PredictionReport
+            prediction={prediction}
+            blueTeam={blue.team ?? ''}
+            redTeam={red.team ?? ''}
+            showSweep={winRequirement === 'sweep'}
+            formSeason={model.formSeason}
+            ratingsLabel={ratings.label}
+            unratedTeams={unratedTeams}
+          />
+          <PositionCalculator
+            prediction={prediction}
+            blueTeam={blue.team ?? ''}
+            redTeam={red.team ?? ''}
+            seriesLength={seriesLength}
+          />
+        </>
       ) : (
         <div className="empty-state">
           <p>Pick a team on each side to see the prediction. It updates as you draft.</p>
