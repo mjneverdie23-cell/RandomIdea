@@ -1615,6 +1615,16 @@
   background: var(--blue-wash);
 }
 
+.position-call.is-wait {
+  border-color: color-mix(in srgb, var(--amber) 50%, transparent);
+  border-left-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+
+.position-call.is-wait .position-call-action {
+  color: var(--amber);
+}
+
 .position-call.is-danger {
   border-color: color-mix(in srgb, var(--red) 55%, transparent);
   border-left-color: var(--red);
@@ -1663,6 +1673,19 @@
 .position-call-row.is-sub strong {
   color: var(--text);
   font-family: var(--font-mono);
+}
+
+.position-call-watch {
+  margin: 4px 0 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line-strong);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.position-call-watch strong {
+  color: var(--text);
 }
 
 .position-call-note {

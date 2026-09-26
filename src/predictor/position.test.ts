@@ -14,13 +14,14 @@ import {
   parseCents,
   parseSureness,
   readMarket,
+  spikeWatch,
   spreadQuality,
   stakingGameProb,
   userProbability,
   type PositionInput,
 } from './position.ts';
 import { seriesWinProbability } from './engine.ts';
-import type { Prediction } from './types.ts';
+import type { GoldSwing, Prediction } from './types.ts';
 
 /** Only the fields the sizing reads; the rest of a prediction is irrelevant here. */
 const prediction = (margin: number, needBlue = 2, needRed = 2) =>
@@ -166,9 +167,9 @@ describe('kelly for a share that pays $1', () => {
 });
 
 describe('assessPosition', () => {
-  it('passes at a fair price', () => {
+  it('waits at a fair price', () => {
     const a = assessPosition(input());
-    expect(a.decision.kind).toBe('pass');
+    expect(a.decision).toMatchObject({ kind: 'wait', reason: 'edge', target: 0.47 });
     expect(a.blue.stakeFraction).toBe(0);
     expect(a.red.stakeFraction).toBe(0);
   });
@@ -195,7 +196,7 @@ describe('assessPosition', () => {
 
   it('refuses an edge thinner than the safety margin', () => {
     const a = assessPosition(input({ modelBlue: 0.54, priceBlue: 0.52, priceRed: 0.48 }));
-    expect(a.decision).toEqual({ kind: 'pass', closest: 'blue' });
+    expect(a.decision).toMatchObject({ kind: 'wait', side: 'blue', reason: 'edge', target: 0.51 });
     expect(a.blue.value).toBe(false);
     expect(a.blue.maxPrice).toBeCloseTo(0.54 - MIN_EDGE, 10);
   });
@@ -327,5 +328,103 @@ describe('conviction', () => {
 
     const wide = assessPosition(input({ priceBlue: 0.5, priceRed: 0.58 }));
     expect(wide.notes.join(' ')).toMatch(/wide spread \(8¢\)/);
+  });
+});
+
+describe('your maximum entry', () => {
+  // The model has blue at 82% for the game; the market 73¢.
+  const favourite = { modelBlue: 0.82, priceBlue: 0.73, priceRed: 0.27 };
+
+  it('waits for the ceiling when the value is priced over it', () => {
+    const now = assessPosition(input(favourite));
+    expect(now.decision).toEqual({ kind: 'buy', side: 'blue' });
+
+    const a = assessPosition(input({ ...favourite, maxEntry: 0.6 }));
+    expect(a.decision).toMatchObject({ kind: 'wait', side: 'blue', target: 0.6, reason: 'limit' });
+  });
+
+  it('says what it will stake at the target, and means it', () => {
+    const a = assessPosition(input({ ...favourite, maxEntry: 0.6 }));
+    if (a.decision.kind !== 'wait') throw new Error('expected a wait');
+    // 22 points off a 60¢ market tapers the size to 30%; quarter Kelly is over the cap.
+    expect(a.decision.stakeFraction).toBeCloseTo(MAX_STAKE * 0.3, 10);
+    expect(a.decision.stake).toBe(15);
+
+    // Enter 60¢ when it gets there: the same number comes back as a buy.
+    const there = assessPosition(input({ ...favourite, priceBlue: 0.6, priceRed: null, maxEntry: 0.6 }));
+    expect(there.decision).toEqual({ kind: 'buy', side: 'blue' });
+    expect(there.blue.stakeFraction).toBeCloseTo(a.decision.stakeFraction, 10);
+  });
+
+  it('buys at or under the ceiling', () => {
+    const a = assessPosition(input({ modelBlue: 0.7, priceBlue: 0.6, priceRed: 0.4, maxEntry: 0.6 }));
+    expect(a.decision).toEqual({ kind: 'buy', side: 'blue' });
+  });
+
+  it('aims under the ceiling when the edge needs a lower price', () => {
+    const a = assessPosition(input({ modelBlue: 0.55, priceBlue: 0.56, priceRed: 0.44, maxEntry: 0.6 }));
+    expect(a.decision).toMatchObject({ kind: 'wait', side: 'blue', target: 0.52, reason: 'edge' });
+  });
+
+  it('waits on the team you picked', () => {
+    const a = assessPosition(input({ modelBlue: 0.52, userBlue: 0.45, pick: 'red', maxEntry: 0.6 }));
+    expect(a.decision).toMatchObject({ kind: 'wait', side: 'red' });
+  });
+
+  it('sizes nothing at a target only a changed game could reach', () => {
+    // 91% on the blend, 60¢ ceiling: the market would have to move 30 points.
+    const a = assessPosition(input({ modelBlue: 0.85, userBlue: 0.95, priceBlue: 0.8, priceRed: 0.2, maxEntry: 0.6 }));
+    expect(a.decision).toMatchObject({ kind: 'wait', target: 0.6, stakeFraction: 0 });
+  });
+});
+
+describe('spikeWatch', () => {
+  const point = (minute: 10 | 15 | 20 | 25, sample: number, spikes: number, dips = 0, dipWins = 0) => ({
+    minute,
+    sample,
+    spikes,
+    spikeWins: Math.round(spikes * 0.8),
+    dips,
+    dipWins,
+  });
+  // Leads grow with time, so the league is ahead more often at every later mark.
+  const league: GoldSwing = [
+    point(10, 1000, 120, 120, 22),
+    point(15, 1000, 270, 270, 50),
+    point(20, 1000, 360, 360, 58),
+    point(25, 1000, 410, 410, 49),
+  ];
+
+  it('picks the mark the team is unusually strong at, not the raw peak', () => {
+    const early: GoldSwing = [point(10, 100, 25), point(15, 100, 30), point(20, 100, 40), point(25, 100, 45)];
+    const w = spikeWatch(early, undefined, league)!;
+    expect(w.minute).toBe(10);
+    expect(w.rate).toBeCloseTo(0.25, 10);
+    expect(w.leagueRate).toBeCloseTo(0.12, 10);
+
+    const mid: GoldSwing = [point(10, 100, 10), point(15, 100, 38), point(20, 100, 40), point(25, 100, 45)];
+    expect(spikeWatch(mid, undefined, league)!.minute).toBe(15);
+  });
+
+  it('ignores a mark with too few games', () => {
+    const thin: GoldSwing = [point(10, 8, 6), point(15, 100, 30)];
+    expect(spikeWatch(thin, undefined, league)!.minute).toBe(15);
+  });
+
+  it('uses your team’s own comeback record when it has one, else the league’s', () => {
+    const them: GoldSwing = [point(15, 100, 38)];
+    const ours: GoldSwing = [point(15, 100, 20, 10, 3)];
+    const own = spikeWatch(them, ours, league)!;
+    expect(own.comeback).toBeCloseTo(0.3, 10);
+    expect(own.comebackIsLeague).toBe(false);
+
+    const thinOurs: GoldSwing = [point(15, 100, 20, 3, 2)];
+    const fallback = spikeWatch(them, thinOurs, league)!;
+    expect(fallback.comeback).toBeCloseTo(50 / 270, 10);
+    expect(fallback.comebackIsLeague).toBe(true);
+  });
+
+  it('says nothing without a record for the other team', () => {
+    expect(spikeWatch(undefined, undefined, league)).toBeNull();
   });
 });

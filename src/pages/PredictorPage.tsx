@@ -342,6 +342,8 @@ export function PredictorPage() {
             blueTeam={blue.team ?? ''}
             redTeam={red.team ?? ''}
             seriesLength={seriesLength}
+            goldSwing={model.goldSwing}
+            goldSwingLeague={model.goldSwingLeague}
           />
         </>
       ) : (

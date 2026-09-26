@@ -10,18 +10,22 @@ import {
   modelProbability,
   parseCents,
   parseSureness,
+  spikeWatch,
   userProbability,
   type Market,
   type PositionAssessment,
   type Side,
   type SideAssessment,
+  type SpikeWatch,
 } from '../../predictor/position.ts';
-import type { Prediction, SeriesLength } from '../../predictor/types.ts';
+import { SWING_GOLD } from '../../predictor/derive.ts';
+import type { GoldSwing, Prediction, SeriesLength } from '../../predictor/types.ts';
 import { readTabScoped, writeTabScoped } from '../../storage/tabScoped.ts';
 
 /**
- * The bankroll belongs to the person, not the match, so it is shared across
- * tabs. Everything about the price and the pick belongs to one match.
+ * The bankroll and the price ceiling belong to the person, not the match, so
+ * they are shared across tabs. Everything about the price and the pick belongs
+ * to one match.
  */
 const PREFS_KEY = 'draftcall.position.prefs.v1';
 // v1 held decimal odds; reading "1.60" back as 1.6¢ would be a silent disaster.
@@ -39,17 +43,28 @@ interface MatchState {
   sure: string;
 }
 
-function loadBankroll(): string {
+interface Prefs {
+  bankroll: string;
+  /** The most the person will pay for a share, in cents as typed; blank for no ceiling. */
+  maxEntry: string;
+}
+
+/** Most people who set a ceiling set it here; the field is always editable. */
+const DEFAULT_MAX_ENTRY = '60';
+
+function loadPrefs(): Prefs {
+  const prefs: Prefs = { bankroll: '', maxEntry: DEFAULT_MAX_ENTRY };
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as { bankroll?: unknown };
-      if (typeof parsed.bankroll === 'string') return parsed.bankroll;
+      const parsed = JSON.parse(raw) as { bankroll?: unknown; maxEntry?: unknown };
+      if (typeof parsed.bankroll === 'string') prefs.bankroll = parsed.bankroll;
+      if (typeof parsed.maxEntry === 'string') prefs.maxEntry = parsed.maxEntry;
     }
   } catch {
-    // Storage is a convenience; fall through to empty.
+    // Storage is a convenience; fall through to defaults.
   }
-  return '';
+  return prefs;
 }
 
 /**
@@ -107,11 +122,21 @@ interface Props {
   blueTeam: string;
   redTeam: string;
   seriesLength: SeriesLength;
+  /** Real gold leads and deficits by minute, per team (lower-case name). */
+  goldSwing: Map<string, GoldSwing>;
+  goldSwingLeague: GoldSwing;
 }
 
-export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength }: Props) {
+export function PositionCalculator({
+  prediction,
+  blueTeam,
+  redTeam,
+  seriesLength,
+  goldSwing,
+  goldSwingLeague,
+}: Props) {
   const teams = `${blueTeam}|${redTeam}`;
-  const [bankrollRaw, setBankrollRaw] = useState(loadBankroll);
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [match, setMatch] = useState<MatchState>(() => loadMatch(teams));
   const sureRef = useRef<HTMLInputElement>(null);
 
@@ -125,11 +150,11 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
 
   useEffect(() => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ bankroll: bankrollRaw }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
     } catch {
       // Not persisting is fine.
     }
-  }, [bankrollRaw]);
+  }, [prefs]);
   useEffect(() => writeTabScoped(MATCH_KEY, JSON.stringify(match)), [match]);
 
   // A best-of-one's series is its game; offering both would be noise.
@@ -142,7 +167,8 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
   const sure = parseSureness(match.sure);
   const pickSide: Side | null =
     match.pick === blueTeam ? 'blue' : match.pick === redTeam ? 'red' : null;
-  const bankroll = Number(bankrollRaw.replace(/[, $]/g, ''));
+  const bankroll = Number(prefs.bankroll.replace(/[, $]/g, ''));
+  const maxEntry = parseCents(prefs.maxEntry);
 
   /**
    * Lanes whose win rate rests on almost nothing: no record at all, or a record
@@ -169,8 +195,19 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
       modelBlue,
       userBlue: userProbability(pickSide, sure),
       thinLanes,
+      maxEntry,
+      pick: pickSide,
     });
-  }, [modelBlue, bankroll, priceBlue, priceRed, pickSide, sure, thinLanes]);
+  }, [modelBlue, bankroll, priceBlue, priceRed, pickSide, sure, thinLanes, maxEntry]);
+
+  /** When the team you'd be waiting against is likeliest to take a real lead. */
+  const watch = useMemo(() => {
+    if (assessment?.decision.kind !== 'wait') return null;
+    const ours = assessment.decision.side;
+    const theirs = ours === 'blue' ? 'red' : 'blue';
+    const key = (side: Side) => (side === 'blue' ? blueTeam : redTeam).toLowerCase();
+    return spikeWatch(goldSwing.get(key(theirs)), goldSwing.get(key(ours)), goldSwingLeague);
+  }, [assessment, goldSwing, goldSwingLeague, blueTeam, redTeam]);
 
   const update = (patch: Partial<MatchState>) => setMatch((m) => ({ ...m, ...patch }));
   const nameOf = (side: Side) => (side === 'blue' ? blueTeam : redTeam);
@@ -186,6 +223,7 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
   };
 
   const sureInvalid = match.sure.trim() !== '' && sure === null;
+  const maxEntryInvalid = prefs.maxEntry.trim() !== '' && maxEntry === null;
 
   return (
     <section className="panel position-panel" aria-label="Position calculator">
@@ -260,9 +298,26 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
               className="input num"
               inputMode="decimal"
               placeholder="e.g. 1000"
-              value={bankrollRaw}
-              onChange={(e) => setBankrollRaw(e.target.value)}
+              value={prefs.bankroll}
+              onChange={(e) => setPrefs((p) => ({ ...p, bankroll: e.target.value }))}
             />
+          </label>
+
+          <label className="field">
+            <span className="field-label">Max entry</span>
+            <span className="position-affix">
+              <input
+                id="position-max-entry"
+                className={`input num${maxEntryInvalid ? ' is-invalid' : ''}`}
+                inputMode="decimal"
+                placeholder="none"
+                value={prefs.maxEntry}
+                onChange={(e) => setPrefs((p) => ({ ...p, maxEntry: e.target.value }))}
+                aria-invalid={maxEntryInvalid}
+              />
+              <span aria-hidden="true">¢</span>
+            </span>
+            {maxEntryInvalid && <span className="field-hint position-hint is-error">1 to 99, or blank</span>}
           </label>
 
           {seriesLength !== 'BO1' && (
@@ -296,7 +351,7 @@ export function PositionCalculator({ prediction, blueTeam, redTeam, seriesLength
           </div>
         ) : (
           <>
-            <Call assessment={assessment} nameOf={nameOf} />
+            <Call assessment={assessment} nameOf={nameOf} maxEntry={maxEntry} watch={watch} />
             <Workings
               assessment={assessment}
               blueTeam={blueTeam}
@@ -362,10 +417,17 @@ function PriceField({
 function Call({
   assessment,
   nameOf,
+  maxEntry,
+  watch,
 }: {
   assessment: PositionAssessment;
   nameOf: (side: Side) => string;
+  maxEntry: number | null;
+  watch: SpikeWatch | null;
 }) {
+  /** The most worth paying, or the user's ceiling if that is lower. */
+  const entry = (s: SideAssessment) =>
+    maxEntry !== null && maxEntry < s.maxPrice ? `${limit(maxEntry)} (your max)` : limit(s.maxPrice);
   const { decision, blue, red, notes } = assessment;
   const note = notes.length > 0 && <p className="position-call-note">{capitalise(notes.join(' · '))}</p>;
 
@@ -391,19 +453,43 @@ function Call({
         </div>
       );
     }
-    case 'pass': {
-      const s = decision.closest === 'blue' ? blue : red;
+    case 'wait': {
+      const s = decision.side === 'blue' ? blue : red;
+      const them = nameOf(decision.side === 'blue' ? 'red' : 'blue');
       return (
-        <div className="position-call is-pass" role="status">
+        <div className="position-call is-wait" role="status">
           <div className="position-call-row">
-            <span className="position-call-action">Pass</span>
+            <span className="position-call-action">
+              Wait — {nameOf(s.side)} at {limit(decision.target)} or less
+            </span>
+            {decision.stakeFraction > 0 && (
+              <span className="position-call-stake">
+                {decision.stake !== null ? money(decision.stake) : pct(decision.stakeFraction)}
+              </span>
+            )}
           </div>
           <div className="position-call-row is-sub">
             <span>
-              {nameOf(s.side)} at {cents(s.price!)} — worth it up to <strong>{limit(s.maxPrice)}</strong> · fair{' '}
-              {fair(s.estimate)}
+              Now {cents(s.price!)} —{' '}
+              {decision.reason === 'limit'
+                ? `over your ${limit(maxEntry!)} max`
+                : `no edge above ${limit(s.maxPrice)}`}{' '}
+              · fair {fair(s.estimate)}
+            </span>
+            <span>
+              {decision.stakeFraction > 0
+                ? `at ${limit(decision.target)} if the game is still even`
+                : `too far from fair to size at ${limit(decision.target)}`}
             </span>
           </div>
+          {watch && (
+            <p className="position-call-watch">
+              <strong>Watch ~{watch.minute} min:</strong> {them} is {SWING_GOLD / 1000}k+ gold up at {watch.minute} in{' '}
+              {pct(watch.rate, 0)} of games (league {pct(watch.leagueRate, 0)}).
+              {watch.comeback !== null &&
+                ` From that far down, ${watch.comebackIsLeague ? 'teams' : nameOf(s.side)} won ${pct(watch.comeback, 0)} (${watch.comebackSample} games) — a dip on a real lead is not a discount.`}
+            </p>
+          )}
           {note}
         </div>
       );
@@ -419,8 +505,8 @@ function Call({
           </div>
           <div className="position-call-row is-sub">
             <span>
-              Worth buying up to: {nameOf('blue')} <strong>{limit(blue.maxPrice)}</strong> ·{' '}
-              {nameOf('red')} <strong>{limit(red.maxPrice)}</strong>
+              Buy up to: {nameOf('blue')} <strong>{entry(blue)}</strong> · {nameOf('red')}{' '}
+              <strong>{entry(red)}</strong>
             </span>
           </div>
         </div>
@@ -523,6 +609,15 @@ function Workings({
         tapers to nothing between {Math.round(MARKET_TAPER_FROM * 100)} and{' '}
         {Math.round(MARKET_STOP_AT * 100)} points off the market. Your sureness counts half, the model
         half.
+      </p>
+      <p className="position-foot">
+        <strong>Waiting for an entry.</strong> Over your max entry, or with no edge yet, the call is to
+        wait for the lower of the two prices, with the stake it would size there already worked out.
+        That amount assumes the game is still roughly even when the price arrives. A price that falls
+        because the other team took a {SWING_GOLD.toLocaleString()}g lead is mostly the market being
+        right: league-wide, that lead at 15 minutes wins about 81% of the time. The watch line names
+        the mark where the other team takes such a lead most unusually often (its rate is shrunk toward
+        the league first), and how your team has done from that far behind there.
       </p>
       <p className="position-foot">
         The model here is re-calibrated, not the report&apos;s number — {blueTeam} is {pct(reportBlue)} in

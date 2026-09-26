@@ -4,7 +4,9 @@ import {
   DECISIVE_GOLD,
   META_MIN_PICKS,
   MIN_TEMPO_SAMPLE,
+  SWING_GOLD,
   buildPredictorModel,
+  deriveGoldSwing,
   deriveMeta,
   MIN_CLASS_PROFILE,
   deriveClassProfiles,
@@ -1239,5 +1241,36 @@ describe('current split when the newest game has none', () => {
   it('still reports nothing for a player who has only played split-less events', () => {
     const onlyWorlds = [games[0]!];
     expect(currentSplits(onlyWorlds).get(splitSubject('player', 'star'))).toBeUndefined();
+  });
+});
+
+describe('deriveGoldSwing', () => {
+  const game = (id: string, winner: Side, checkpoints: (number | null)[]) =>
+    makeGame({ id, blue: 'T1', red: 'GenG', winner, day: Number(id), blueCheckpoints: checkpoints });
+
+  it('counts real leads and deficits at each mark, and who won them', () => {
+    const { byTeam, league } = deriveGoldSwing([
+      game('1', 'blue', [SWING_GOLD, SWING_GOLD, 0, null]),
+      game('2', 'red', [SWING_GOLD - 1, SWING_GOLD, -SWING_GOLD, null]),
+      game('3', 'red', [-SWING_GOLD, 0, 0, null]),
+    ]);
+    const t1 = byTeam.get('t1')!;
+    // No game reached 25 minutes, so that mark is absent rather than zero.
+    expect(t1.map((p) => p.minute)).toEqual([10, 15, 20]);
+    expect(t1[0]).toEqual({ minute: 10, sample: 3, spikes: 1, spikeWins: 1, dips: 1, dipWins: 0 });
+    expect(t1[1]).toEqual({ minute: 15, sample: 3, spikes: 2, spikeWins: 1, dips: 0, dipWins: 0 });
+
+    // The other side of the same games is the mirror.
+    const geng = byTeam.get('geng')!;
+    expect(geng[1]).toEqual({ minute: 15, sample: 3, spikes: 0, spikeWins: 0, dips: 2, dipWins: 1 });
+
+    // The league counts both teams in every game.
+    expect(league[0]).toEqual({ minute: 10, sample: 6, spikes: 2, spikeWins: 2, dips: 2, dipWins: 0 });
+  });
+
+  it('feeds the model from the form season', () => {
+    const model = buildPredictorModel([game('1', 'blue', [SWING_GOLD, 0, 0, 0])]);
+    expect(model.goldSwing.get('t1')![0]!.spikes).toBe(1);
+    expect(model.goldSwingLeague[0]!.sample).toBe(2);
   });
 });

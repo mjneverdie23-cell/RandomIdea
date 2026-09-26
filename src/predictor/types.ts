@@ -217,6 +217,28 @@ export interface GoldTempoPoint {
 export type GoldTempo = GoldTempoPoint[];
 
 /**
+ * How often a team holds a real gold lead at one minute mark, and what it does
+ * from a real deficit there — the moments a live price moves on.
+ *
+ * Raw counts rather than rates, so a reader can apply its own sample floor or
+ * shrink a thin record toward the league.
+ */
+export interface GoldSwingPoint {
+  minute: GoldCheckpoint;
+  /** Games that reached this mark. */
+  sample: number;
+  /** Games at least the swing threshold ahead at the mark. */
+  spikes: number;
+  spikeWins: number;
+  /** Games at least the swing threshold behind at the mark. */
+  dips: number;
+  dipWins: number;
+}
+
+/** One point per checkpoint, in minute order; a mark no game reached is absent. */
+export type GoldSwing = GoldSwingPoint[];
+
+/**
  * How a team spends the early game, and what happens when it starts badly.
  *
  * The share figures pool the early checkpoints rather than reporting one mark,
@@ -301,6 +323,10 @@ export interface PredictorModel {
   goldTempo: Map<string, GoldTempo>;
   /** Early-window lead/behind shares and comeback record, per team. */
   earlyGold: Map<string, EarlyGoldProfile>;
+  /** Real gold leads and deficits by minute mark, per team. */
+  goldSwing: Map<string, GoldSwing>;
+  /** The same counts over every team, as the baseline to compare against. */
+  goldSwingLeague: GoldSwing;
   /** What each player usually drafts, by champion class. */
   classProfiles: Map<string, ClassProfile>;
   /** Champion pool and favourite archetype, keyed `player|role`. */

@@ -34,6 +34,8 @@ import { anywhereKey, splitSubject } from './engine.ts';
 import { primaryClass, type ChampionClass } from './championClasses.ts';
 import { archetypeOf, archetypeProfileKey, type Archetype } from './championArchetypes.ts';
 import type {
+  GoldSwing,
+  GoldSwingPoint,
   GoldTempo,
   ArchetypeProfile,
   ChampionScaling,
@@ -902,6 +904,68 @@ function deriveGoldTempo(games: readonly Game[]): Map<string, GoldTempo> {
   return tempo;
 }
 
+/**
+ * Gold lead that counts as a real swing: the kind a live price moves on.
+ *
+ * On the 2026 export a team 1,500g up at 15 minutes goes on to win 81% of the
+ * time, and 1,500g+ leads occur in 12% of team-games at 10 minutes and 27% at
+ * 15. Smaller leads are too common and too often undone to mean much; larger
+ * ones are rare enough at 10 minutes to leave most teams without a sample.
+ */
+export const SWING_GOLD = 1500;
+
+/**
+ * Per team and for the league: how often a real lead is held at each mark,
+ * and how often a real deficit there is still won.
+ *
+ * Counts only — the reader decides how much sample is enough and how far to
+ * shrink a thin record toward the league.
+ */
+export function deriveGoldSwing(games: readonly Game[]): {
+  byTeam: Map<string, GoldSwing>;
+  league: GoldSwing;
+} {
+  const blank = (): GoldSwingPoint[] =>
+    GOLD_CHECKPOINTS.map((minute) => ({ minute, sample: 0, spikes: 0, spikeWins: 0, dips: 0, dipWins: 0 }));
+  const perTeam = new Map<string, GoldSwingPoint[]>();
+  const league = blank();
+
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      const checkpoints = side.goldDiff?.checkpoints;
+      if (!checkpoints) continue;
+
+      const key = side.teamName.toLowerCase();
+      let points = perTeam.get(key);
+      if (!points) {
+        points = blank();
+        perTeam.set(key, points);
+      }
+      const won = game.winner === side.side;
+
+      GOLD_CHECKPOINTS.forEach((_, index) => {
+        const diff = checkpoints[index];
+        if (diff === null || diff === undefined) return;
+        for (const point of [points[index]!, league[index]!]) {
+          point.sample += 1;
+          if (diff >= SWING_GOLD) {
+            point.spikes += 1;
+            if (won) point.spikeWins += 1;
+          } else if (diff <= -SWING_GOLD) {
+            point.dips += 1;
+            if (won) point.dipWins += 1;
+          }
+        }
+      });
+    }
+  }
+
+  const reached = (points: GoldSwingPoint[]) => points.filter((point) => point.sample > 0);
+  const byTeam = new Map<string, GoldSwing>();
+  for (const [team, points] of perTeam) byTeam.set(team, reached(points));
+  return { byTeam, league: reached(league) };
+}
+
 /* ------------------------------------------------------------------ */
 /* Player champion-class profiles                                      */
 /* ------------------------------------------------------------------ */
@@ -1302,6 +1366,7 @@ export function buildPredictorModel(
 
   const { byCompetition: standingsByCompetition, overall: standingsOverall } = deriveStandings(runs);
   const { byCompetition: teamsByCompetition, all: allTeams } = deriveTeams(games);
+  const goldSwing = deriveGoldSwing(formGames);
 
   return {
     playerSplitRecord: records.playerSplit,
@@ -1323,6 +1388,8 @@ export function buildPredictorModel(
     behavior: deriveBehavior(formGames, runs),
     goldTempo: deriveGoldTempo(formGames),
     earlyGold: deriveEarlyGold(formGames),
+    goldSwing: goldSwing.byTeam,
+    goldSwingLeague: goldSwing.league,
     // Class preference is a durable habit, so it reads all scoped history.
     classProfiles: deriveClassProfiles(games),
     archetypeProfiles: deriveArchetypeProfiles(games),
@@ -1370,6 +1437,8 @@ export function emptyPredictorModel(): PredictorModel {
     behavior: new Map(),
     goldTempo: new Map(),
     earlyGold: new Map(),
+    goldSwing: new Map(),
+    goldSwingLeague: [],
     classProfiles: new Map(),
     archetypeProfiles: new Map(),
     standingsByCompetition: new Map(),

@@ -1051,16 +1051,17 @@ market saying 40%. The maths lives in `src/predictor/position.ts` and has no
 React in it.
 
 **Inputs.** Who you think wins (one click on the team) and how sure you are
-(50–100%), each team's price in cents, the bankroll, and whether the prices are
-for the series or this game (a BO1 is always the game). Prices take `40`, `40¢`,
+(50–100%), each team's price in cents, the bankroll, your **max entry** (the most
+you will pay for a share, 60¢ by default, blank for none), and whether the
+prices are for the series or this game (a BO1 is always the game). Prices take `40`, `40¢`,
 `62.5`, `0.40` or `$0.40`. One price is enough. A blank side is taken as 100¢
-minus the other and marked *auto*. The bankroll is remembered per browser. The
+minus the other and marked *auto*. The bankroll and max entry are remembered per browser. The
 pick, sureness and prices are kept per tab and per matchup. Swapping sides
 carries each price and the pick with its team, and a new matchup starts empty,
 so an old price is never applied to a new game.
 
 **Output.** A single call: **Buy {team} — amount**, with the price, the most
-it's worth paying and the fair price; or **Pass**, **Check the prices**, or
+it's worth paying and the fair price; or **Wait**, **Check the prices**, or
 **Don't size**. At most one short line says why the size was cut. The full
 working (market view, model, you, fair, limit, edge, Kelly, conviction) is
 folded under *Show the working*.
@@ -1087,6 +1088,35 @@ folded under *Show the working*.
 
 Two real prices never add up to under 100¢. If they do, nothing is sized until
 they are fixed.
+
+**Waiting for a better entry.** When the side worth owning is priced over your
+max entry, or has no edge yet, the call is **Wait — {team} at N¢ or less**. The
+target is the lower of your max entry and the most it's worth. The side is the
+one with value, else your pick, else the favourite. The stake it would size at
+the target is already worked out, and entering that price when it arrives gives
+the same amount back as a buy. That amount assumes the game is still roughly
+even. It includes the distance taper, because by then the market has moved
+away from the pre-game read.
+
+Under the wait is a **watch** line: the minute mark where the other team takes
+a 1,500g+ lead most unusually often, and how often your team has won from that
+far behind there. For example: "Watch ~15 min: T1 is 1.5k+ gold up at 15 in 32%
+of games (league 27%). From that far down, Hanwha Life Esports won 22%
+(23 games)."
+
+- **Picking the minute.** Each team's rate is compared with the league's rather
+  than read raw. Leads grow over time, so every team's raw peak is the last mark,
+  which says nothing about the team. The rate is first shrunk toward the league
+  by 20 games, so 3-of-12 can't outrank 48-of-150, and a mark needs 10 games to
+  count.
+- **The comeback rate** is your team's own when it has five or more such
+  deficits at that mark, otherwise the league's.
+- **Why it matters.** On the 2026 export a 1,500g lead at 15 minutes wins 81% of
+  the time. A price that falls on a real lead is mostly the market being right,
+  so the dip to buy is one on a small swing.
+
+The counts come from `deriveGoldSwing` in `src/predictor/derive.ts`
+(`SWING_GOLD = 1500`), over the same form season as the other gold reads.
 
 **The staking probability is not the report's probability.** Measured over
 3,692 games (March 2025 onwards), the report's logistic scale (2.0) is

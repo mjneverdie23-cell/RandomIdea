@@ -45,7 +45,7 @@
  */
 
 import { seriesWinProbability } from './engine.ts';
-import type { Prediction } from './types.ts';
+import type { GoldSwing, GoldSwingPoint, Prediction } from './types.ts';
 
 export type Side = 'blue' | 'red';
 
@@ -337,7 +337,18 @@ export interface PositionInput {
   userBlue: number | null;
   /** Lanes across both drafts whose win rate rests on under `THIN_RECORD_GAMES`. */
   thinLanes?: number;
+  /** The user's own ceiling: no share is bought above this price. `null` for none. */
+  maxEntry?: number | null;
+  /** The side the user says wins, so a wait is planned on their team. */
+  pick?: Side | null;
 }
+
+/** Why the answer is to wait rather than buy now. */
+export type WaitReason =
+  /** The price is over the user's own ceiling. */
+  | 'limit'
+  /** The price is over what the estimate says it is worth. */
+  | 'edge';
 
 /** The single answer the calculator gives. */
 export type Decision =
@@ -345,7 +356,20 @@ export type Decision =
   | { kind: 'crossed'; total: number }
   | { kind: 'too far'; distance: number }
   | { kind: 'buy'; side: Side }
-  | { kind: 'pass'; closest: Side };
+  | {
+      kind: 'wait';
+      side: Side;
+      /** The price to wait for: the lower of the user's ceiling and the limit, in whole cents. */
+      target: number;
+      reason: WaitReason;
+      /**
+       * What the calculator would size at the target, with the market then at
+       * that price. Zero when the target sits too far from the estimate to
+       * size at all — the price only gets there if the game has changed.
+       */
+      stakeFraction: number;
+      stake: number | null;
+    };
 
 export interface PositionAssessment {
   market: MarketRead | null;
@@ -359,10 +383,64 @@ export interface PositionAssessment {
 }
 
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
+/** Whole cents, rounded down: a limit is never quoted above what clears the edge. */
+const floorCents = (p: number) => Math.floor(p * 100 + 1e-6) / 100;
+
+interface Sizing {
+  conviction: Conviction;
+  stakeFraction: number;
+  capped: boolean;
+}
+
+/**
+ * The stake for one side at one price, given where the market is.
+ *
+ * Shared by the price on screen and the price a wait is aiming for, so the
+ * amount shown for a target is exactly what the calculator will say when the
+ * price actually gets there.
+ */
+function sizeAt(args: {
+  estimate: number;
+  model: number;
+  user: number | null;
+  price: number;
+  marketFair: number;
+  marketFactor: number;
+  thin: boolean;
+  value: boolean;
+  sane: boolean;
+}): Sizing {
+  const { estimate, model, user, price, marketFair, marketFactor, thin, value, sane } = args;
+  // The model and the user each either see value at this price or don't.
+  // Only the blend is traded, but a split between them is a doubt.
+  const split = user !== null && model > marketFair !== user > marketFair;
+  const conviction: Conviction = {
+    agreement: split ? DOUBT_FACTOR : 1,
+    data: thin ? DOUBT_FACTOR : 1,
+    market: marketFactor,
+    value: 0,
+  };
+  conviction.value = conviction.agreement * conviction.data * conviction.market;
+
+  const takes = value && sane;
+  const kellySize = BASE_KELLY * kellyFraction(estimate, price);
+  return {
+    conviction,
+    stakeFraction: takes ? Math.min(kellySize, MAX_STAKE) * conviction.value : 0,
+    capped: takes && kellySize > MAX_STAKE,
+  };
+}
+
+/** Whether a price clears the safety margin, to a tenth of a cent so float noise can't decide it. */
+const clears = (estimate: number, price: number) =>
+  Math.round((estimate - price) * 1000) >= Math.round(MIN_EDGE * 1000) && estimate > price;
 
 export function assessPosition(input: PositionInput): PositionAssessment {
   const bankroll = input.bankroll !== null && input.bankroll > 0 ? input.bankroll : null;
   const estimateBlue = clamp(blend(input.modelBlue, input.userBlue), PROB_FLOOR, PROB_CEIL);
+  const maxEntry = input.maxEntry ?? null;
+  const amount = (fraction: number) =>
+    bankroll === null ? null : Math.round(fraction * bankroll * 100) / 100;
 
   // One price is enough: the other side of a two-way market is its complement.
   const priceBlue = input.priceBlue ?? (input.priceRed === null ? null : 1 - input.priceRed);
@@ -383,18 +461,6 @@ export function assessPosition(input: PositionInput): PositionAssessment {
     const user = input.userBlue === null ? null : isBlue ? input.userBlue : 1 - input.userBlue;
     const marketFair = market ? market.fair[isBlue ? 0 : 1] : null;
 
-    // The model and the user each either see value at this price or don't.
-    // Only the blend is traded, but a split between them is a doubt.
-    const split =
-      user !== null && marketFair !== null && model > marketFair !== user > marketFair;
-    const conviction: Conviction = {
-      agreement: split ? DOUBT_FACTOR : 1,
-      data: thin ? DOUBT_FACTOR : 1,
-      market: marketFactor,
-      value: 0,
-    };
-    conviction.value = conviction.agreement * conviction.data * conviction.market;
-
     const base = {
       side: which,
       price,
@@ -404,42 +470,37 @@ export function assessPosition(input: PositionInput): PositionAssessment {
       user,
       estimate,
       maxPrice: estimate - MIN_EDGE,
-      conviction,
     };
-    if (price === null) {
+    if (price === null || marketFair === null) {
       return {
         ...base,
         edge: null,
         ev: null,
         fullKelly: null,
         value: false,
+        conviction: { agreement: 1, data: thin ? DOUBT_FACTOR : 1, market: 0, value: 0 },
         stakeFraction: 0,
         stake: null,
         capped: false,
       };
     }
 
-    const edge = estimate - price;
-    const fullKelly = kellyFraction(estimate, price);
-    // Rounded to a tenth of a cent so 79¢ against a 79¢ limit is not lost to float noise.
-    const value = Math.round(edge * 1000) >= Math.round(MIN_EDGE * 1000) && fullKelly > 0;
-    const takes = value && sane;
-    const kellySize = BASE_KELLY * fullKelly;
-    const stakeFraction = takes ? Math.min(kellySize, MAX_STAKE) * conviction.value : 0;
+    const value = clears(estimate, price);
+    const sizing = sizeAt({ estimate, model, user, price, marketFair, marketFactor, thin, value, sane });
     return {
       ...base,
-      edge,
+      edge: estimate - price,
       ev: estimate / price - 1,
-      fullKelly,
+      fullKelly: kellyFraction(estimate, price),
       value,
-      stakeFraction,
-      stake: bankroll === null ? null : Math.round(stakeFraction * bankroll * 100) / 100,
-      capped: takes && kellySize > MAX_STAKE,
+      ...sizing,
+      stake: amount(sizing.stakeFraction),
     };
   };
 
   const blue = side('blue');
   const red = side('red');
+  const sides = { blue, red };
 
   let decision: Decision;
   if (market === null) decision = { kind: 'no price' };
@@ -448,15 +509,42 @@ export function assessPosition(input: PositionInput): PositionAssessment {
   else {
     // With the two prices summing to at least $1, at most one side can clear
     // the margin.
-    const buy = [blue, red].find((s) => s.stakeFraction > 0);
-    decision = buy
-      ? { kind: 'buy', side: buy.side }
-      : { kind: 'pass', closest: (blue.edge ?? -1) >= (red.edge ?? -1) ? 'blue' : 'red' };
+    const value = [blue, red].find((s) => s.stakeFraction > 0);
+    if (value && (maxEntry === null || value.price! <= maxEntry + 1e-9)) {
+      decision = { kind: 'buy', side: value.side };
+    } else {
+      // Wait on the side worth owning: the one with value over the ceiling,
+      // else the user's pick, else the estimate's favourite.
+      const waitSide: Side =
+        value?.side ?? input.pick ?? (estimateBlue >= 0.5 ? 'blue' : 'red');
+      const s = sides[waitSide];
+      const target = floorCents(Math.min(maxEntry ?? 1, s.maxPrice));
+      // At the target the market has moved there too: the other side is its complement.
+      const atTarget = sizeAt({
+        estimate: s.estimate,
+        model: s.model,
+        user: s.user,
+        price: target,
+        marketFair: target,
+        marketFactor: marketTaper(Math.abs(s.estimate - target)),
+        thin,
+        value: clears(s.estimate, target),
+        sane: true,
+      });
+      decision = {
+        kind: 'wait',
+        side: waitSide,
+        target,
+        reason: maxEntry !== null && s.price! > maxEntry + 1e-9 ? 'limit' : 'edge',
+        stakeFraction: atTarget.stakeFraction,
+        stake: amount(atTarget.stakeFraction),
+      };
+    }
   }
 
   const notes: string[] = [];
   if (decision.kind === 'buy') {
-    const s = decision.side === 'blue' ? blue : red;
+    const s = sides[decision.side];
     if (s.conviction.agreement < 1) {
       notes.push(
         s.model > s.marketFair!
@@ -473,4 +561,80 @@ export function assessPosition(input: PositionInput): PositionAssessment {
   if (market?.quality === 'wide') notes.push(`wide spread (${Math.round(market.spread * 100)}¢) — check the price fills`);
 
   return { market, distance, blue, red, decision, notes };
+}
+
+/* ------------------------------------------------------------------ */
+/* When to watch                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Games of league average a team's spike rate is shrunk toward. A team with 15
+ * games at a mark is mostly league; one with 150 is mostly itself.
+ */
+export const SWING_PRIOR_GAMES = 20;
+/** Games at a mark before a team's spike rate there is considered at all. */
+export const MIN_SWING_SAMPLE = 10;
+/** Deficit games before a team's own comeback rate is used over the league's. */
+export const MIN_DIP_SAMPLE = 5;
+
+/** When the other team is likeliest to take a real lead, and what that means for yours. */
+export interface SpikeWatch {
+  minute: number;
+  /** The other team's share of games a real lead up at that mark. */
+  rate: number;
+  /** Games of theirs that reached the mark. */
+  sample: number;
+  leagueRate: number;
+  /** How often your team still won from a real deficit at that mark. */
+  comeback: number | null;
+  comebackSample: number;
+  /** The comeback rate is the league's, because your team's record there is too thin. */
+  comebackIsLeague: boolean;
+}
+
+/**
+ * The mark at which a team takes a real gold lead most unusually often.
+ *
+ * Compared with the league rather than read raw: every team is more often
+ * ahead at 25 minutes than at 10, simply because leads grow, so the raw peak is
+ * nearly always the last mark and says nothing about the team. The rate is
+ * shrunk toward the league first, so a 3-of-12 start can't outrank 48-of-150.
+ *
+ * The comeback rate matters as much as the timing. A price that falls because
+ * the other side is 1,500g up is mostly the market being right — league-wide,
+ * that lead at 15 minutes wins 81% of the time — so a dip on a real lead is not
+ * the discount it looks like.
+ */
+export function spikeWatch(
+  opponent: GoldSwing | undefined,
+  ours: GoldSwing | undefined,
+  league: GoldSwing,
+): SpikeWatch | null {
+  if (!opponent) return null;
+  let best: { point: GoldSwingPoint; leagueRate: number; lift: number } | null = null;
+  for (const point of opponent) {
+    const base = league.find((l) => l.minute === point.minute);
+    if (!base || base.spikes === 0 || point.sample < MIN_SWING_SAMPLE) continue;
+    const leagueRate = base.spikes / base.sample;
+    const shrunk = (point.spikes + SWING_PRIOR_GAMES * leagueRate) / (point.sample + SWING_PRIOR_GAMES);
+    const lift = shrunk / leagueRate;
+    if (!best || lift > best.lift) best = { point, leagueRate, lift };
+  }
+  if (!best) return null;
+
+  const { minute } = best.point;
+  const own = ours?.find((p) => p.minute === minute);
+  const base = league.find((l) => l.minute === minute)!;
+  const useOwn = own !== undefined && own.dips >= MIN_DIP_SAMPLE;
+  const dips = useOwn ? own.dips : base.dips;
+  const dipWins = useOwn ? own.dipWins : base.dipWins;
+  return {
+    minute,
+    rate: best.point.spikes / best.point.sample,
+    sample: best.point.sample,
+    leagueRate: best.leagueRate,
+    comeback: dips > 0 ? dipWins / dips : null,
+    comebackSample: dips,
+    comebackIsLeague: !useOwn,
+  };
 }
