@@ -1,0 +1,6 @@
+{
+  "_comment": "LoL Esports team name -> the name your data uses. Only needed when the draft puller prints a 'not a team in your data' warning. Keys starting with _ are ignored.",
+  "teams": {
+    "_Example Team Esports": "Example Team"
+  }
+}

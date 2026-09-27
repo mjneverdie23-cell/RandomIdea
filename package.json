@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "assets": "node scripts/fetch-assets.mjs",
     "assets:champions": "node scripts/fetch-assets.mjs --only=champions",
-    "assets:teams": "node scripts/fetch-assets.mjs --only=teams"
+    "assets:teams": "node scripts/fetch-assets.mjs --only=teams",
+    "draft:live": "node scripts/lolesports-draft.mjs"
   },
   "dependencies": {
     "papaparse": "^5.5.4",

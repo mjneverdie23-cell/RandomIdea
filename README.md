@@ -892,6 +892,61 @@ The confidence table underneath breaks the record down by what the model
 claimed, so a band that says 80% and delivers 56% is visible rather than
 averaged away. **Every call** lists each match, and clicking one loads it into
 the composer.
+### Pulling a live draft from LoL Esports (test version)
+
+`npm run draft:live` reads a pro game that is live right now from the feeds
+lolesports.com itself uses. It prints the league, teams, series format, series
+score, game number and all ten picks, plus the gold and kill line. It also
+prints them as the JSON the **Paste matches** box above accepts, so filling the
+Predictor is one paste instead of twelve dropdowns.
+
+```bash
+npm run draft:live                              # what's live now, with drafts
+npm run draft:live -- --watch                   # keep polling; print each new game once
+npm run draft:live -- --watch --gold            # ...plus the live gold/kills line each poll
+npm run draft:live -- --league lck,lpl          # only these leagues (slug or name)
+npm run draft:live -- --copy                    # also copy the paste to the clipboard
+npm run draft:live -- --recent                  # recently finished matches, to test with
+npm run draft:live -- --match <id> --game 2     # one match, live or finished
+```
+
+Other options:
+
+- `--out file.json` also writes the paste to a file.
+- `--json` prints the paste alone, for piping into another tool.
+- `--every 30` sets the poll interval in seconds.
+- `--stage playoffs` supplies the round when the feed doesn't say.
+
+**Team names are matched to your data.** LoL Esports and Oracle's Elixir don't
+always spell a team the same way ("Dplus KIA" and "Dplus Kia"), and the
+Predictor only finds records under the exact name.
+
+- The script reads the team list from `data/<year>.json`, which the app writes
+  when it runs under `npm run dev` and you import a CSV.
+- It matches ignoring case and punctuation, then by team code, then by one name
+  containing the other.
+- It says when it matched by code or partial name. It warns when it can't place
+  a team at all; add those to `scripts/lolesports-aliases.json`.
+
+**Limits of the test version:**
+
+- **Unofficial feeds.** They are not a documented API and can change. The key
+  sent is the public one the site uses; set `LOLESPORTS_API_KEY` if it is ever
+  rotated.
+- **Draft timing.** The feed carries champions once the game has loaded, not
+  pick by pick during the draft.
+- **Series score.** It is filled only for a game in progress. For a finished
+  game the feed doesn't say who won the earlier games, so set the score in the
+  app.
+- **Coverage.** Whether a league is covered, the LPL in particular, depends on
+  what lolesports.com shows.
+- **Mirrors.** `LOLESPORTS_API_BASE` and `LOLESPORTS_FEED_BASE` point it at a
+  mirror or a recorded mock.
+
+The parsing lives in `scripts/lib/lolesports.mjs`.
+`src/predictor/lolesportsDraft.test.ts` runs it on recorded-shape responses and
+checks that the output loads cleanly through the Predictor's own importer.
+
 ### Backtesting without lookahead
 
 A model built from the whole season already knows how the season went. Predict
@@ -1226,7 +1281,8 @@ mode" branch anywhere downstream.
 data/              imported seasons, one JSON per year (gitignored)
 public/assets/     champion art + team logos (populated by `npm run assets`)
 scripts/           asset downloader, team list, data-folder dev middleware,
-                   champion-graph + team-ratings builders, match exporter (py)
+                   champion-graph + team-ratings builders, match exporter (py),
+                   LoL Esports live draft puller
 src/
   assets/          local-asset manifest
   domain/          types, competition registry, champion + team identity/art
