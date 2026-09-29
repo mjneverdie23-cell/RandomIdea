@@ -1,0 +1,108 @@
+{
+  "match": {
+    "roundsToWin": 13,
+    "halftimeAfterRound": 12,
+    "overtimeEnabled": true,
+    "overtimeWinMargin": 2,
+    "overtimeStartMoney": 5000,
+    "overtimeSwapEveryRounds": 1,
+    "maxOvertimeRounds": 12,
+    "teamSize": 5,
+    "firstRoundExtraBuySeconds": 5.0,
+    "halftimeSeconds": 5.0
+  },
+  "round": {
+    "buyPhaseSeconds": 20.0,
+    "roundSeconds": 100.0,
+    "roundEndSeconds": 6.0,
+    "freezeDuringBuyPhase": true,
+    "buyOnlyInSpawnZone": true,
+    "buyGraceSeconds": 15.0
+  },
+  "economy": {
+    "startMoney": 800,
+    "maxMoney": 9000,
+    "winReward": 3000,
+    "lossBase": 1900,
+    "lossStreakIncrement": 500,
+    "lossMax": 2900,
+    "plantRewardTeam": 300,
+    "plantRewardPlayer": 300,
+    "defuseRewardPlayer": 300,
+    "defaultKillReward": 200,
+    "sellBackDuringBuyPhase": true
+  },
+  "bomb": {
+    "plantSeconds": 4.0,
+    "defuseSeconds": 7.0,
+    "defuseKitSeconds": 4.0,
+    "halfDefuseCheckpoint": true,
+    "fuseSeconds": 45.0,
+    "blastRadius": 16.0,
+    "blastDamage": 500,
+    "interactRadius": 1.6,
+    "pickupRadius": 1.2,
+    "beepIntervalStart": 1.0,
+    "beepIntervalEnd": 0.15
+  },
+  "movement": {
+    "runSpeed": 6.0,
+    "walkMultiplier": 0.55,
+    "crouchMultiplier": 0.4,
+    "acceleration": 45.0,
+    "deceleration": 40.0,
+    "airAcceleration": 8.0,
+    "gravity": 20.0,
+    "jumpVelocity": 7.4,
+    "standHeight": 1.8,
+    "crouchHeight": 1.2,
+    "radius": 0.35,
+    "eyeHeightStand": 1.62,
+    "eyeHeightCrouch": 1.05,
+    "crouchTransitionSpeed": 8.0,
+    "stepHeight": 0.35
+  },
+  "combat": {
+    "maxHealth": 100,
+    "maxArmor": 50,
+    "friendlyFire": false,
+    "armorAbsorption": 1.0,
+    "headZoneFraction": 0.84,
+    "legZoneFraction": 0.42,
+    "assistMinDamage": 40,
+    "abilityCooldownSeconds": 0.5,
+    "projectileGravity": 15.0,
+    "projectileBounce": 0.4
+  },
+  "ultimate": {
+    "pointsPerKill": 1,
+    "pointsPerDeath": 1,
+    "pointsPerPlant": 1,
+    "pointsPerDefuse": 1
+  },
+  "scoring": {
+    "kill": 2,
+    "assist": 1,
+    "plant": 2,
+    "defuse": 2
+  },
+  "loadout": {
+    "defaultMelee": "knife",
+    "defaultSecondary": "p9"
+  },
+  "visuals": {
+    "attackColor": "#E0533D",
+    "defenseColor": "#3D8BE0",
+    "floorColor": "#8A8A82",
+    "wallColor": "#C9C3B6",
+    "lowCoverColor": "#9C7A4E",
+    "highCoverColor": "#6E6A63",
+    "siteColor": "#D9B44A",
+    "attackSpawnColor": "#7A4A42",
+    "defenseSpawnColor": "#42587A",
+    "skinColor": "#E0B89A",
+    "bombColor": "#FF2D2D",
+    "skyColor": "#9FC3E7"
+  },
+  "mapRotation": ["outpost"]
+}

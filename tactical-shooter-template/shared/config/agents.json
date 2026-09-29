@@ -1,0 +1,44 @@
+{
+  "agents": [
+    { "id": "vanguard", "displayName": "Vanguard", "role": "Duelist", "color": "#E8553E",
+      "description": "Entry fragger. Dashes into sites, blinds defenders, then overwhelms them.",
+      "abilities": [
+        { "slot": "C", "abilityId": "flashbang", "price": 200, "maxCharges": 2, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "Q", "abilityId": "frag", "price": 300, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "E", "abilityId": "dash", "price": 0, "maxCharges": 1, "freeChargesPerRound": 1, "ultPoints": 0 },
+        { "slot": "X", "abilityId": "overdrive", "price": 0, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 6 }
+      ] },
+    { "id": "warden", "displayName": "Warden", "role": "Controller", "color": "#9B59B6",
+      "description": "Blocks sightlines with smoke and denies space with fire.",
+      "abilities": [
+        { "slot": "C", "abilityId": "incendiary", "price": 250, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "Q", "abilityId": "flashbang", "price": 200, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "E", "abilityId": "smoke", "price": 100, "maxCharges": 2, "freeChargesPerRound": 1, "ultPoints": 0 },
+        { "slot": "X", "abilityId": "firestorm", "price": 0, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 7 }
+      ] },
+    { "id": "seeker", "displayName": "Seeker", "role": "Initiator", "color": "#2ECC71",
+      "description": "Finds enemies and sets teammates up for the fight.",
+      "abilities": [
+        { "slot": "C", "abilityId": "flashbang", "price": 200, "maxCharges": 2, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "Q", "abilityId": "smoke", "price": 200, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "E", "abilityId": "recon_pulse", "price": 0, "maxCharges": 1, "freeChargesPerRound": 1, "ultPoints": 0 },
+        { "slot": "X", "abilityId": "orbital_scan", "price": 0, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 7 }
+      ] },
+    { "id": "bastion", "displayName": "Bastion", "role": "Sentinel", "color": "#F1C40F",
+      "description": "Holds sites with barriers and keeps the team alive.",
+      "abilities": [
+        { "slot": "C", "abilityId": "barrier", "price": 300, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "Q", "abilityId": "incendiary", "price": 250, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "E", "abilityId": "medkit", "price": 0, "maxCharges": 1, "freeChargesPerRound": 1, "ultPoints": 0 },
+        { "slot": "X", "abilityId": "fortify", "price": 0, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 6 }
+      ] },
+    { "id": "operator", "displayName": "Operator", "role": "Classic", "color": "#95A5A6",
+      "description": "Counter-Strike style kit: four purchasable grenades and no ultimate.",
+      "abilities": [
+        { "slot": "C", "abilityId": "flashbang", "price": 200, "maxCharges": 2, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "Q", "abilityId": "smoke", "price": 300, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "E", "abilityId": "frag", "price": 300, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 },
+        { "slot": "X", "abilityId": "incendiary", "price": 400, "maxCharges": 1, "freeChargesPerRound": 0, "ultPoints": 0 }
+      ] }
+  ]
+}

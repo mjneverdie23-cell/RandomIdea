@@ -1,0 +1,30 @@
+{
+  "defaultDifficulty": "normal",
+  "difficulties": [
+    { "id": "easy", "displayName": "Easy", "reactionTime": 0.6, "aimErrorDegrees": 5.0, "turnSpeed": 220, "viewAngle": 100,
+      "sightRange": 40, "burstShots": 3, "burstPause": 0.45, "headshotBias": 0.1, "recoilControl": 0.2, "abilityUseChance": 0.2 },
+    { "id": "normal", "displayName": "Normal", "reactionTime": 0.35, "aimErrorDegrees": 2.5, "turnSpeed": 400, "viewAngle": 110,
+      "sightRange": 60, "burstShots": 4, "burstPause": 0.3, "headshotBias": 0.3, "recoilControl": 0.5, "abilityUseChance": 0.4 },
+    { "id": "hard", "displayName": "Hard", "reactionTime": 0.2, "aimErrorDegrees": 1.0, "turnSpeed": 720, "viewAngle": 120,
+      "sightRange": 90, "burstShots": 6, "burstPause": 0.2, "headshotBias": 0.55, "recoilControl": 0.8, "abilityUseChance": 0.6 }
+  ],
+  "names": ["Ace", "Blaze", "Cipher", "Delta", "Echo", "Frost", "Ghost", "Havoc", "Iris", "Jinx",
+            "Kilo", "Lynx", "Mako", "Nova", "Onyx", "Pike", "Quill", "Rook", "Sage", "Talon"],
+  "buy": {
+    "fullBuyMoney": 3900,
+    "forceBuyMoney": 2000,
+    "sniperChance": 0.2,
+    "preferredRifles": ["valkyrie", "kestrel"],
+    "forceBuyWeapons": ["wasp", "sentinel", "breacher"],
+    "abilityBuyChance": 0.8
+  },
+  "behaviour": {
+    "perceptionInterval": 0.1,
+    "repathSeconds": 1.5,
+    "stuckSeconds": 1.2,
+    "memorySeconds": 3.0,
+    "holdRadiusCells": 5,
+    "midRouteChance": 0.35,
+    "decisionJitterSeconds": 1.5
+  }
+}

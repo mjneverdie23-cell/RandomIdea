@@ -1,0 +1,19 @@
+{
+    "name": "TacticalShooter.Editor",
+    "rootNamespace": "TacticalShooter.EditorTools",
+    "references": [
+        "TacticalShooter.Core",
+        "TacticalShooter.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

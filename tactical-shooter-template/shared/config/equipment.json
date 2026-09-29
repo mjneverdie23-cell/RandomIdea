@@ -1,0 +1,10 @@
+{
+  "equipment": [
+    { "id": "light_shield", "displayName": "Light Shield", "type": "armor", "price": 400, "amount": 25, "side": "any",
+      "description": "25 armour. Absorbs damage before health." },
+    { "id": "heavy_shield", "displayName": "Heavy Shield", "type": "armor", "price": 1000, "amount": 50, "side": "any",
+      "description": "50 armour. Absorbs damage before health." },
+    { "id": "defuse_kit", "displayName": "Defuse Kit", "type": "defuseKit", "price": 400, "amount": 0, "side": "defense",
+      "description": "Defuse the bomb faster. Defenders only." }
+  ]
+}

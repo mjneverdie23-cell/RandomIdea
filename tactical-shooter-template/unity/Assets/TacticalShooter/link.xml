@@ -1,0 +1,7 @@
+<!--
+  The core assembly maps JSON onto config classes with reflection. Keep every type and field
+  when IL2CPP strips managed code.
+-->
+<linker>
+  <assembly fullname="TacticalShooter.Core" preserve="all" />
+</linker>

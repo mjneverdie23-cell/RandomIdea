@@ -1,0 +1,26 @@
+{
+  "bindings": [
+    { "action": "MoveForward", "key": "W", "altKey": "Up" },
+    { "action": "MoveBack", "key": "S", "altKey": "Down" },
+    { "action": "MoveLeft", "key": "A", "altKey": "Left" },
+    { "action": "MoveRight", "key": "D", "altKey": "Right" },
+    { "action": "Jump", "key": "Space", "altKey": "" },
+    { "action": "Crouch", "key": "LeftCtrl", "altKey": "" },
+    { "action": "Walk", "key": "LeftShift", "altKey": "" },
+    { "action": "Fire", "key": "Mouse1", "altKey": "" },
+    { "action": "Aim", "key": "Mouse2", "altKey": "" },
+    { "action": "Reload", "key": "R", "altKey": "" },
+    { "action": "Interact", "key": "F", "altKey": "" },
+    { "action": "Drop", "key": "G", "altKey": "" },
+    { "action": "Primary", "key": "1", "altKey": "" },
+    { "action": "Secondary", "key": "2", "altKey": "" },
+    { "action": "Melee", "key": "3", "altKey": "" },
+    { "action": "Ability1", "key": "C", "altKey": "" },
+    { "action": "Ability2", "key": "Q", "altKey": "" },
+    { "action": "Ability3", "key": "E", "altKey": "" },
+    { "action": "Ultimate", "key": "X", "altKey": "" },
+    { "action": "BuyMenu", "key": "B", "altKey": "" },
+    { "action": "Scoreboard", "key": "Tab", "altKey": "" },
+    { "action": "Pause", "key": "Escape", "altKey": "P" }
+  ]
+}

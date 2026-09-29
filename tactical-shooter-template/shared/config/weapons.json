@@ -1,0 +1,129 @@
+{
+  "weapons": [
+    {
+      "id": "knife", "displayName": "Combat Knife", "category": "melee", "slot": "melee",
+      "price": 0, "killReward": 300,
+      "damage": 50, "headMultiplier": 1.0, "legMultiplier": 1.0, "armorPenetration": 0.0,
+      "falloffStart": 0, "falloffEnd": 0, "falloffMinMultiplier": 1.0, "maxRange": 2.2,
+      "fireMode": "melee", "fireRate": 2.0, "magazineSize": 0, "reserveAmmo": 0, "reloadSeconds": 0, "equipSeconds": 0.4, "pellets": 1,
+      "baseSpread": 0, "moveSpread": 0, "airSpread": 0, "crouchSpreadMultiplier": 1.0, "adsSpreadMultiplier": 1.0,
+      "bloomPerShot": 0, "maxBloom": 0,
+      "recoilPattern": [], "recoilRandomYaw": 0, "recoilRecovery": 20, "recoilResetSeconds": 0.3,
+      "adsFovMultiplier": 1.0, "scoped": false, "adsMoveMultiplier": 1.0, "moveSpeedMultiplier": 1.0,
+      "fireSound": "knife_swing", "color": "#B0B0B0"
+    },
+    {
+      "id": "p9", "displayName": "P-9 Sidearm", "category": "sidearm", "slot": "secondary",
+      "price": 0, "killReward": 200,
+      "damage": 26, "headMultiplier": 3.0, "legMultiplier": 0.85, "armorPenetration": 0.0,
+      "falloffStart": 30, "falloffEnd": 50, "falloffMinMultiplier": 0.85, "maxRange": 200,
+      "fireMode": "semi", "fireRate": 6.75, "magazineSize": 12, "reserveAmmo": 36, "reloadSeconds": 1.75, "equipSeconds": 0.75, "pellets": 1,
+      "baseSpread": 0.4, "moveSpread": 3.0, "airSpread": 6.0, "crouchSpreadMultiplier": 0.8, "adsSpreadMultiplier": 1.0,
+      "bloomPerShot": 0.6, "maxBloom": 3.0,
+      "recoilPattern": [{"pitch": 1.1, "yaw": 0.0}, {"pitch": 1.2, "yaw": 0.1}, {"pitch": 1.3, "yaw": -0.1}],
+      "recoilRandomYaw": 0.2, "recoilRecovery": 14, "recoilResetSeconds": 0.3,
+      "adsFovMultiplier": 1.0, "scoped": false, "adsMoveMultiplier": 1.0, "moveSpeedMultiplier": 1.0,
+      "fireSound": "shot_pistol", "color": "#4A4A4A"
+    },
+    {
+      "id": "magnum", "displayName": "Magnum", "category": "sidearm", "slot": "secondary",
+      "price": 800, "killReward": 200,
+      "damage": 55, "headMultiplier": 2.9, "legMultiplier": 0.85, "armorPenetration": 0.25,
+      "falloffStart": 30, "falloffEnd": 50, "falloffMinMultiplier": 0.85, "maxRange": 200,
+      "fireMode": "semi", "fireRate": 4.0, "magazineSize": 6, "reserveAmmo": 24, "reloadSeconds": 2.25, "equipSeconds": 1.0, "pellets": 1,
+      "baseSpread": 0.25, "moveSpread": 4.0, "airSpread": 8.0, "crouchSpreadMultiplier": 0.8, "adsSpreadMultiplier": 1.0,
+      "bloomPerShot": 1.5, "maxBloom": 4.5,
+      "recoilPattern": [{"pitch": 3.5, "yaw": 0.2}],
+      "recoilRandomYaw": 0.6, "recoilRecovery": 16, "recoilResetSeconds": 0.45,
+      "adsFovMultiplier": 1.0, "scoped": false, "adsMoveMultiplier": 1.0, "moveSpeedMultiplier": 1.0,
+      "fireSound": "shot_magnum", "color": "#6B5B4B"
+    },
+    {
+      "id": "wasp", "displayName": "Wasp SMG", "category": "smg", "slot": "primary",
+      "price": 1600, "killReward": 200,
+      "damage": 26, "headMultiplier": 3.0, "legMultiplier": 0.85, "armorPenetration": 0.0,
+      "falloffStart": 20, "falloffEnd": 30, "falloffMinMultiplier": 0.85, "maxRange": 200,
+      "fireMode": "auto", "fireRate": 13.33, "magazineSize": 30, "reserveAmmo": 90, "reloadSeconds": 2.25, "equipSeconds": 0.75, "pellets": 1,
+      "baseSpread": 0.4, "moveSpread": 1.5, "airSpread": 5.0, "crouchSpreadMultiplier": 0.85, "adsSpreadMultiplier": 0.8,
+      "bloomPerShot": 0.12, "maxBloom": 2.5,
+      "recoilPattern": [{"pitch": 0.35, "yaw": 0.0}, {"pitch": 0.35, "yaw": 0.05}, {"pitch": 0.4, "yaw": -0.05}, {"pitch": 0.35, "yaw": 0.15}, {"pitch": 0.3, "yaw": -0.2}, {"pitch": 0.25, "yaw": 0.2}],
+      "recoilRandomYaw": 0.25, "recoilRecovery": 12, "recoilResetSeconds": 0.3,
+      "adsFovMultiplier": 0.87, "scoped": false, "adsMoveMultiplier": 0.85, "moveSpeedMultiplier": 0.97,
+      "fireSound": "shot_smg", "color": "#3F5F4F"
+    },
+    {
+      "id": "breacher", "displayName": "Breacher Shotgun", "category": "shotgun", "slot": "primary",
+      "price": 1850, "killReward": 200,
+      "damage": 20, "headMultiplier": 2.0, "legMultiplier": 0.85, "armorPenetration": 0.0,
+      "falloffStart": 8, "falloffEnd": 15, "falloffMinMultiplier": 0.35, "maxRange": 60,
+      "fireMode": "semi", "fireRate": 1.1, "magazineSize": 5, "reserveAmmo": 15, "reloadSeconds": 2.5, "equipSeconds": 1.0, "pellets": 8,
+      "baseSpread": 4.0, "moveSpread": 1.0, "airSpread": 3.0, "crouchSpreadMultiplier": 1.0, "adsSpreadMultiplier": 1.0,
+      "bloomPerShot": 0, "maxBloom": 0,
+      "recoilPattern": [{"pitch": 4.5, "yaw": 0.0}],
+      "recoilRandomYaw": 0.8, "recoilRecovery": 14, "recoilResetSeconds": 0.9,
+      "adsFovMultiplier": 1.0, "scoped": false, "adsMoveMultiplier": 1.0, "moveSpeedMultiplier": 0.95,
+      "fireSound": "shot_shotgun", "color": "#5A3F2A"
+    },
+    {
+      "id": "valkyrie", "displayName": "Valkyrie AR", "category": "rifle", "slot": "primary",
+      "price": 2900, "killReward": 200,
+      "damage": 40, "headMultiplier": 4.0, "legMultiplier": 0.85, "armorPenetration": 0.0,
+      "falloffStart": 0, "falloffEnd": 0, "falloffMinMultiplier": 1.0, "maxRange": 250,
+      "fireMode": "auto", "fireRate": 9.75, "magazineSize": 25, "reserveAmmo": 50, "reloadSeconds": 2.5, "equipSeconds": 1.0, "pellets": 1,
+      "baseSpread": 0.25, "moveSpread": 6.0, "airSpread": 10.0, "crouchSpreadMultiplier": 0.85, "adsSpreadMultiplier": 0.75,
+      "bloomPerShot": 0.35, "maxBloom": 4.0,
+      "recoilPattern": [
+        {"pitch": 0.55, "yaw": 0.0}, {"pitch": 0.6, "yaw": 0.05}, {"pitch": 0.7, "yaw": -0.05}, {"pitch": 0.75, "yaw": 0.1},
+        {"pitch": 0.8, "yaw": 0.15}, {"pitch": 0.7, "yaw": 0.3}, {"pitch": 0.6, "yaw": 0.4}, {"pitch": 0.4, "yaw": 0.5},
+        {"pitch": 0.3, "yaw": -0.6}, {"pitch": 0.25, "yaw": -0.7}, {"pitch": 0.2, "yaw": -0.6}, {"pitch": 0.2, "yaw": 0.5},
+        {"pitch": 0.2, "yaw": 0.6}
+      ],
+      "recoilRandomYaw": 0.15, "recoilRecovery": 15, "recoilResetSeconds": 0.35,
+      "adsFovMultiplier": 0.8, "scoped": false, "adsMoveMultiplier": 0.75, "moveSpeedMultiplier": 0.93,
+      "fireSound": "shot_rifle", "color": "#2F2F35"
+    },
+    {
+      "id": "kestrel", "displayName": "Kestrel Carbine", "category": "rifle", "slot": "primary",
+      "price": 2900, "killReward": 200,
+      "damage": 39, "headMultiplier": 4.0, "legMultiplier": 0.85, "armorPenetration": 0.0,
+      "falloffStart": 15, "falloffEnd": 30, "falloffMinMultiplier": 0.8, "maxRange": 250,
+      "fireMode": "auto", "fireRate": 11.0, "magazineSize": 30, "reserveAmmo": 60, "reloadSeconds": 2.5, "equipSeconds": 1.0, "pellets": 1,
+      "baseSpread": 0.2, "moveSpread": 5.0, "airSpread": 10.0, "crouchSpreadMultiplier": 0.85, "adsSpreadMultiplier": 0.75,
+      "bloomPerShot": 0.28, "maxBloom": 3.5,
+      "recoilPattern": [
+        {"pitch": 0.45, "yaw": 0.0}, {"pitch": 0.5, "yaw": -0.05}, {"pitch": 0.55, "yaw": 0.05}, {"pitch": 0.55, "yaw": -0.1},
+        {"pitch": 0.5, "yaw": -0.2}, {"pitch": 0.45, "yaw": -0.3}, {"pitch": 0.35, "yaw": 0.35}, {"pitch": 0.3, "yaw": 0.4},
+        {"pitch": 0.25, "yaw": 0.3}, {"pitch": 0.2, "yaw": -0.4}
+      ],
+      "recoilRandomYaw": 0.12, "recoilRecovery": 15, "recoilResetSeconds": 0.3,
+      "adsFovMultiplier": 0.8, "scoped": false, "adsMoveMultiplier": 0.75, "moveSpeedMultiplier": 0.93,
+      "fireSound": "shot_carbine", "color": "#35404A"
+    },
+    {
+      "id": "sentinel", "displayName": "Sentinel DMR", "category": "rifle", "slot": "primary",
+      "price": 2250, "killReward": 200,
+      "damage": 65, "headMultiplier": 3.0, "legMultiplier": 0.85, "armorPenetration": 0.25,
+      "falloffStart": 0, "falloffEnd": 0, "falloffMinMultiplier": 1.0, "maxRange": 250,
+      "fireMode": "semi", "fireRate": 5.25, "magazineSize": 12, "reserveAmmo": 36, "reloadSeconds": 2.5, "equipSeconds": 1.0, "pellets": 1,
+      "baseSpread": 0.1, "moveSpread": 6.0, "airSpread": 10.0, "crouchSpreadMultiplier": 0.85, "adsSpreadMultiplier": 0.5,
+      "bloomPerShot": 0.8, "maxBloom": 3.0,
+      "recoilPattern": [{"pitch": 1.5, "yaw": 0.1}],
+      "recoilRandomYaw": 0.3, "recoilRecovery": 14, "recoilResetSeconds": 0.4,
+      "adsFovMultiplier": 0.66, "scoped": false, "adsMoveMultiplier": 0.7, "moveSpeedMultiplier": 0.92,
+      "fireSound": "shot_dmr", "color": "#4B4B3A"
+    },
+    {
+      "id": "longbow", "displayName": "Longbow Sniper", "category": "sniper", "slot": "primary",
+      "price": 4700, "killReward": 150,
+      "damage": 150, "headMultiplier": 1.7, "legMultiplier": 0.85, "armorPenetration": 0.5,
+      "falloffStart": 0, "falloffEnd": 0, "falloffMinMultiplier": 1.0, "maxRange": 300,
+      "fireMode": "semi", "fireRate": 0.75, "magazineSize": 5, "reserveAmmo": 10, "reloadSeconds": 3.7, "equipSeconds": 1.25, "pellets": 1,
+      "baseSpread": 5.0, "moveSpread": 8.0, "airSpread": 15.0, "crouchSpreadMultiplier": 0.9, "adsSpreadMultiplier": 0.02,
+      "bloomPerShot": 0, "maxBloom": 0,
+      "recoilPattern": [{"pitch": 6.0, "yaw": 0.0}],
+      "recoilRandomYaw": 0.5, "recoilRecovery": 18, "recoilResetSeconds": 1.0,
+      "adsFovMultiplier": 0.4, "scoped": true, "adsMoveMultiplier": 0.6, "moveSpeedMultiplier": 0.86,
+      "fireSound": "shot_sniper", "color": "#2E3B2E"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# --- Unity (unity/) ---
+unity/[Ll]ibrary/
+unity/[Tt]emp/
+unity/[Oo]bj/
+unity/[Ll]ogs/
+unity/[Uu]ser[Ss]ettings/
+unity/[Bb]uild/
+unity/[Bb]uilds/
+unity/*.csproj
+unity/*.sln
+unity/*.suo
+unity/.vs/
+unity/.idea/
+
+# --- Unreal Engine (unreal/) ---
+unreal/Binaries/
+unreal/Intermediate/
+unreal/Saved/
+unreal/DerivedDataCache/
+unreal/.vs/
+unreal/.idea/
+unreal/*.sln
+unreal/*.xcworkspace
+unreal/.vscode/
+
+# --- tooling ---
+tools/**/bin/
+tools/**/obj/
+tools/**/build/
+__pycache__/
+*.pyc
