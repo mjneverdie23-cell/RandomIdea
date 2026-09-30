@@ -100,8 +100,27 @@ void FTSBotBrain::OnSpawn()
 
 FTSIntent FTSBotBrain::Think(float Dt)
 {
-	if (Mode->Flow.Phase != ETSMatchPhase::Live)
+	const ETSMatchPhase Phase = Mode->Flow.Phase;
+	if (Phase != ETSMatchPhase::Live)
 	{
+		// Round end / halftime: no objectives, but shoot back at anyone in sight, so the
+		// seconds before the next round are not free kills. Buy phase: look around.
+		if (Phase == ETSMatchPhase::RoundEnd || Phase == ETSMatchPhase::Halftime)
+		{
+			Perceive(Dt);
+			if (Target != nullptr)
+			{
+				FTSIntent Defend = FTSIntent::Idle(Yaw, Pitch);
+				FVector DefendMove = FVector::ZeroVector;
+				Aim(Dt);
+				Fight(Dt, Defend, DefendMove);
+				ManageWeapons(Defend);
+				ToMoveIntent(DefendMove, Defend);
+				Defend.Yaw = Yaw;
+				Defend.Pitch = Pitch;
+				return Defend;
+			}
+		}
 		Yaw = MoveTowardsAngle(Yaw, HoldYaw, 60.f * Dt);
 		return FTSIntent::Idle(Yaw, Pitch);
 	}
@@ -555,7 +574,7 @@ void FTSBotBrain::ManageWeapons(FTSIntent& Intent)
 	if (Target != nullptr && W.CurrentSlot == 0 && Primary.Mag == 0 && Secondary.IsValid() && Secondary.Mag > 0) Intent.SelectSlot = 1;
 	else if (Target == nullptr && bPrimaryAmmo && W.CurrentSlot != 0) Intent.SelectSlot = 0;
 	else if (W.CurrentSlot == 0 && !bPrimaryAmmo) Intent.SelectSlot = bSecondaryAmmo ? 1 : 2;
-	else if (W.CurrentSlot == 1 && !bSecondaryAmmo && !bPrimaryAmmo) Intent.SelectSlot = 2;
+	else if (W.CurrentSlot == 1 && !bSecondaryAmmo) Intent.SelectSlot = bPrimaryAmmo ? 0 : 2;
 	else if (W.CurrentSlot == 2 && (bPrimaryAmmo || bSecondaryAmmo)) Intent.SelectSlot = bPrimaryAmmo ? 0 : 1;
 	const FTSWeaponInstance& Cur = W.Current();
 	if (Target == nullptr && Cur.IsValid() && Cur.Def->MagazineSize > 0 && Cur.Mag < Cur.Def->MagazineSize * 0.4f && Cur.Reserve > 0) Intent.bReload = true;

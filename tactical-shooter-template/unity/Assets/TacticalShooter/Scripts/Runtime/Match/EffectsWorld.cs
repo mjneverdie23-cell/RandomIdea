@@ -49,11 +49,14 @@ namespace TacticalShooter
             public WeaponInstance weapon;
             public Vector3 position;
             public GameObject go;
+            /// <summary>Who dropped it on purpose; they only pick it up by walking over it after stepping away.</summary>
+            public TacticalCharacter droppedBy;
         }
 
         sealed class Temp
         {
             public GameObject go;
+            public PrimitiveType type;
             public float life, timeLeft;
             public Vector3 fromScale, toScale;
         }
@@ -66,6 +69,11 @@ namespace TacticalShooter
         readonly List<Barrier> barriers = new List<Barrier>();
         readonly List<Pickup> pickups = new List<Pickup>();
         readonly List<Temp> temps = new List<Temp>();
+        // Short-lived shapes (tracers, flashes, impacts) are recycled instead of created and
+        // destroyed for every shot: a full lobby firing automatics would otherwise churn hundreds
+        // of GameObjects per second.
+        readonly Dictionary<PrimitiveType, Stack<GameObject>> tempPool = new Dictionary<PrimitiveType, Stack<GameObject>>();
+        readonly Stack<Temp> spareTemps = new Stack<Temp>();
 
         public IReadOnlyList<Smoke> Smokes => smokes;
         public IReadOnlyList<Pickup> Pickups => pickups;
@@ -90,7 +98,7 @@ namespace TacticalShooter
             foreach (var f in fires) Object.Destroy(f.go);
             foreach (var b in barriers) Object.Destroy(b.go);
             foreach (var p in pickups) Object.Destroy(p.go);
-            foreach (var t in temps) Object.Destroy(t.go);
+            foreach (var t in temps) ReleaseTemp(t);
             projectiles.Clear();
             smokes.Clear();
             fires.Clear();
@@ -168,14 +176,20 @@ namespace TacticalShooter
             }
 
             // Walking over a weapon picks it up if that slot is empty.
+            var alive = pickups.Count > 0 ? match.AliveCharacters() : null;
             for (int i = pickups.Count - 1; i >= 0; i--)
             {
                 var p = pickups[i];
                 p.go.transform.Rotate(0f, 90f * dt, 0f);
-                foreach (var ch in match.AliveCharacters())
+                foreach (var ch in alive)
                 {
-                    if (ch.Weapons.Slots[(int)p.weapon.def.Slot] != null) continue;
-                    if ((ch.Feet - p.position).sqrMagnitude > 1.2f * 1.2f) continue;
+                    bool inReach = (ch.Feet - p.position).sqrMagnitude <= 1.2f * 1.2f;
+                    if (ch == p.droppedBy)
+                    {
+                        if (!inReach) p.droppedBy = null;
+                        continue;
+                    }
+                    if (!inReach || ch.Weapons.Slots[(int)p.weapon.def.Slot] != null) continue;
                     GiveTo(ch, i);
                     break;
                 }
@@ -185,7 +199,13 @@ namespace TacticalShooter
             {
                 var t = temps[i];
                 t.timeLeft -= dt;
-                if (t.timeLeft <= 0f) { Object.Destroy(t.go); temps.RemoveAt(i); continue; }
+                if (t.timeLeft <= 0f || t.go == null)
+                {
+                    ReleaseTemp(t);
+                    temps[i] = temps[temps.Count - 1];
+                    temps.RemoveAt(temps.Count - 1);
+                    continue;
+                }
                 t.go.transform.localScale = Vector3.Lerp(t.toScale, t.fromScale, t.timeLeft / t.life);
             }
         }
@@ -299,12 +319,13 @@ namespace TacticalShooter
 
         // ---- dropped weapons ---------------------------------------------------------------
 
-        public void SpawnPickup(WeaponInstance weapon, Vector3 position)
+        /// <summary>droppedBy: the character who dropped it on purpose, if any.</summary>
+        public void SpawnPickup(WeaponInstance weapon, Vector3 position, TacticalCharacter droppedBy = null)
         {
             if (weapon == null) return;
             Vector3 ground = new Vector3(position.x, 0.1f, position.z);
             var go = Prims.Shape(PrimitiveType.Cube, root, ground, new Vector3(0.12f, 0.12f, 0.7f), Prims.ToColor(weapon.def.color), "Pickup_" + weapon.def.id);
-            pickups.Add(new Pickup { weapon = weapon, position = ground, go = go });
+            pickups.Add(new Pickup { weapon = weapon, position = ground, go = go, droppedBy = droppedBy });
         }
 
         /// <summary>Interact near a weapon: swap it with the one in the same slot.</summary>
@@ -347,38 +368,67 @@ namespace TacticalShooter
             Vector3 d = to - from;
             float len = d.magnitude;
             if (len < 0.5f) return;
-            var go = Prims.Shape(PrimitiveType.Cube, root, from + d * 0.5f, new Vector3(0.02f, 0.02f, len), new Color(1f, 0.9f, 0.5f), "Tracer");
-            go.transform.rotation = Quaternion.LookRotation(d);
-            AddTemp(go, 0.05f, go.transform.localScale, new Vector3(0.005f, 0.005f, len));
+            var scale = new Vector3(0.02f, 0.02f, len);
+            AddTemp(PrimitiveType.Cube, from + d * 0.5f, new Color(1f, 0.9f, 0.5f), 0.05f, scale, new Vector3(0.005f, 0.005f, len), Quaternion.LookRotation(d));
         }
 
         public void MuzzleFlash(Vector3 at)
         {
-            var go = Prims.Shape(PrimitiveType.Sphere, root, at, Vector3.one * 0.12f, new Color(1f, 0.85f, 0.4f), "Muzzle");
-            AddTemp(go, 0.04f, Vector3.one * 0.12f, Vector3.one * 0.02f);
+            AddTemp(PrimitiveType.Sphere, at, new Color(1f, 0.85f, 0.4f), 0.04f, Vector3.one * 0.12f, Vector3.one * 0.02f);
         }
 
         public void Impact(Vector3 at, Vector3 normal)
         {
-            var go = Prims.Shape(PrimitiveType.Cube, root, at + normal * 0.02f, Vector3.one * 0.08f, new Color(0.25f, 0.22f, 0.2f), "Impact");
-            AddTemp(go, 0.6f, Vector3.one * 0.08f, Vector3.one * 0.02f);
+            AddTemp(PrimitiveType.Cube, at + normal * 0.02f, new Color(0.25f, 0.22f, 0.2f), 0.6f, Vector3.one * 0.08f, Vector3.one * 0.02f);
         }
 
         public void BloodPuff(Vector3 at)
         {
-            var go = Prims.Shape(PrimitiveType.Sphere, root, at, Vector3.one * 0.15f, new Color(0.7f, 0.05f, 0.05f), "Hit");
-            AddTemp(go, 0.2f, Vector3.one * 0.15f, Vector3.one * 0.35f);
+            AddTemp(PrimitiveType.Sphere, at, new Color(0.7f, 0.05f, 0.05f), 0.2f, Vector3.one * 0.15f, Vector3.one * 0.35f);
         }
 
         /// <summary>Expanding sphere (or flat ring) used for explosions, flashes and pulses.</summary>
         public void Burst(Vector3 at, float radius, Color color, float seconds, bool flat = false)
         {
-            var go = Prims.Shape(flat ? PrimitiveType.Cylinder : PrimitiveType.Sphere, root, at, Vector3.one * 0.2f, color, "Burst");
+            Vector3 from = flat ? new Vector3(0.2f, 0.02f, 0.2f) : Vector3.one * 0.2f;
             Vector3 to = flat ? new Vector3(radius * 2f, 0.02f, radius * 2f) : Vector3.one * (radius * 2f);
-            AddTemp(go, seconds, flat ? new Vector3(0.2f, 0.02f, 0.2f) : Vector3.one * 0.2f, to);
+            AddTemp(flat ? PrimitiveType.Cylinder : PrimitiveType.Sphere, at, color, seconds, from, to);
         }
 
-        void AddTemp(GameObject go, float seconds, Vector3 from, Vector3 to) =>
-            temps.Add(new Temp { go = go, life = seconds, timeLeft = seconds, fromScale = from, toScale = to });
+        /// <summary>A shape that scales from 'from' to 'to' over 'seconds', then goes back to the pool.</summary>
+        void AddTemp(PrimitiveType type, Vector3 at, Color color, float seconds, Vector3 from, Vector3 to, Quaternion? rotation = null)
+        {
+            GameObject go = null;
+            if (tempPool.TryGetValue(type, out var pool))
+                while (go == null && pool.Count > 0) go = pool.Pop();
+            if (go == null) go = Prims.Shape(type, root, at, from, color, "Fx");
+            else
+            {
+                go.transform.localPosition = at;
+                go.transform.localScale = from;
+                Prims.SetColor(go, color);
+                go.SetActive(true);
+            }
+            go.transform.rotation = rotation ?? Quaternion.identity;
+            var t = spareTemps.Count > 0 ? spareTemps.Pop() : new Temp();
+            t.go = go;
+            t.type = type;
+            t.life = t.timeLeft = seconds;
+            t.fromScale = from;
+            t.toScale = to;
+            temps.Add(t);
+        }
+
+        void ReleaseTemp(Temp t)
+        {
+            if (t.go != null)
+            {
+                t.go.SetActive(false);
+                if (!tempPool.TryGetValue(t.type, out var pool)) tempPool[t.type] = pool = new Stack<GameObject>();
+                pool.Push(t.go);
+            }
+            t.go = null;
+            spareTemps.Push(t);
+        }
     }
 }

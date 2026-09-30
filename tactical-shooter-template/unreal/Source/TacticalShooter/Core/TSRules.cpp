@@ -272,6 +272,7 @@ namespace
 
 		if (const FTSEquipmentDef* E = D.EquipmentItem(ItemId))
 		{
+			if ((E->IsArmor() || E->IsDefuseKit()) && !TSShop::AllowedOnSide(E->Side, Side)) return Fail(ETSShopResult::WrongSide, Money);
 			if (E->IsArmor())
 			{
 				if (Lo.Armor >= E->Amount) return Fail(ETSShopResult::AlreadyOwned, Money);
@@ -403,6 +404,12 @@ int32 TSShop::AbilitySlotOf(const FTSAgentDef* Agent, const FString& AbilityId)
 	for (int32 i = 0; i < Agent->Abilities.Num(); ++i)
 		if (Agent->Abilities[i].AbilityId == AbilityId) return i;
 	return -1;
+}
+
+bool TSShop::AllowedOnSide(const FString& ItemSide, ETSSide Side)
+{
+	return ItemSide.IsEmpty() || ItemSide.Equals(TEXT("any"), ESearchCase::IgnoreCase) ||
+		ItemSide.Equals(TSIds::ToId(Side), ESearchCase::IgnoreCase);
 }
 
 // -------------------------------------------------------------------------------- bot buying

@@ -26,14 +26,14 @@ FTSGameData FTSGameData::Load(TFunctionRef<bool(const FString& Key, FString& Out
 	FTSGameData D;
 	ReadJson(ReadText, TEXT("Config/game"), D.Game, D.LoadErrors);
 
-	FTSWeaponList Weapons;
-	if (ReadJson(ReadText, TEXT("Config/weapons"), Weapons, D.LoadErrors)) D.Weapons = Weapons.Weapons;
-	FTSEquipmentList Equipment;
-	if (ReadJson(ReadText, TEXT("Config/equipment"), Equipment, D.LoadErrors)) D.Equipment = Equipment.Equipment;
-	FTSAbilityList Abilities;
-	if (ReadJson(ReadText, TEXT("Config/abilities"), Abilities, D.LoadErrors)) D.Abilities = Abilities.Abilities;
-	FTSAgentList Agents;
-	if (ReadJson(ReadText, TEXT("Config/agents"), Agents, D.LoadErrors)) D.Agents = Agents.Agents;
+	FTSWeaponList WeaponList;
+	if (ReadJson(ReadText, TEXT("Config/weapons"), WeaponList, D.LoadErrors)) D.Weapons = WeaponList.Weapons;
+	FTSEquipmentList EquipmentList;
+	if (ReadJson(ReadText, TEXT("Config/equipment"), EquipmentList, D.LoadErrors)) D.Equipment = EquipmentList.Equipment;
+	FTSAbilityList AbilityList;
+	if (ReadJson(ReadText, TEXT("Config/abilities"), AbilityList, D.LoadErrors)) D.Abilities = AbilityList.Abilities;
+	FTSAgentList AgentList;
+	if (ReadJson(ReadText, TEXT("Config/agents"), AgentList, D.LoadErrors)) D.Agents = AgentList.Agents;
 
 	ReadJson(ReadText, TEXT("Config/bots"), D.Bots, D.LoadErrors);
 	ReadJson(ReadText, TEXT("Config/input"), D.Input, D.LoadErrors);

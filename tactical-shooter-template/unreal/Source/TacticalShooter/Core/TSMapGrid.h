@@ -29,7 +29,7 @@ struct FTSGridBox
 class TACTICALSHOOTER_API FTSMapGrid
 {
 public:
-	static FTSMapGrid Parse(const FTSMapDef& Def, TArray<FString>& OutErrors);
+	static FTSMapGrid Parse(const FTSMapDef& InDef, TArray<FString>& OutErrors);
 	static bool TryParseSymbol(TCHAR Ch, ETSCellType& Out);
 
 	bool IsValid() const { return Width > 0 && Height > 0; }

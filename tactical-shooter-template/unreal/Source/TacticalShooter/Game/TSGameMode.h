@@ -58,6 +58,9 @@ public:
 	ETSShopResult TryBuy(FTSPlayerRecord& P, const FString& ItemId);
 	ETSShopResult TrySell(FTSPlayerRecord& P, const FString& ItemId);
 
+	/** Where something the character drops lands: up to DistanceCm in front of the feet, short of walls. */
+	FVector DropPoint(const ATSCharacter* C, float DistanceCm) const;
+
 	void OnCharacterKilled(ATSCharacter* Victim, ATSCharacter* Killer, const FString& SourceId, bool bHeadshot);
 	void OnWeaponChanged(ATSCharacter* C, const FTSWeaponDef& Def);
 	void Announce(const FString& Text, float Seconds);

@@ -172,7 +172,7 @@ namespace TacticalShooter
 #endif
         }
 
-        /// <summary>Stores a key override (or clears it when it equals the default).</summary>
+        /// <summary>Stores a key override for one action (the entry keeps both of its keys).</summary>
         public static void SetKey(UserSettings s, GameData data, string action, string key, bool alt)
         {
             var list = new List<KeyBinding>(s.keyOverrides ?? new KeyBinding[0]);

@@ -123,6 +123,8 @@ namespace TacticalShooter.Core
             }
 
             var e = d.EquipmentItem(itemId);
+            if (e != null && (e.type == "armor" || e.type == "defuseKit") && !AllowedOnSide(e.side, side))
+                return Fail(ShopResult.WrongSide, money);
             if (e != null && e.type == "armor")
             {
                 if (lo.armor >= e.amount) return Fail(ShopResult.AlreadyOwned, money);
@@ -210,6 +212,11 @@ namespace TacticalShooter.Core
                 if (s.freeChargesPerRound > lo.abilityCharges[i]) lo.abilityCharges[i] = s.freeChargesPerRound;
             }
         }
+
+        /// <summary>equipment.json "side": "any", "attack" or "defense".</summary>
+        public static bool AllowedOnSide(string itemSide, Side side) =>
+            string.IsNullOrEmpty(itemSide) || string.Equals(itemSide, "any", System.StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(itemSide, Ids.ToId(side), System.StringComparison.OrdinalIgnoreCase);
 
         public static int AbilitySlotOf(AgentDef agent, string abilityId)
         {

@@ -212,7 +212,9 @@ capsule and the map grid. So art swaps are local:
   the logical map (bots and buy/site zones use it) and place art that matches it, or generate
   art per cell type.
 - **Effects, bomb, pickups:** `EffectsWorld` / `FTSEffectsWorld` and `BombSystem` / `FTSBombSystem`
-  spawn shapes through one helper each (`Prims` / `ATSShapeActor`).
+  spawn shapes through one helper each (`Prims` / `ATSShapeActor`). Short-lived effects
+  (tracers, muzzle flashes, impacts, bursts) go through `AddTemp`, which recycles pooled shapes;
+  keep real VFX pooled the same way, since every shot creates several.
 
 ### 4.11 UI
 

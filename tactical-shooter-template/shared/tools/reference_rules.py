@@ -424,6 +424,8 @@ def shop_buy(data, agent, side, lo, money, item_id):
         lo.purchases.append({"kind": "weapon", "id": item_id, "price": d["price"], "slot": slot,
                              "previousId": previous, "previousArmor": 0})
         return "ok", money, dropped
+    if kind in ("armor", "defuseKit") and d.get("side", "any").lower() not in ("", "any", side):
+        return "wrongSide", money, None
     if kind == "armor":
         if lo.armor >= d["amount"]:
             return "alreadyOwned", money, None

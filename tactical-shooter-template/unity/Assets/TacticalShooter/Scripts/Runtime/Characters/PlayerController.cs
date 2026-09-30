@@ -22,7 +22,10 @@ namespace TacticalShooter
             Yaw = c.Yaw;
             Pitch = 0f;
             deathTime = -99f;
-            SetView(c);
+            // Always re-follow: dying un-hides the body, and if the camera never left it (death
+            // shortly before the round restarted) SetView would skip hiding it again.
+            ViewTarget = c;
+            Game.Camera.Follow(c);
         }
 
         public void OnLocalDeath() => deathTime = match.Time;

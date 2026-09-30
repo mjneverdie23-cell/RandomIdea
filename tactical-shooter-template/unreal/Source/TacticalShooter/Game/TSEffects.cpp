@@ -31,7 +31,8 @@ void ATSShapeActor::Setup(ETSShape Shape, const FLinearColor& Color, const FVect
 
 void ATSShapeActor::SetColor(const FLinearColor& Color)
 {
-	Mesh->SetMaterial(0, UTSGameSubsystem::Get(this)->Material(Color));
+	UMaterialInterface* Material = UTSGameSubsystem::Get(this)->Material(Color);
+	if (Mesh->GetMaterial(0) != Material) Mesh->SetMaterial(0, Material);
 }
 
 namespace
@@ -68,7 +69,7 @@ void FTSEffectsWorld::ClearAll()
 	for (const FFire& F : Fires) Kill(F.Actor);
 	for (const FBarrier& B : Barriers) Kill(B.Actor);
 	for (const FPickup& P : Pickups) Kill(P.Actor);
-	for (const FTemp& T : Temps) Kill(T.Actor);
+	for (const FTemp& T : Temps) ReleaseTemp(T);
 	Projectiles.Reset();
 	Smokes.Reset();
 	Fires.Reset();
@@ -162,14 +163,20 @@ void FTSEffectsWorld::Tick(float Dt)
 	}
 
 	// Walking over a weapon picks it up if that slot is empty.
+	const TArray<ATSCharacter*> Alive = Pickups.Num() > 0 ? Mode->AliveCharacters() : TArray<ATSCharacter*>();
 	for (int32 i = Pickups.Num() - 1; i >= 0; --i)
 	{
 		FPickup& P = Pickups[i];
 		if (P.Actor.IsValid()) P.Actor->AddActorLocalRotation(FRotator(0.f, 90.f * Dt, 0.f));
-		for (ATSCharacter* C : Mode->AliveCharacters())
+		for (ATSCharacter* C : Alive)
 		{
-			if (C->Weapons.Slots[(int32)P.Weapon.Def->GetSlot()].IsValid()) continue;
-			if (FVector::DistSquared2D(C->Feet(), P.Position) > FMath::Square(120.f)) continue;
+			const bool bInReach = FVector::DistSquared2D(C->Feet(), P.Position) <= FMath::Square(120.f);
+			if (C == P.DroppedBy)
+			{
+				if (!bInReach) P.DroppedBy = nullptr;
+				continue;
+			}
+			if (!bInReach || C->Weapons.Slots[(int32)P.Weapon.Def->GetSlot()].IsValid()) continue;
 			GiveTo(C, i);
 			break;
 		}
@@ -181,8 +188,8 @@ void FTSEffectsWorld::Tick(float Dt)
 		T.TimeLeft -= Dt;
 		if (T.TimeLeft <= 0.f || !T.Actor.IsValid())
 		{
-			Kill(T.Actor);
-			Temps.RemoveAt(i);
+			ReleaseTemp(T);
+			Temps.RemoveAtSwap(i);
 			continue;
 		}
 		T.Actor->SetActorScale3D(FMath::Lerp(T.ToScale, T.FromScale, T.TimeLeft / T.Life));
@@ -316,11 +323,12 @@ bool FTSEffectsWorld::InsideSmoke(const FVector& P) const
 	return false;
 }
 
-void FTSEffectsWorld::SpawnPickup(const FTSWeaponInstance& Weapon, const FVector& At)
+void FTSEffectsWorld::SpawnPickup(const FTSWeaponInstance& Weapon, const FVector& At, ATSCharacter* DroppedBy)
 {
 	if (!Weapon.IsValid()) return;
 	FPickup P;
 	P.Weapon = Weapon;
+	P.DroppedBy = DroppedBy;
 	P.Position = FVector(At.X, At.Y, 10.f);
 	P.Actor = SpawnShape(ETSShape::Cube, P.Position, UTSGameSubsystem::Color(Weapon.Def->Color), FVector(0.7f, 0.12f, 0.12f));
 	Pickups.Add(P);
@@ -358,15 +366,38 @@ void FTSEffectsWorld::GiveTo(ATSCharacter* C, int32 Index)
 	Mode->PlaySound(TEXT("equip"), C->Feet());
 }
 
-void FTSEffectsWorld::AddTemp(ATSShapeActor* Actor, float Seconds, const FVector& From, const FVector& To)
+void FTSEffectsWorld::AddTemp(ETSShape Shape, const FVector& At, const FLinearColor& Color, float Seconds, const FVector& From, const FVector& To,
+	const FRotator& Rotation)
 {
-	if (Actor == nullptr) return;
+	ATSShapeActor* Actor = nullptr;
+	TArray<TWeakObjectPtr<ATSShapeActor>>& Pool = TempPool[(int32)Shape];
+	while (Actor == nullptr && Pool.Num() > 0) Actor = Pool.Pop().Get();
+	if (Actor != nullptr)
+	{
+		Actor->SetActorLocationAndRotation(At, Rotation);
+		Actor->SetActorScale3D(From);
+		Actor->SetColor(Color);
+		Actor->SetActorHiddenInGame(false);
+	}
+	else
+	{
+		Actor = SpawnShape(Shape, At, Color, From, false, Rotation);
+		if (Actor == nullptr) return;
+	}
 	FTemp T;
 	T.Actor = Actor;
+	T.Shape = Shape;
 	T.Life = T.TimeLeft = Seconds;
 	T.FromScale = From;
 	T.ToScale = To;
 	Temps.Add(T);
+}
+
+void FTSEffectsWorld::ReleaseTemp(const FTemp& T)
+{
+	if (!T.Actor.IsValid()) return;
+	T.Actor->SetActorHiddenInGame(true);
+	TempPool[(int32)T.Shape].Add(T.Actor);
 }
 
 void FTSEffectsWorld::Tracer(const FVector& From, const FVector& To)
@@ -375,27 +406,27 @@ void FTSEffectsWorld::Tracer(const FVector& From, const FVector& To)
 	const float Len = (float)(D.Size() / 100.0);
 	if (Len < 0.5f) return;
 	const FVector Scale(Len, 0.02f, 0.02f);
-	AddTemp(SpawnShape(ETSShape::Cube, From + D * 0.5f, FLinearColor(1.f, 0.9f, 0.5f), Scale, false, D.Rotation()), 0.05f, Scale, FVector(Len, 0.005f, 0.005f));
+	AddTemp(ETSShape::Cube, From + D * 0.5f, FLinearColor(1.f, 0.9f, 0.5f), 0.05f, Scale, FVector(Len, 0.005f, 0.005f), D.Rotation());
 }
 
 void FTSEffectsWorld::MuzzleFlash(const FVector& At)
 {
-	AddTemp(SpawnShape(ETSShape::Sphere, At, FLinearColor(1.f, 0.85f, 0.4f), FVector(0.12f)), 0.04f, FVector(0.12f), FVector(0.02f));
+	AddTemp(ETSShape::Sphere, At, FLinearColor(1.f, 0.85f, 0.4f), 0.04f, FVector(0.12f), FVector(0.02f));
 }
 
 void FTSEffectsWorld::Impact(const FVector& At, const FVector& Normal)
 {
-	AddTemp(SpawnShape(ETSShape::Cube, At + Normal * 2.f, FLinearColor(0.25f, 0.22f, 0.2f), FVector(0.08f)), 0.6f, FVector(0.08f), FVector(0.02f));
+	AddTemp(ETSShape::Cube, At + Normal * 2.f, FLinearColor(0.25f, 0.22f, 0.2f), 0.6f, FVector(0.08f), FVector(0.02f));
 }
 
 void FTSEffectsWorld::BloodPuff(const FVector& At)
 {
-	AddTemp(SpawnShape(ETSShape::Sphere, At, FLinearColor(0.7f, 0.05f, 0.05f), FVector(0.15f)), 0.2f, FVector(0.15f), FVector(0.35f));
+	AddTemp(ETSShape::Sphere, At, FLinearColor(0.7f, 0.05f, 0.05f), 0.2f, FVector(0.15f), FVector(0.35f));
 }
 
 void FTSEffectsWorld::Burst(const FVector& At, float RadiusMetres, const FLinearColor& Color, float Seconds, bool bFlat)
 {
 	const FVector From = bFlat ? FVector(0.2f, 0.2f, 0.02f) : FVector(0.2f);
 	const FVector To = bFlat ? FVector(RadiusMetres * 2.f, RadiusMetres * 2.f, 0.02f) : FVector(RadiusMetres * 2.f);
-	AddTemp(SpawnShape(bFlat ? ETSShape::Cylinder : ETSShape::Sphere, At, Color, From), Seconds, From, To);
+	AddTemp(bFlat ? ETSShape::Cylinder : ETSShape::Sphere, At, Color, Seconds, From, To);
 }

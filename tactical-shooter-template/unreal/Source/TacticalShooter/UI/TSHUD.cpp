@@ -327,20 +327,16 @@ void ATSHUD::DrawMinimap(ATSGameMode* M)
 	DrawTexture(MinimapTexture, (float)MinimapOrigin.X * Scale, (float)MinimapOrigin.Y * Scale, (float)MinimapSize.X * Scale, (float)MinimapSize.Y * Scale, 0.f, 0.f, 1.f, 1.f);
 
 	const FTSPlayerRecord* Local = M->LocalRecord();
+	const float Now = GetWorld()->GetRealTimeSeconds();
+	if (Now >= NextSpotTime)
+	{
+		NextSpotTime = Now + 0.1f;
+		UpdateSpotted(M, Local->Team);
+	}
 	for (ATSCharacter* C : M->AliveCharacters())
 	{
 		const bool bEnemy = C->Team() != Local->Team;
-		bool bShow = !bEnemy || C->RevealedUntil > M->MatchTime;
-		if (!bShow)
-		{
-			// An enemy shows while any teammate has line of sight to them.
-			for (ATSCharacter* Mate : M->AliveCharacters())
-			{
-				if (Mate->Team() != Local->Team || FVector::DistSquared(Mate->Feet(), C->Feet()) > FMath::Square(6000.0)) continue;
-				if (M->Combat.LineOfSight(Mate->EyePosition(), C->ChestPosition())) { bShow = true; break; }
-			}
-		}
-		if (!bShow) continue;
+		if (bEnemy && C->RevealedUntil <= M->MatchTime && !SpottedIds.Contains(C->Id())) continue;
 		const FVector2D P = ToMinimap(C->Feet());
 		const float Size = C->Record->bIsLocal ? 10.f : 7.f;
 		const FLinearColor Col = C->Record->bIsLocal ? FLinearColor::White : bEnemy ? HudAccent : SideColor(M, C->Team());
@@ -350,10 +346,36 @@ void ATSHUD::DrawMinimap(ATSGameMode* M)
 	}
 	const FTSBombSystem& Bomb = M->Bomb;
 	const bool bCarriedByMate = Bomb.State == ETSBombState::Carried && Bomb.Carrier && Bomb.Carrier->Team() == Local->Team;
-	if (Bomb.State == ETSBombState::Planted || Bomb.State == ETSBombState::Dropped || bCarriedByMate)
+	// Same visibility as the world marker: a dropped bomb is only shown to the attackers.
+	const bool bDroppedForUs = Bomb.State == ETSBombState::Dropped && M->SideOf(*Local) == ETSSide::Attack;
+	if (Bomb.State == ETSBombState::Planted || bDroppedForUs || bCarriedByMate)
 	{
 		const FVector2D P = ToMinimap(bCarriedByMate ? Bomb.Carrier->Feet() : Bomb.Position);
 		Rect((float)P.X - 4.f, (float)P.Y - 12.f, 8.f, 8.f, UTSGameSubsystem::Color(UTSGameSubsystem::Get(this)->Data().Game.Visuals.BombColor));
+	}
+}
+
+void ATSHUD::UpdateSpotted(ATSGameMode* M, ETSTeam Team)
+{
+	// An enemy shows on the map while a teammate within 60 m, looking within 60 degrees of
+	// them, has line of sight (same rule as HudScreen.cs).
+	SpottedIds.Reset();
+	const TArray<ATSCharacter*> Alive = M->AliveCharacters();
+	const float MinCos = FMath::Cos(FMath::DegreesToRadians(60.f));
+	for (ATSCharacter* Enemy : Alive)
+	{
+		if (Enemy->Team() == Team) continue;
+		for (ATSCharacter* Mate : Alive)
+		{
+			if (Mate->Team() != Team || FVector::DistSquared(Mate->Feet(), Enemy->Feet()) > FMath::Square(6000.0)) continue;
+			const FVector ToEnemy = (Enemy->ChestPosition() - Mate->EyePosition()).GetSafeNormal();
+			if (FVector::DotProduct(Mate->AimForward(), ToEnemy) < MinCos) continue;
+			if (M->Combat.LineOfSight(Mate->EyePosition(), Enemy->ChestPosition()))
+			{
+				SpottedIds.Add(Enemy->Id());
+				break;
+			}
+		}
 	}
 }
 
@@ -439,7 +461,8 @@ void ATSHUD::DrawInteraction(ATSGameMode* M, ATSCharacter* Local)
 	FString Hint;
 	if (M->Flow.Phase == ETSMatchPhase::BuyPhase) Hint = FString::Printf(TEXT("Press %s to buy"), *TSKeyNames::Label(Game->Keys.Key(TEXT("BuyMenu"))));
 	else if (Local->bCarryingBomb) Hint = M->World.SiteAt(Local->Feet()) >= 0 ? FString::Printf(TEXT("Hold %s to plant"), *Interact) : FString(TEXT("You carry the bomb - plant it on site A or B"));
-	else if (Bomb.State == ETSBombState::Planted && Local->Side() == ETSSide::Defense && FVector::DistSquared2D(Local->Feet(), Bomb.Position) < FMath::Square(200.0))
+	else if (Bomb.State == ETSBombState::Planted && Local->Side() == ETSSide::Defense &&
+		FVector::DistSquared2D(Local->Feet(), Bomb.Position) <= FMath::Square(Game->Data().Game.Bomb.InteractRadius * 100.0))
 		Hint = FString::Printf(TEXT("Hold %s to defuse%s"), *Interact, Local->Record->Loadout.bHasDefuseKit ? TEXT(" (kit)") : TEXT(""));
 	else if (M->Effects.NearestPickup(Local->Feet(), 180.f) != INDEX_NONE) Hint = FString::Printf(TEXT("Press %s to pick up the weapon"), *Interact);
 	Label(Hint, CX, 1080.f - 150.f, 20.f, HudDim, 0.5f);

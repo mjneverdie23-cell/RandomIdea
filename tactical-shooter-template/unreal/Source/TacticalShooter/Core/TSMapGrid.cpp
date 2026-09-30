@@ -1,23 +1,23 @@
 #include "TSMapGrid.h"
 
-FTSMapGrid FTSMapGrid::Parse(const FTSMapDef& Def, TArray<FString>& OutErrors)
+FTSMapGrid FTSMapGrid::Parse(const FTSMapDef& InDef, TArray<FString>& OutErrors)
 {
 	FTSMapGrid G;
-	if (Def.Rows.Num() == 0)
+	if (InDef.Rows.Num() == 0)
 	{
 		OutErrors.Add(TEXT("map has no rows"));
 		return G;
 	}
 	int32 W = 0;
-	for (const FString& Row : Def.Rows) W = FMath::Max(W, Row.Len());
-	G.Def = Def;
+	for (const FString& Row : InDef.Rows) W = FMath::Max(W, Row.Len());
+	G.Def = InDef;
 	G.Width = W;
-	G.Height = Def.Rows.Num();
-	G.CellSize = Def.CellSize;
+	G.Height = InDef.Rows.Num();
+	G.CellSize = InDef.CellSize;
 	G.Cells.SetNum(W * G.Height);
 	for (int32 Y = 0; Y < G.Height; ++Y)
 	{
-		const FString& Row = Def.Rows[Y];
+		const FString& Row = InDef.Rows[Y];
 		if (Row.Len() != W) OutErrors.Add(FString::Printf(TEXT("row %d has length %d, expected %d"), Y, Row.Len(), W));
 		for (int32 X = 0; X < W; ++X)
 		{
@@ -31,7 +31,7 @@ FTSMapGrid FTSMapGrid::Parse(const FTSMapDef& Def, TArray<FString>& OutErrors)
 			G.Cells[Y * W + X] = T;
 		}
 	}
-	if (Def.CellSize <= 0.f) OutErrors.Add(TEXT("cellSize must be > 0"));
+	if (InDef.CellSize <= 0.f) OutErrors.Add(TEXT("cellSize must be > 0"));
 	return G;
 }
 

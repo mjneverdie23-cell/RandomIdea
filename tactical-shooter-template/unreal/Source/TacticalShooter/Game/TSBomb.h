@@ -29,7 +29,8 @@ struct FTSBombSystem
 	void Reset();
 	bool IsBusy(const ATSCharacter* C) const { return (C == Planter && PlantProgress > 0.f) || (C == Defuser && DefuseProgress > 0.f); }
 	void GiveTo(ATSCharacter* C);
-	void Drop(const FVector& At);
+	/** By: who dropped it on purpose (null when it falls from a dead carrier). */
+	void Drop(const FVector& At, ATSCharacter* By = nullptr);
 	void Tick(float Dt);
 	/** Called when FTSMatchFlow reports the fuse ran out. */
 	void Explode();
@@ -44,4 +45,6 @@ private:
 	TWeakObjectPtr<ATSShapeActor> LightActor;
 	float BeepTimer = 0.f;
 	bool bLightOn = false;
+	/** Who just dropped the bomb on purpose; they must step away before it can be picked up again. */
+	ATSCharacter* DroppedBy = nullptr;
 };

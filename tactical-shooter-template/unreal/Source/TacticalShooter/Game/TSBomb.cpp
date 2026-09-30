@@ -40,7 +40,7 @@ void FTSBombSystem::Reset()
 {
 	if (Carrier != nullptr) Carrier->SetCarryingBomb(false);
 	State = ETSBombState::None;
-	Carrier = Planter = Defuser = nullptr;
+	Carrier = Planter = Defuser = DroppedBy = nullptr;
 	PlantProgress = DefuseProgress = 0.f;
 	Site = -1;
 	if (BombActor.IsValid()) BombActor->SetActorHiddenInGame(true);
@@ -51,16 +51,18 @@ void FTSBombSystem::GiveTo(ATSCharacter* C)
 {
 	State = ETSBombState::Carried;
 	Carrier = C;
+	DroppedBy = nullptr;
 	C->SetCarryingBomb(true);
 	if (BombActor.IsValid()) BombActor->SetActorHiddenInGame(true);
 	if (LightActor.IsValid()) LightActor->SetActorHiddenInGame(true);
 }
 
-void FTSBombSystem::Drop(const FVector& At)
+void FTSBombSystem::Drop(const FVector& At, ATSCharacter* By)
 {
 	if (State != ETSBombState::Carried) return;
 	if (Carrier != nullptr) Carrier->SetCarryingBomb(false);
 	Carrier = nullptr;
+	DroppedBy = By;
 	Planter = nullptr;
 	PlantProgress = 0.f;
 	State = ETSBombState::Dropped;
@@ -84,7 +86,7 @@ void FTSBombSystem::Tick(float Dt)
 		}
 		if (C->LastIntent.bDrop)
 		{
-			Drop(C->Feet() + C->GetActorForwardVector() * 120.f);
+			Drop(Mode->DropPoint(C, S.PickupRadius * 100.f), C);
 			break;
 		}
 		const int32 AtSite = Mode->World.SiteAt(C->Feet());
@@ -106,7 +108,15 @@ void FTSBombSystem::Tick(float Dt)
 		for (ATSCharacter* C : Mode->AliveCharacters())
 		{
 			if (C->Side() != ETSSide::Attack) continue;
-			if (FVector::DistSquared2D(C->Feet(), Position) <= FMath::Square(S.PickupRadius * 100.f))
+			const bool bInReach = FVector::DistSquared2D(C->Feet(), Position) <= FMath::Square(S.PickupRadius * 100.f);
+			if (C == DroppedBy)
+			{
+				// The dropper has to leave the pickup radius first, or the bomb would bounce
+				// straight back to them (it lands right at the edge of the radius).
+				if (!bInReach) DroppedBy = nullptr;
+				continue;
+			}
+			if (bInReach)
 			{
 				GiveTo(C);
 				break;

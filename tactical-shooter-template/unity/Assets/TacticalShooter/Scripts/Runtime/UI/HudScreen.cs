@@ -84,6 +84,21 @@ namespace TacticalShooter.UI
         {
             public Image back;
             public Text key, name, charges;
+            public long chargesShown = long.MinValue;
+        }
+
+        // The HUD ticks every frame; labels showing numbers are only re-formatted when the number
+        // changes, so a steady HUD allocates no strings.
+        static readonly object Unset = new object();
+        long scoreShown = long.MinValue, clockShown = long.MinValue, roundShown = long.MinValue, healthShown = long.MinValue,
+             armorShown = long.MinValue, moneyShown = long.MinValue, ammoShown = long.MinValue;
+        object nameShownFor = Unset, weaponShownFor = Unset;
+
+        static bool Changed(ref long shown, long value)
+        {
+            if (shown == value) return false;
+            shown = value;
+            return true;
         }
 
         public HudScreen(RectTransform canvas)
@@ -335,13 +350,17 @@ namespace TacticalShooter.UI
             // scores
             var mine = local.team;
             var theirs = Ids.Other(mine);
-            scoreLeft.text = flow.Score[(int)mine].ToString();
-            scoreRight.text = flow.Score[(int)theirs].ToString();
+            if (Changed(ref scoreShown, flow.Score[(int)mine] * 10000L + flow.Score[(int)theirs]))
+            {
+                scoreLeft.text = flow.Score[(int)mine].ToString();
+                scoreRight.text = flow.Score[(int)theirs].ToString();
+            }
             scoreLeft.color = Prims.ToColor(flow.SideOf(mine) == Side.Attack ? vis.attackColor : vis.defenseColor);
             scoreRight.color = Prims.ToColor(flow.SideOf(theirs) == Side.Attack ? vis.attackColor : vis.defenseColor);
             float secs = Mathf.Max(0f, flow.ClockSeconds);
-            clock.text = flow.Phase == MatchPhase.Live && flow.BombPlanted ? "" : $"{(int)secs / 60}:{(int)secs % 60:00}";
-            roundText.text = "ROUND " + flow.Round + (flow.InOvertime ? "  OT" : "");
+            long clockValue = flow.Phase == MatchPhase.Live && flow.BombPlanted ? -1 : (int)secs;
+            if (Changed(ref clockShown, clockValue)) clock.text = clockValue < 0 ? "" : $"{clockValue / 60}:{clockValue % 60:00}";
+            if (Changed(ref roundShown, flow.Round * 2L + (flow.InOvertime ? 1 : 0))) roundText.text = "ROUND " + flow.Round + (flow.InOvertime ? "  OT" : "");
             FillPips(pipsLeft, mine, m, scoreLeft.color);
             FillPips(pipsRight, theirs, m, scoreRight.color);
             switch (flow.Phase)
@@ -359,16 +378,26 @@ namespace TacticalShooter.UI
             var subject = view != null ? view : me;
             if (subject != null)
             {
-                health.text = subject.Health.ToString();
+                if (Changed(ref healthShown, subject.Health)) health.text = subject.Health.ToString();
                 health.color = subject.Health > 30 ? UIFactory.TextColor : UIFactory.Accent;
-                armor.text = subject.Armor > 0 ? "ARMOR " + subject.Armor : "";
-                agentName.text = subject.Record.name + " - " + (subject.Agent?.displayName ?? "");
+                if (Changed(ref armorShown, subject.Armor)) armor.text = subject.Armor > 0 ? "ARMOR " + subject.Armor : "";
+                if (!ReferenceEquals(nameShownFor, subject))
+                {
+                    nameShownFor = subject;
+                    agentName.text = subject.Record.name + " - " + (subject.Agent?.displayName ?? "");
+                }
                 healthBar.rectTransform.anchorMax = new Vector2(subject.Health / (float)Game.Data.Game.combat.maxHealth, 1f);
                 var w = subject.Weapons.Current;
-                weaponName.text = w != null ? w.def.displayName.ToUpperInvariant() : "";
-                ammo.text = w == null ? "" : w.def.magazineSize <= 0 ? "-" :
-                    (subject.Weapons.IsReloading ? "<size=26>RELOADING</size>" : $"{w.mag}<size=26> / {w.reserve}</size>");
-                moneyText.text = "$" + subject.Record.money;
+                object wdef = w?.def;
+                if (!ReferenceEquals(weaponShownFor, wdef))
+                {
+                    weaponShownFor = wdef;
+                    weaponName.text = w != null ? w.def.displayName.ToUpperInvariant() : "";
+                }
+                long ammoValue = w == null ? -1 : w.def.magazineSize <= 0 ? -2 : subject.Weapons.IsReloading ? -3 : w.mag * 100000L + w.reserve;
+                if (Changed(ref ammoShown, ammoValue))
+                    ammo.text = ammoValue == -1 ? "" : ammoValue == -2 ? "-" : ammoValue == -3 ? "<size=26>RELOADING</size>" : $"{w.mag}<size=26> / {w.reserve}</size>";
+                if (Changed(ref moneyShown, subject.Record.money)) moneyText.text = "$" + subject.Record.money;
                 for (int i = 0; i < 4; i++) UpdateChip(chips[i], subject, i);
                 crosshair.SpreadDegrees = subject.Weapons.CurrentSpread;
             }
@@ -444,13 +473,24 @@ namespace TacticalShooter.UI
             var slot = c.Abilities.Slot(i);
             var def = c.Abilities.Def(i);
             chip.back.enabled = slot != null;
-            if (slot == null) { chip.key.text = chip.name.text = chip.charges.text = ""; return; }
+            if (slot == null)
+            {
+                chip.key.text = chip.name.text = chip.charges.text = "";
+                chip.chargesShown = long.MinValue;
+                return;
+            }
             string key = Game.Keys.Key(i == 0 ? "Ability1" : i == 1 ? "Ability2" : i == 2 ? "Ability3" : "Ultimate");
             chip.key.text = KeyNames.Label(key);
             chip.name.text = def != null ? def.displayName : slot.abilityId;
             bool ready = c.Abilities.IsReady(i);
             chip.name.color = ready ? UIFactory.TextColor : UIFactory.TextDim;
-            chip.charges.text = slot.IsUltimate ? $"{c.Record.ultPoints}/{slot.ultPoints}" : new string('|', c.Abilities.Charges(i)) + new string('.', Mathf.Max(0, slot.maxCharges - c.Abilities.Charges(i)));
+            int charges = c.Abilities.Charges(i);
+            long shown = slot.IsUltimate ? (1L << 40) + c.Record.ultPoints * 1000L + slot.ultPoints : charges * 1000L + slot.maxCharges;
+            if (chip.chargesShown != shown)
+            {
+                chip.chargesShown = shown;
+                chip.charges.text = slot.IsUltimate ? $"{c.Record.ultPoints}/{slot.ultPoints}" : new string('|', charges) + new string('.', Mathf.Max(0, slot.maxCharges - charges));
+            }
             chip.back.color = slot.IsUltimate && ready ? new Color(1f, 0.8f, 0.2f, 0.45f) : new Color(0f, 0f, 0f, 0.55f);
         }
 
@@ -462,7 +502,8 @@ namespace TacticalShooter.UI
             if (flow.Phase == MatchPhase.BuyPhase) return $"Press {KeyNames.Label(Game.Keys.Key("BuyMenu"))} to buy";
             if (me.CarryingBomb)
                 return m.WorldMap.SiteAt(me.Feet) >= 0 ? $"Hold {interact} to plant" : "You carry the bomb - plant it on site A or B";
-            if (m.Bomb.State == BombState.Planted && me.Side == Side.Defense && (me.Feet - m.Bomb.Position).sqrMagnitude < 4f)
+            float defuseRadius = Game.Data.Game.bomb.interactRadius;
+            if (m.Bomb.State == BombState.Planted && me.Side == Side.Defense && (me.Feet - m.Bomb.Position).sqrMagnitude <= defuseRadius * defuseRadius)
                 return $"Hold {interact} to defuse" + (me.Record.loadout.hasDefuseKit ? " (kit)" : "");
             if (m.Effects.NearestPickup(me.Feet, 1.8f) >= 0) return $"Press {interact} to pick up the weapon";
             return "";
@@ -529,6 +570,11 @@ namespace TacticalShooter.UI
         readonly RawImage image;
         readonly List<Image> dots = new List<Image>();
         MapGrid grid;
+        // Which enemies the team can see is re-checked 10 times a second, not every frame:
+        // it costs up to one line-of-sight test per (teammate, enemy) pair.
+        const float SpotInterval = 0.1f;
+        readonly HashSet<TacticalCharacter> spotted = new HashSet<TacticalCharacter>();
+        float spotTimer;
 
         public Minimap(RectTransform parent)
         {
@@ -588,11 +634,19 @@ namespace TacticalShooter.UI
             var rect = image.rectTransform.rect;
             int used = 0;
             var vis = Game.Data.Game.visuals;
+            spotTimer -= Time.unscaledDeltaTime;
+            if (spotTimer <= 0f)
+            {
+                spotTimer = SpotInterval;
+                spotted.Clear();
+                foreach (var c in m.AllCharacters)
+                    if (c.Alive && c.Team != local.team && SeenByTeam(m, c, local.team)) spotted.Add(c);
+            }
             foreach (var c in m.AllCharacters)
             {
                 if (!c.Alive) continue;
                 bool enemy = c.Team != local.team;
-                if (enemy && c.RevealedUntil <= m.Time && !SeenByTeam(m, c, local.team)) continue;
+                if (enemy && c.RevealedUntil <= m.Time && !spotted.Contains(c)) continue;
                 var dot = Dot(used++);
                 Color color = enemy ? UIFactory.Accent : Prims.ToColor(c.Side == Side.Attack ? vis.attackColor : vis.defenseColor);
                 if (c.Record.isLocal) color = Color.white;
@@ -602,7 +656,10 @@ namespace TacticalShooter.UI
                 dot.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -c.Yaw + 45f);
             }
             var bomb = m.Bomb;
-            if (bomb.State == BombState.Planted || bomb.State == BombState.Dropped || (bomb.State == BombState.Carried && bomb.Carrier != null && bomb.Carrier.Team == local.team))
+            // Same visibility as the world marker: a dropped bomb is only shown to the attackers.
+            bool attacking = m.SideOf(local) == Side.Attack;
+            if (bomb.State == BombState.Planted || (bomb.State == BombState.Dropped && attacking) ||
+                (bomb.State == BombState.Carried && bomb.Carrier != null && bomb.Carrier.Team == local.team))
             {
                 var dot = Dot(used++);
                 dot.color = Prims.ToColor(vis.bombColor);

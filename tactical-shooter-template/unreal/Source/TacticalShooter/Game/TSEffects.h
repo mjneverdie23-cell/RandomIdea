@@ -37,8 +37,9 @@ struct FTSEffectsWorld
 	struct FSmoke { FVector Center; float Radius = 0.f; float MaxRadius = 0.f; float TimeLeft = 0.f; TWeakObjectPtr<ATSShapeActor> Actor; };
 	struct FFire { ATSCharacter* Owner = nullptr; const FTSAbilityDef* Def = nullptr; FVector Center; float Radius = 0.f; float TimeLeft = 0.f; float TickTimer = 0.f; TWeakObjectPtr<ATSShapeActor> Actor; };
 	struct FBarrier { float TimeLeft = 0.f; TArray<FTSCell> Cells; TWeakObjectPtr<ATSShapeActor> Actor; };
-	struct FPickup { FTSWeaponInstance Weapon; FVector Position; TWeakObjectPtr<ATSShapeActor> Actor; };
-	struct FTemp { float Life = 0.f; float TimeLeft = 0.f; FVector FromScale; FVector ToScale; TWeakObjectPtr<ATSShapeActor> Actor; };
+	/** DroppedBy: who dropped it on purpose; they only pick it up by walking over it after stepping away. */
+	struct FPickup { FTSWeaponInstance Weapon; FVector Position; TWeakObjectPtr<ATSShapeActor> Actor; ATSCharacter* DroppedBy = nullptr; };
+	struct FTemp { float Life = 0.f; float TimeLeft = 0.f; FVector FromScale; FVector ToScale; ETSShape Shape = ETSShape::Cube; TWeakObjectPtr<ATSShapeActor> Actor; };
 
 	ATSGameMode* Mode = nullptr;
 	TArray<FProjectile> Projectiles;
@@ -57,7 +58,7 @@ struct FTSEffectsWorld
 	bool SmokeBlocks(const FVector& A, const FVector& B) const;
 	bool InsideSmoke(const FVector& P) const;
 
-	void SpawnPickup(const FTSWeaponInstance& Weapon, const FVector& At);
+	void SpawnPickup(const FTSWeaponInstance& Weapon, const FVector& At, ATSCharacter* DroppedBy = nullptr);
 	/** Interact near a weapon: swap it with the one in the same slot. */
 	bool TrySwap(ATSCharacter* C);
 	int32 NearestPickup(const FVector& P, float MaxDistanceCm) const;
@@ -71,9 +72,18 @@ struct FTSEffectsWorld
 
 private:
 	ATSShapeActor* SpawnShape(ETSShape Shape, const FVector& At, const FLinearColor& Color, const FVector& ScaleMetres, bool bCollision = false, const FRotator& Rotation = FRotator::ZeroRotator);
-	void AddTemp(ATSShapeActor* Actor, float Seconds, const FVector& From, const FVector& To);
+	/** A shape that scales From -> To (metres) over Seconds, then goes back to the pool. */
+	void AddTemp(ETSShape Shape, const FVector& At, const FLinearColor& Color, float Seconds, const FVector& From, const FVector& To,
+		const FRotator& Rotation = FRotator::ZeroRotator);
+	void ReleaseTemp(const FTemp& T);
 	void Detonate(const FProjectile& P);
 	void Flash(ATSCharacter* Owner, const FVector& Pos, const FTSAbilityDef& A);
 	void GiveTo(ATSCharacter* C, int32 Index);
 	static void Kill(const TWeakObjectPtr<ATSShapeActor>& Actor);
+
+	/**
+	 * Hidden short-lived shapes (tracers, flashes, impacts) per ETSShape, reused instead of
+	 * spawning and destroying an actor for every shot.
+	 */
+	TArray<TWeakObjectPtr<ATSShapeActor>> TempPool[3];
 };

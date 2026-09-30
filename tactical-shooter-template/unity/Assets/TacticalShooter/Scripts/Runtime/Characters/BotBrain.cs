@@ -155,7 +155,24 @@ namespace TacticalShooter
             var flow = match.Flow;
             if (flow.Phase != MatchPhase.Live)
             {
-                // Buy phase / round end: look around a little, nothing else.
+                // Round end / halftime: no objectives, but shoot back at anyone in sight, so the
+                // seconds before the next round are not free kills. Buy phase: look around.
+                if (flow.Phase == MatchPhase.RoundEnd || flow.Phase == MatchPhase.Halftime)
+                {
+                    Perceive(dt);
+                    if (target != null)
+                    {
+                        var defend = Intent.Idle(yaw, pitch);
+                        Vector3 defendMove = Vector3.zero;
+                        Aim(dt);
+                        Fight(dt, ref defend, ref defendMove);
+                        ManageWeapons(ref defend);
+                        ToMoveIntent(defendMove, ref defend);
+                        defend.yaw = yaw;
+                        defend.pitch = pitch;
+                        return defend;
+                    }
+                }
                 yaw = Mathf.MoveTowardsAngle(yaw, holdYaw, 60f * dt);
                 return Intent.Idle(yaw, pitch);
             }
@@ -600,7 +617,7 @@ namespace TacticalShooter
             if (target != null && w.CurrentSlot == 0 && primary.mag == 0 && secondary != null && secondary.mag > 0) intent.selectSlot = 1;
             else if (target == null && primaryHasAmmo && w.CurrentSlot != 0) intent.selectSlot = 0;
             else if (w.CurrentSlot == 0 && !primaryHasAmmo) intent.selectSlot = secondaryHasAmmo ? 1 : 2;
-            else if (w.CurrentSlot == 1 && !secondaryHasAmmo && !primaryHasAmmo) intent.selectSlot = 2;
+            else if (w.CurrentSlot == 1 && !secondaryHasAmmo) intent.selectSlot = primaryHasAmmo ? 0 : 2;
             else if (w.CurrentSlot == 2 && (primaryHasAmmo || secondaryHasAmmo)) intent.selectSlot = primaryHasAmmo ? 0 : 1;
             var cur = w.Current;
             if (target == null && cur != null && cur.def.magazineSize > 0 && cur.mag < cur.def.magazineSize * 0.4f && cur.reserve > 0) intent.reload = true;

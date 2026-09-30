@@ -100,7 +100,7 @@ void FTSMatchFlow::NotifyBombDefused()
 }
 
 bool FTSMatchFlow::EvaluateRoundEnd(bool bDetonated, bool bDefused, bool bPlanted, int32 AliveAttackers, int32 AliveDefenders,
-	float RoundTimeLeft, ETSSide& OutWinner, ETSRoundEndReason& OutReason)
+	float InRoundTimeLeft, ETSSide& OutWinner, ETSRoundEndReason& OutReason)
 {
 	OutWinner = ETSSide::Defense;
 	OutReason = ETSRoundEndReason::None;
@@ -108,7 +108,7 @@ bool FTSMatchFlow::EvaluateRoundEnd(bool bDetonated, bool bDefused, bool bPlante
 	if (bDefused) { OutWinner = ETSSide::Defense; OutReason = ETSRoundEndReason::BombDefused; return true; }
 	if (!bPlanted && AliveAttackers == 0) { OutWinner = ETSSide::Defense; OutReason = ETSRoundEndReason::Elimination; return true; }
 	if (AliveDefenders == 0) { OutWinner = ETSSide::Attack; OutReason = ETSRoundEndReason::Elimination; return true; }
-	if (!bPlanted && RoundTimeLeft <= 0.f) { OutWinner = ETSSide::Defense; OutReason = ETSRoundEndReason::TimeExpired; return true; }
+	if (!bPlanted && InRoundTimeLeft <= 0.f) { OutWinner = ETSSide::Defense; OutReason = ETSRoundEndReason::TimeExpired; return true; }
 	return false;
 }
 

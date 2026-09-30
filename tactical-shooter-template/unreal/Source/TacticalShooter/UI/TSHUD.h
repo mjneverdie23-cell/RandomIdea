@@ -58,6 +58,7 @@ private:
 	float LabelWidth(const FString& Text, float Size, bool bBold = false);
 	FLinearColor SideColor(ATSGameMode* M, ETSTeam Team) const;
 	FVector2D ToMinimap(const FVector& World) const;
+	void UpdateSpotted(ATSGameMode* M, ETSTeam Team);
 
 	TWeakObjectPtr<ATSGameMode> BoundMode;
 	FDelegateHandle KillHandle, DamageHandle, AnnounceHandle;
@@ -71,6 +72,10 @@ private:
 	int32 FpsFrames = 0;
 	FString FpsText;
 	float Scale = 1.f;
+
+	/** Enemies a teammate can see; refreshed 10 times a second (one sight test per pair). */
+	TSet<int32> SpottedIds;
+	float NextSpotTime = 0.f;
 
 	UPROPERTY() TObjectPtr<UTexture2D> MinimapTexture;
 	FString MinimapFor;

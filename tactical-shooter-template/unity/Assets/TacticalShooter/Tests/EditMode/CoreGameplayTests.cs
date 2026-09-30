@@ -119,6 +119,18 @@ namespace TacticalShooter.Tests
         }
 
         [Test]
+        public void EquipmentSideRestrictsWhoCanBuyIt()
+        {
+            var d = GameData.Load(TestData.ReadShared); // private copy: this test edits it
+            var agent = d.Agents[0];
+            var armor = d.EquipmentItem("light_shield");
+            armor.side = "defense";
+            var lo = new Loadout(d.Game.loadout.defaultSecondary);
+            Assert.AreEqual(ShopResult.WrongSide, ShopRules.Check(d, agent, Side.Attack, lo, 9000, armor.id));
+            Assert.AreEqual(ShopResult.Ok, ShopRules.Check(d, agent, Side.Defense, lo, 9000, armor.id));
+        }
+
+        [Test]
         public void ArmourTakesTheFirstHitsOfARifle()
         {
             var rifle = D.Weapon("valkyrie");

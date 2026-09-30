@@ -55,6 +55,8 @@ void ATSCharacter::Init(ATSGameMode* InMode, FTSPlayerRecord* InRecord)
 
 	const FTSMovementSettings& M = Config.Movement;
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	// The game mode hands out intents in its tick; moving after it removes a frame of input lag.
+	MoveComp->AddTickPrerequisiteActor(InMode);
 	MoveComp->MaxAcceleration = M.Acceleration * 100.f;
 	MoveComp->BrakingDecelerationWalking = M.Deceleration * 100.f;
 	MoveComp->GravityScale = M.Gravity / 9.81f;
@@ -161,7 +163,7 @@ void ATSCharacter::Respawn(const FVector& InFeet, float InYaw)
 	RecoilPitch = RecoilYaw = 0.f;
 	CrouchAmount = 0.f;
 	SpeedMultiplier = FireRateMultiplier = DamageTakenMultiplier = 1.f;
-	BuffTimeLeft = HealTimeLeft = 0.f;
+	BuffTimeLeft = HealTimeLeft = DashTimeLeft = 0.f;
 	BlindTimeLeft = BlindDuration = 0.f;
 	RevealedUntil = 0.f;
 	LastDamagedTime = -99.f;
@@ -236,7 +238,23 @@ void ATSCharacter::Move(const FTSIntent& Intent, float Dt)
 	MoveComp->MaxWalkSpeed = Speed;
 	MoveComp->MaxWalkSpeedCrouched = Speed;
 
-	if (bCanMove)
+	if (DashTimeLeft > 0.f)
+	{
+		// Hold the dash velocity for its duration (distance / duration, like the Unity project),
+		// with the speed cap raised to it, then clamp back to the normal speed.
+		DashTimeLeft -= Dt;
+		const float DashSpeed = (float)DashVelocity.Size();
+		MoveComp->MaxWalkSpeed = MoveComp->MaxWalkSpeedCrouched = FMath::Max(Speed, DashSpeed);
+		MoveComp->Velocity = FVector(DashVelocity.X, DashVelocity.Y, MoveComp->Velocity.Z);
+		AddMovementInput(DashVelocity.GetSafeNormal(), 1.f);
+		if (DashTimeLeft <= 0.f)
+		{
+			MoveComp->MaxWalkSpeed = MoveComp->MaxWalkSpeedCrouched = Speed;
+			const FVector Horizontal = FVector(DashVelocity.X, DashVelocity.Y, 0.f).GetClampedToMaxSize(Speed);
+			MoveComp->Velocity = FVector(Horizontal.X, Horizontal.Y, MoveComp->Velocity.Z);
+		}
+	}
+	else if (bCanMove)
 	{
 		const FRotator YawRot(0.f, Yaw, 0.f);
 		AddMovementInput(FRotationMatrix(YawRot).GetUnitAxis(EAxis::X), Intent.MoveForward);
@@ -368,7 +386,8 @@ void ATSCharacter::StartDash(const FTSAbilityDef& A)
 	FVector Dir = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X) * LastIntent.MoveForward + FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y) * LastIntent.MoveRight;
 	if (Dir.SizeSquared() < 0.01f) Dir = YawRot.Vector();
 	const float Duration = FMath::Max(0.05f, A.Duration);
-	LaunchCharacter(Dir.GetSafeNormal() * (A.Distance / Duration) * 100.f, true, false);
+	DashVelocity = Dir.GetSafeNormal2D() * (A.Distance / Duration) * 100.f;
+	DashTimeLeft = Duration;
 }
 
 void ATSCharacter::StartHeal(const FTSAbilityDef& A)

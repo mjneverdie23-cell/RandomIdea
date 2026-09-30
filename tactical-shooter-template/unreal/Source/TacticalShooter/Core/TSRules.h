@@ -130,6 +130,8 @@ namespace TSShop
 	/** Round start: signature abilities refill. */
 	TACTICALSHOOTER_API void GrantFreeCharges(const FTSAgentDef* Agent, FTSLoadout& Lo);
 	TACTICALSHOOTER_API int32 AbilitySlotOf(const FTSAgentDef* Agent, const FString& AbilityId);
+	/** equipment.json "side": "any", "attack" or "defense". */
+	TACTICALSHOOTER_API bool AllowedOnSide(const FString& ItemSide, ETSSide Side);
 }
 
 namespace TSBotBuy

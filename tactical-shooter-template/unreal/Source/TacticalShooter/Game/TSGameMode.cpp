@@ -7,7 +7,9 @@
 #include "UI/TSHUD.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "CollisionQueryParams.h"
 #include "Engine/World.h"
+#include "WorldCollision.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -261,12 +263,27 @@ void ATSGameMode::HandleDropAndSwap(ATSCharacter* C, const FTSIntent& Intent)
 			const FTSWeaponInstance Dropped = C->Weapons.Remove(Slot);
 			if (Slot == ETSWeaponSlot::Primary) C->Record->Loadout.PrimaryId.Empty();
 			else C->Record->Loadout.SecondaryId.Empty();
-			Effects.SpawnPickup(Dropped, C->Feet() + C->GetActorForwardVector() * 120.f);
+			Effects.SpawnPickup(Dropped, DropPoint(C, 120.f), C);
 		}
 	}
+	const double DefuseRadiusCm = UTSGameSubsystem::Get(this)->Data().Game.Bomb.InteractRadius * 100.0;
 	const bool bBusyWithBomb = Bomb.IsBusy(C) || (C->bCarryingBomb && World.SiteAt(C->Feet()) >= 0) ||
-		(Bomb.State == ETSBombState::Planted && C->Side() == ETSSide::Defense && FVector::DistSquared2D(C->Feet(), Bomb.Position) < FMath::Square(200.0));
+		(Bomb.State == ETSBombState::Planted && C->Side() == ETSSide::Defense && FVector::DistSquared2D(C->Feet(), Bomb.Position) <= FMath::Square(DefuseRadiusCm));
 	if (Intent.bInteract && !bWasInteract && !bBusyWithBomb) Effects.TrySwap(C);
+}
+
+FVector ATSGameMode::DropPoint(const ATSCharacter* C, float DistanceCm) const
+{
+	const FVector Dir = C->GetActorForwardVector().GetSafeNormal2D();
+	const FVector From = C->Feet() + FVector(0.f, 0.f, 30.f);
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(TSDrop), false, C);
+	FHitResult Hit;
+	if (GetWorld()->SweepSingleByObjectType(Hit, From, From + Dir * DistanceCm, FQuat::Identity, Objects, FCollisionShape::MakeSphere(10.f), Params))
+		DistanceCm = FMath::Max(0.f, (float)Hit.Distance - 15.f);
+	return C->Feet() + Dir * DistanceCm;
 }
 
 // ------------------------------------------------------------------------------ flow events
@@ -493,7 +510,10 @@ ETSShopResult ATSGameMode::TryBuy(FTSPlayerRecord& P, const FString& ItemId)
 				const FTSWeaponInstance Old = C->Weapons.Replace(FTSWeaponInstance(Def));
 				if (!O.DroppedWeaponId.IsEmpty() && Old.IsValid()) Effects.SpawnPickup(Old, C->Feet() + C->GetActorForwardVector() * 80.f);
 			}
-			C->Armor = P.Loadout.Armor;
+			// Only an armour purchase changes armour. The loadout copy is stale during the buy
+			// grace period (damage, Fortify), so copying it for other items would undo those.
+			const FTSEquipmentDef* E = D.EquipmentItem(ItemId);
+			if (E != nullptr && E->IsArmor()) C->Armor = P.Loadout.Armor;
 		}
 	}
 	if (P.bIsLocal) PlaySound2D(Result == ETSShopResult::Ok ? TEXT("buy") : TEXT("ui_error"));
@@ -515,7 +535,8 @@ ETSShopResult ATSGameMode::TrySell(FTSPlayerRecord& P, const FString& ItemId)
 			if (Now.IsEmpty()) C->Weapons.Remove(Def->GetSlot());
 			else C->Weapons.Replace(FTSWeaponInstance(D.Weapon(Now)));
 		}
-		C->Armor = P.Loadout.Armor;
+		const FTSEquipmentDef* E = D.EquipmentItem(ItemId);
+		if (E != nullptr && E->IsArmor()) C->Armor = P.Loadout.Armor;
 	}
 	if (P.bIsLocal) PlaySound2D(O.Ok() ? TEXT("buy") : TEXT("ui_error"));
 	return O.Result;

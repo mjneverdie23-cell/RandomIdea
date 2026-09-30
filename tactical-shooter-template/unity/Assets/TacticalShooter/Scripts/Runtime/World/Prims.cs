@@ -47,10 +47,16 @@ namespace TacticalShooter
             return mat;
         }
 
+        static readonly Dictionary<string, Color> parsedColors = new Dictionary<string, Color>();
+
+        /// <summary>Config hex colour -> Color. Memoised: the HUD asks for the same few colours every frame.</summary>
         public static Color ToColor(string hex)
         {
+            if (hex != null && parsedColors.TryGetValue(hex, out var cached)) return cached;
             var c = ColorHex.Parse(hex);
-            return new Color(c.r, c.g, c.b, c.a);
+            var color = new Color(c.r, c.g, c.b, c.a);
+            if (hex != null) parsedColors[hex] = color;
+            return color;
         }
 
         /// <summary>A visual-only shape (no collider) parented under parent.</summary>

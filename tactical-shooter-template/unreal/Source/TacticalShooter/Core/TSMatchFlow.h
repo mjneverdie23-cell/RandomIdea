@@ -60,7 +60,7 @@ public:
 
 	/** GAME_RULES.md 2.1. Returns true when the round is over. */
 	static bool EvaluateRoundEnd(bool bDetonated, bool bDefused, bool bPlanted, int32 AliveAttackers, int32 AliveDefenders,
-		float RoundTimeLeft, ETSSide& OutWinner, ETSRoundEndReason& OutReason);
+		float InRoundTimeLeft, ETSSide& OutWinner, ETSRoundEndReason& OutReason);
 
 	ETSSide SideOf(ETSTeam T) const { return T == ETSTeam::A ? SideOfA : TSIds::Other(SideOfA); }
 	ETSTeam TeamOn(ETSSide S) const { return SideOfA == S ? ETSTeam::A : ETSTeam::B; }

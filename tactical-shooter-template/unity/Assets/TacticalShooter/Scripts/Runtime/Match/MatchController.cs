@@ -201,12 +201,27 @@ namespace TacticalShooter
                 {
                     var dropped = ch.Weapons.Remove(slot);
                     if (slot == WeaponSlot.Primary) ch.Record.loadout.primaryId = null; else ch.Record.loadout.secondaryId = null;
-                    Effects.SpawnPickup(dropped, ch.Feet + ch.transform.forward * 1.2f);
+                    Effects.SpawnPickup(dropped, DropPoint(ch, 1.2f), ch);
                 }
             }
+            float defuseRadius = Config.bomb.interactRadius;
             bool busyWithBomb = Bomb.IsBusy(ch) || (ch.CarryingBomb && WorldMap.SiteAt(ch.Feet) >= 0) ||
-                                (Bomb.State == BombState.Planted && ch.Side == Side.Defense && (ch.Feet - Bomb.Position).sqrMagnitude < 4f);
+                                (Bomb.State == BombState.Planted && ch.Side == Side.Defense &&
+                                 (ch.Feet - Bomb.Position).sqrMagnitude <= defuseRadius * defuseRadius);
             if (intent.interact && !wasInteract && !busyWithBomb) Effects.TrySwap(ch);
+        }
+
+        /// <summary>
+        /// Where something the character drops lands: up to distance in front of the feet, stopped
+        /// short of walls and cover so it can always be picked up again.
+        /// </summary>
+        public Vector3 DropPoint(TacticalCharacter ch, float distance)
+        {
+            Vector3 dir = ch.transform.forward;
+            Vector3 from = ch.Feet + Vector3.up * 0.3f;
+            if (Physics.SphereCast(from, 0.1f, dir, out RaycastHit hit, distance, Layers.WorldMask, QueryTriggerInteraction.Ignore))
+                distance = Mathf.Max(0f, hit.distance - 0.15f);
+            return ch.Feet + dir * distance;
         }
 
         // ---- flow events ----------------------------------------------------------------------
@@ -420,7 +435,9 @@ namespace TacticalShooter
                     var old = ch.Weapons.Replace(new WeaponInstance(def));
                     if (o.droppedWeaponId != null && old != null) Effects.SpawnPickup(old, ch.Feet + ch.transform.forward * 0.8f);
                 }
-                ch.Armor = rec.loadout.armor;
+                // Only an armour purchase changes armour. The loadout copy is stale during the buy
+                // grace period (damage, Fortify), so copying it for other items would undo those.
+                if (IsArmor(itemId)) ch.Armor = rec.loadout.armor;
             }
             return Report(rec, itemId, o.result);
         }
@@ -441,10 +458,12 @@ namespace TacticalShooter
                     if (now == null) ch.Weapons.Remove(def.Slot);
                     else ch.Weapons.Replace(new WeaponInstance(Data.Weapon(now)));
                 }
-                ch.Armor = rec.loadout.armor;
+                if (IsArmor(itemId)) ch.Armor = rec.loadout.armor;
             }
             return Report(rec, itemId, o.result);
         }
+
+        static bool IsArmor(string itemId) => Data.EquipmentItem(itemId)?.type == "armor";
 
         ShopResult Report(PlayerRecord rec, string itemId, ShopResult result)
         {

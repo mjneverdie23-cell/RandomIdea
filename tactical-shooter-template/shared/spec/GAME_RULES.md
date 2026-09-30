@@ -140,8 +140,9 @@ floats and the 64-bit reference (for example `55 * 2.9` is `159.4999...` in one 
 
 - Frag: `raw = ability.damage * max(0, 1 - distance / ability.radius)`, needs line of sight
   from the explosion to the target's chest, armour penetration 0.
-- Fire zone: `ability.damage` per second to enemies whose feet are within `ability.radius`
-  horizontally (0.25 s ticks), armour penetration 0.
+- Fire zone: every 0.25 s, `ability.damage * 0.25` raw damage to enemies whose feet are within
+  `ability.radius` horizontally, armour penetration 0. Each tick is rounded by 4.3, so the rate
+  is only exactly `ability.damage` per second when it is a multiple of 4 (35 gives 9 per tick).
 - Bomb: `bomb.blastDamage * max(0, 1 - distance / bomb.blastRadius)`, ignores walls,
   armour penetration 1 (armour does not help).
 
@@ -201,9 +202,11 @@ returns to zero at `recoilRecovery` degrees per second.
 - Weapons: buying a weapon for an occupied slot replaces it. If the replaced weapon was bought
   this round it is refunded, and the refund counts towards the price. Otherwise a weapon with a
   price is dropped on the ground and a free default weapon simply vanishes.
+- Equipment (armour and the defuse kit) with a `side` other than `any` fails with `wrongSide`
+  for the other side.
 - Armour: can be bought when current armour is below the item's `amount`; sets armour to
   `amount`. An armour bought earlier this round is refunded the same way as a weapon.
-- Defuse kit: defenders only, one per player.
+- Defuse kit: defenders only (whatever its `side` says), one per player.
 - Abilities: `price` per charge up to `maxCharges`.
 - Every purchase is recorded for the round with what it replaced. Sell-back
   (`economy.sellBackDuringBuyPhase`, BuyPhase only) refunds the latest purchase of an item that
@@ -215,8 +218,8 @@ returns to zero at `recoilRecovery` degrees per second.
 
 ## 7. Death and carry-over
 
-On death: primary is dropped as a pickup (or the secondary if there is no primary), the
-bomb is dropped, loadout becomes: no primary, default secondary, armour 0, no kit.
+On death: primary is dropped as a pickup (or, if there is no primary, the secondary when it
+has a price; a free default sidearm vanishes, as in the shop), the bomb is dropped, loadout becomes: no primary, default secondary, armour 0, no kit.
 Ability charges and ultimate points are kept. Players do not respawn until the next round.
 
 ## 8. Ultimates
@@ -227,8 +230,10 @@ the player's points, capped at the agent's ultimate cost. Using the ultimate res
 ## 9. Bomb
 
 - One random living attacker receives the bomb at the start of each round.
-- The carrier can drop it; it is dropped on death. Any living attacker picks it up by walking
-  within `bomb.pickupRadius`.
+- The carrier can drop it (it lands up to `bomb.pickupRadius` in front of them, short of walls);
+  it is dropped on death. Any living attacker picks it up by walking within `bomb.pickupRadius`,
+  except that whoever dropped it must first step out of that radius. Dropped weapons follow the
+  same rule for the player who dropped them.
 - **Plant**: carrier, alive, grounded, feet inside a bomb-site cell, holding Interact for
   `bomb.plantSeconds`. Moving is blocked while planting; releasing resets progress.
 - **Defuse**: a living defender within `bomb.interactRadius` holds Interact for

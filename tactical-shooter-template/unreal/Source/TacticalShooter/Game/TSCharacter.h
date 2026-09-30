@@ -120,6 +120,9 @@ private:
 	float CrouchAmount = 0.f;
 	float HealPerSecond = 0.f;
 	float HealAccumulator = 0.f;
+	float DashTimeLeft = 0.f;
+	/** Horizontal dash velocity, cm/s. */
+	FVector DashVelocity = FVector::ZeroVector;
 	float FootstepTimer = 0.f;
 	bool bWasGrounded = true;
 	float CameraFov = 103.f;

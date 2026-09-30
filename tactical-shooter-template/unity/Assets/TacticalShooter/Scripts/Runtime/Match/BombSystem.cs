@@ -26,6 +26,8 @@ namespace TacticalShooter
 
         float beepTimer;
         bool lightOn;
+        /// <summary>Who just dropped the bomb on purpose; they must step away before it can be picked up again.</summary>
+        TacticalCharacter droppedBy;
 
         BombSettings Settings => Game.Data.Game.bomb;
 
@@ -47,7 +49,7 @@ namespace TacticalShooter
         {
             if (Carrier != null) Carrier.SetCarryingBomb(false);
             State = BombState.None;
-            Carrier = Planter = Defuser = null;
+            Carrier = Planter = Defuser = droppedBy = null;
             PlantProgress = DefuseProgress = 0f;
             Site = -1;
             bombObject.SetActive(false);
@@ -59,16 +61,19 @@ namespace TacticalShooter
         {
             State = BombState.Carried;
             Carrier = c;
+            droppedBy = null;
             c.SetCarryingBomb(true);
             bombObject.SetActive(false);
             Game.Events.RaiseBombStatus(c.Record.name + " has the bomb");
         }
 
-        public void Drop(Vector3 at)
+        /// <summary>by: the character who dropped it on purpose (null when it falls from a dead carrier).</summary>
+        public void Drop(Vector3 at, TacticalCharacter by = null)
         {
             if (State != BombState.Carried) return;
             Carrier.SetCarryingBomb(false);
             Carrier = null;
+            droppedBy = by;
             Planter = null;
             PlantProgress = 0f;
             State = BombState.Dropped;
@@ -89,7 +94,7 @@ namespace TacticalShooter
                     if (c == null || !c.Alive) { Drop(c != null ? c.Feet : Position); break; }
                     if (c.LastIntent.drop)
                     {
-                        Drop(c.Feet + c.transform.forward * 1.2f);
+                        Drop(match.DropPoint(c, Settings.pickupRadius), c);
                         break;
                     }
                     int site = match.WorldMap.SiteAt(c.Feet);
@@ -112,7 +117,15 @@ namespace TacticalShooter
                     {
                         if (c.Side != Side.Attack) continue;
                         Vector3 d = c.Feet - Position;
-                        if (new Vector2(d.x, d.z).sqrMagnitude <= Settings.pickupRadius * Settings.pickupRadius) { GiveTo(c); break; }
+                        bool inReach = new Vector2(d.x, d.z).sqrMagnitude <= Settings.pickupRadius * Settings.pickupRadius;
+                        if (c == droppedBy)
+                        {
+                            // The dropper has to leave the pickup radius first, or the bomb would bounce
+                            // straight back to them (it lands right at the edge of the radius).
+                            if (!inReach) droppedBy = null;
+                            continue;
+                        }
+                        if (inReach) { GiveTo(c); break; }
                     }
                     break;
                 case BombState.Planted:
