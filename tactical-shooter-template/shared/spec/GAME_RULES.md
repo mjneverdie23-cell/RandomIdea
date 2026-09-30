@@ -145,6 +145,17 @@ floats and the 64-bit reference (for example `55 * 2.9` is `159.4999...` in one 
 - Bomb: `bomb.blastDamage * max(0, 1 - distance / bomb.blastRadius)`, ignores walls,
   armour penetration 1 (armour does not help).
 
+### 4.5 Melee and flashes
+
+- Melee: a 0.35 m sphere swept from the eyes along the aim, `weapon.maxRange` long and
+  stopped by the first wall. The first enemy it touches takes `weapon.damage` as Body damage,
+  doubled from behind (a backstab: `dot(victimForward, horizontalDirection(attacker -> victim)) > 0.5`).
+- Flash: every living character except the thrower whose eyes are within `ability.radius` of
+  the pop, with line of sight to it, is blinded for
+  `ability.duration * facing * (1 - 0.5 * distance / ability.radius)` seconds, where
+  `facing = 1` within 30 degrees of the aim direction, `0` beyond 110 degrees and linear in
+  between. Results under 0.2 s are ignored, and a new blind only replaces a shorter remaining one.
+
 ## 5. Weapons
 
 ### 5.1 Spread (degrees, half-angle of the cone)

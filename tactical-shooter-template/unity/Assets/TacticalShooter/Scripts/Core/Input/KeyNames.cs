@@ -91,7 +91,10 @@ namespace TacticalShooter.Core
         }
     }
 
-    /// <summary>Action -> key lookup with the player's overrides applied on top of input.json.</summary>
+    /// <summary>
+    /// Action -> key lookup with the player's overrides applied on top of input.json. An override
+    /// entry carries both keys; an empty altKey means "no alternative key".
+    /// </summary>
     public sealed class KeyMap
     {
         readonly Dictionary<string, KeyBinding> bindings = new Dictionary<string, KeyBinding>();

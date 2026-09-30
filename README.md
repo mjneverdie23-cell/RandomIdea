@@ -56,6 +56,11 @@ See [HANDBOOK.md](HANDBOOK.md) §2-3 for the full map of the codebase.
 `web-prototype/` holds the earlier browser/three.js version of the same game. It still runs
 (`npm start`), and the Godot port was built from it. It is not the main project.
 
+`tactical-shooter-template/` is a separate, engine-portable **CS / Valorant-style template**
+(5v5 bomb defusal with agents, economy, bots and full menus) implemented twice from one set of
+shared rules and data: a **Unity 6** project and an **Unreal Engine 5** C++ project. See
+[tactical-shooter-template/README.md](tactical-shooter-template/README.md).
+
 ## Licence
 
 MIT (see `LICENSE`).

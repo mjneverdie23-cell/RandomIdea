@@ -179,7 +179,8 @@ namespace TacticalShooter
             var entry = list.Find(k => k.action == action);
             if (entry == null)
             {
-                entry = new KeyBinding { action = action, key = "", altKey = null };
+                // An override always carries both keys (empty altKey = no alternative key).
+                entry = new KeyBinding { action = action, key = Game.Keys.Key(action), altKey = Game.Keys.AltKey(action) };
                 list.Add(entry);
             }
             if (alt) entry.altKey = key; else entry.key = key;

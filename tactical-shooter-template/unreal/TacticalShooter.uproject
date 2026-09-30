@@ -1,0 +1,13 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.5",
+	"Category": "",
+	"Description": "Tactical shooter template (CS / Valorant style bomb defusal) built from basic shapes. Shares its rules and data with the Unity project in this repository.",
+	"Modules": [
+		{
+			"Name": "TacticalShooter",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}

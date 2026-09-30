@@ -60,8 +60,9 @@ namespace TacticalShooter
                     continue;
                 }
                 if (ch == attacker || !ch.Alive || (!FriendlyFire && ch.Team == attacker.Team)) continue;
-                Vector3 victimForward = ch.transform.forward;
-                bool backstab = Vector3.Dot(victimForward, (ch.Feet - attacker.Feet).normalized) > 0.5f;
+                Vector3 toVictim = ch.Feet - attacker.Feet;
+                toVictim.y = 0f;
+                bool backstab = Vector3.Dot(ch.transform.forward, toVictim.normalized) > 0.5f;
                 ch.ApplyDamage(w.damage * (backstab ? 2f : 1f), w.armorPenetration, attacker, w.id, HitZone.Body, eye);
                 match.Effects.BloodPuff(ch.ChestPosition);
                 return;
