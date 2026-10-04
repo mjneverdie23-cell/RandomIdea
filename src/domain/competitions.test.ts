@@ -73,9 +73,27 @@ describe('resolveCompetition', () => {
     expect(resolveCompetition('LCK AS')).toBeNull();
   });
 
+  it('resolves CBLOL for the predictor only', () => {
+    // `CBLOL` is the spelling in Oracle's Elixir; the long names are what the
+    // league has been called elsewhere.
+    for (const raw of ['CBLOL', 'cblol', 'CBLOL Brazil', 'Campeonato Brasileiro de League of Legends']) {
+      expect(resolveCompetition(raw)).toBe('CBLOL');
+    }
+    expect(isQuizCompetition('CBLOL')).toBe(false);
+    expect(QUIZ_COMPETITION_IDS).not.toContain('CBLOL');
+    expect(COMPETITION_IDS).toContain('CBLOL');
+  });
+
+  it('keeps the Brazilian academy out', () => {
+    expect(resolveCompetition('CBLOL Academy')).toBeNull();
+    expect(resolveCompetition('CBLOLA')).toBeNull();
+    // The 2025 league the Brazilian teams played in also carried the LLA sides.
+    expect(resolveCompetition('LTA South')).toBeNull();
+  });
+
   it('keeps every other competition quizzed', () => {
     for (const id of COMPETITION_IDS) {
-      if (id === 'LCK_CL') continue;
+      if (id === 'LCK_CL' || id === 'CBLOL') continue;
       expect(isQuizCompetition(id)).toBe(true);
     }
   });
@@ -99,7 +117,7 @@ describe('resolveCompetition', () => {
   it('rejects competitions outside the configured set', () => {
     expect(resolveCompetition('LTA North')).toBeNull();
     expect(resolveCompetition('VCS')).toBeNull();
-    expect(resolveCompetition('CBLOL')).toBeNull();
+    expect(resolveCompetition('LJL')).toBeNull();
     expect(resolveCompetition('Demacia Cup')).toBeNull();
     expect(resolveCompetition('')).toBeNull();
     expect(resolveCompetition(null)).toBeNull();

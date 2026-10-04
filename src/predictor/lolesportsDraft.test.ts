@@ -254,6 +254,7 @@ describe('the paste', () => {
     expect(resolveCompetition(competitionFor({ slug: 'lck_challengers_league', name: 'LCK Challengers' }))).toBe('LCK_CL');
     expect(resolveCompetition(competitionFor({ slug: 'first_stand', name: 'First Stand' }))).toBe('FIRST_STAND');
     expect(resolveCompetition(competitionFor({ slug: 'lpl', name: 'LPL' }))).toBe('LPL');
+    expect(resolveCompetition(competitionFor({ slug: 'cblol-brazil', name: 'CBLOL' }))).toBe('CBLOL');
   });
 });
 

@@ -95,7 +95,8 @@ export type CompetitionId =
   | 'MSI'
   | 'FIRST_STAND'
   | 'EWC'
-  | 'LCK_CL';
+  | 'LCK_CL'
+  | 'CBLOL';
 
 export type SeriesFormat = 'BO1' | 'BO3' | 'BO5' | 'UNKNOWN';
 

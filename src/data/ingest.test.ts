@@ -169,6 +169,15 @@ describe('ingestRows', () => {
     expect(result.stats.rejectedByCompetition).toBe(0);
   });
 
+  it('imports CBLOL, also for the predictor alone', () => {
+    const result = ingest([
+      ...gameRows({ gameId: 'BR', league: 'CBLOL' }),
+      ...gameRows({ gameId: 'BRA', league: 'CBLOLA' }),
+    ]);
+    expect(result.games.map((g) => g.competition)).toEqual(['CBLOL']);
+    expect(result.stats.rejectedByCompetition).toBe(1);
+  });
+
   it('drops games with an incomplete draft and reports why', () => {
     const result = ingest(gameRows({ omitPlayerRows: 2 }));
     expect(result.games).toHaveLength(0);

@@ -54,6 +54,18 @@ const LCK_CL_TEAMS: RosterTemplate[] = [
   { team: 'BNK FearX Youth', players: ['Soboro', 'Lonely', 'Jiwoong', 'Taeyeon', 'Execute'] },
 ];
 
+/** CBLOL rosters, as each team last lined up in the 2026 export. */
+const CBLOL_TEAMS: RosterTemplate[] = [
+  { team: 'paiN Gaming', players: ['Boal', 'CarioK', 'Namiru', 'Hena', 'Ceos'] },
+  { team: 'LOUD', players: ['xyno', 'Sinatra', 'Kaze', 'Rabelo', 'uZent'] },
+  { team: 'FURIA', players: ['Guigo', 'Shini', 'Tutsz', 'Ayu', 'JoJo'] },
+  { team: 'Vivo Keyd Stars', players: ['zekas', 'Disamis', 'Mireu', 'Jeskla', 'scamber'] },
+  { team: 'RED Canids', players: ['zynts', 'STEPZ', 'Fuuu', 'Morttheus', 'Manel'] },
+  { team: 'Fluxo W7M', players: ['Zothve', 'Peach', 'cody', 'BAO', 'Momochi'] },
+  { team: 'Leviatan', players: ['Devost', 'Booki', 'Enga', 'Strensh', 'Shiku'] },
+  { team: 'LØS', players: ['Zest', 'Curse', 'Feisty', 'Duduhh', 'Ackerman'] },
+];
+
 const LPL_TEAMS: RosterTemplate[] = [
   { team: 'Bilibili Gaming', players: ['Bin', 'Xun', 'knight', 'Elk', 'ON'] },
   { team: 'JD Gaming', players: ['Xiaoxu', 'Junjia', 'Hongq', 'GALA', 'Vampire'] },
@@ -253,6 +265,17 @@ function buildPlans(): EventPlan[] {
         { split: 'Quarterfinal', playoffs: 1, startDay: 284, endDay: 287, series: 4, bestOf: 5 },
         { split: 'Semifinal', playoffs: 1, startDay: 291, endDay: 292, series: 2, bestOf: 5 },
         { split: 'Final', playoffs: 1, startDay: 298, endDay: 298, series: 1, bestOf: 5 },
+      ],
+    },
+    {
+      // Predictor-only, like LCK CL. Bo3 through the split and Bo5 in the
+      // playoffs, which is how the 2026 export plays out.
+      league: 'CBLOL',
+      year: 2025,
+      pool: CBLOL_TEAMS,
+      blocks: [
+        { split: 'Split 1', playoffs: 0, startDay: 20, endDay: 70, series: 16, bestOf: 3 },
+        { split: 'Split 1', playoffs: 1, startDay: 74, endDay: 82, series: 5, bestOf: 5 },
       ],
     },
   ];

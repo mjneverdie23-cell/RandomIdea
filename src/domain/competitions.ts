@@ -2,7 +2,7 @@
  * Single source of truth for which competitions are eligible.
  *
  * The quiz only ever uses LCK, LEC, LCS, LPL, LCP, Worlds, First Stand, MSI and
- * EWC.
+ * EWC. LCK CL and CBLOL are imported for the predictor alone.
  * Nothing else in the app hardcodes a league string: UI filters, quiz
  * generation and the import report all read this registry, so adding or
  * removing a competition is a one-file change.
@@ -188,6 +188,33 @@ export const COMPETITIONS: CompetitionDefinition[] = [
     // that meant the competition resolved for nobody's real export. The rest
     // are older and third-party spellings.
     aliases: ['LCKC', 'LCK CL', 'LCKCL', 'LCK CHALLENGERS LEAGUE', 'LCK CHALLENGERS'],
+  },
+  {
+    id: 'CBLOL',
+    label: 'CBLOL',
+    short: 'CBLOL',
+    scope: 'regional',
+    accent: '#c8e64c',
+    // Predictor only, like LCK CL: the Brazilian league is here so its teams
+    // can be predicted — and so its players' records follow them to First
+    // Stand, MSI and Worlds — not to become quiz questions.
+    //
+    // No `overridesExclusions`: nothing in the exclusion list catches `CBLOL`,
+    // and the same list keeps `CBLOL Academy` out. `CBLOLA`, the academy's
+    // code in Oracle's Elixir, is simply not an alias.
+    //
+    // Oracle's Elixir writes `CBLOL` and puts the Cup, Split 1 and Split 2 in
+    // the split column (246 games in the 2026 export). In 2025 the Brazilian
+    // teams played in LTA South instead, which is deliberately not an alias:
+    // that league also carried the LLA sides, and `LTA North` resolves to
+    // nothing either.
+    quiz: false,
+    aliases: [
+      'CBLOL',
+      'CBLOL BRAZIL',
+      'CAMPEONATO BRASILEIRO DE LEAGUE OF LEGENDS',
+      'CIRCUITO BRASILEIRO DE LEAGUE OF LEGENDS',
+    ],
   },
 ];
 

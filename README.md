@@ -18,8 +18,8 @@ and nothing hidden.
 
 Games come from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)
 match-data CSVs, filtered to nine competitions: **LCK, LEC, LCS, LPL, LCP,
-Worlds, First Stand, MSI, EWC** — plus **LCK CL**, which is imported for the
-Predictor alone and never appears as a quiz question.
+Worlds, First Stand, MSI, EWC** — plus **LCK CL** and **CBLOL**, which are
+imported for the Predictor alone and never appear as quiz questions.
 
 ---
 
@@ -117,7 +117,7 @@ hardcodes a league name.
 **Predictor-only competitions.** A competition can set `quiz: false`, which
 means its games are imported and feed the Predictor but never become a quiz
 question, are never offered as a quiz source, and never reach the leaderboard.
-**LCK CL** is the one that does. The Challengers League is where LCK academy
+**LCK CL** and **CBLOL** do. The Challengers League is where LCK academy
 rosters play, so it is the record of what a player did before promotion —
 exactly what you want when the Predictor is asked about a rookie whose
 top-flight history is three games long. As quiz questions those games are a
@@ -137,6 +137,25 @@ resolves while `LCK CL Academy` and `LCK CL Qualifiers` are still thrown out.
 
 Note that its games do join the meta pool, which is global rather than
 per-league — the same way LPL games already inform a read on an LEC draft.
+
+**CBLOL** is in the Predictor so Brazilian matches can be predicted, and so its
+players' records follow them to First Stand, MSI and Worlds.
+
+- **Spelling and splits.** Oracle's Elixir writes the league as `CBLOL`, with the
+  Cup, Split 1 and Split 2 in the split column: 246 games in the 2026 export.
+- **No exclusion override.** It doesn't need `overridesExclusions`, because
+  nothing in the exclusion list catches `CBLOL`, and the same list keeps
+  `CBLOL Academy` out. `CBLOLA`, the academy's code, simply isn't an alias.
+- **LTA South isn't an alias.** The Brazilian teams played there in 2025, but
+  that league also carried the LLA sides. `LTA North` resolves to nothing
+  either.
+- **Measured on that export:**
+  - Including CBLOL changed none of the meta flags. It adds 38 games to a
+    396-game meta window and doesn't flip a single champion in any role.
+  - Without lookahead, the model calls 63.0% of 243 CBLOL games, improving
+    from 58.5% in the Cup to 69.9% in Split 2 as history builds.
+  - Blue side wins 59.3% of CBLOL games, so read that 63% against a strong
+    "always blue" baseline.
 
 **PCS is deliberately not an alias for LCP.** LCP was formed in 2025 out of the
 PCS and LCO regions, so treating PCS as an old name would match how `EU LCS` and
