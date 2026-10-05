@@ -1242,6 +1242,16 @@ describe('current split when the newest game has none', () => {
     const onlyWorlds = [games[0]!];
     expect(currentSplits(onlyWorlds).get(splitSubject('player', 'star'))).toBeUndefined();
   });
+
+  it('is not moved by a cup kept under OTHER, even one that names a split', () => {
+    const cup = makeGame({
+      id: 'cup', blue: 'A', red: 'C', winner: 'blue', day: 30,
+      competition: 'OTHER', split: 'Demacia Cup',
+      bluePlayers: ['t', 'j', 'm', 'star', 's'],
+    });
+    const splits = currentSplits([cup, ...games]);
+    expect(splitLabel(splits.get(splitSubject('player', 'star')))).toBe('Split 3');
+  });
 });
 
 describe('deriveGoldSwing', () => {

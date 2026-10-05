@@ -2,7 +2,8 @@
  * Single source of truth for which competitions are eligible.
  *
  * The quiz only ever uses LCK, LEC, LCS, LPL, LCP, Worlds, First Stand, MSI and
- * EWC. LCK CL and CBLOL are imported for the predictor alone.
+ * EWC. LCK CL and CBLOL are imported for the predictor alone, and so is every
+ * other event a team from those leagues played, under `OTHER`.
  * Nothing else in the app hardcodes a league string: UI filters, quiz
  * generation and the import report all read this registry, so adding or
  * removing a competition is a one-file change.
@@ -60,6 +61,12 @@ export interface CompetitionDefinition {
  * Academy, challenger and development leagues share prefixes with their
  * parent league, so they are rejected explicitly.
  */
+/**
+ * Events that are not competitive play: exhibition games keep their result out
+ * of every record, even when the teams in them are ones being followed.
+ */
+const NON_COMPETITIVE: RegExp[] = [/\bALL[- ]?STAR\b/, /\bSHOWMATCH\b/];
+
 const GLOBAL_EXCLUSIONS: RegExp[] = [
   /\bCL\b/, // LCK CL — Challengers League
   /\bACADEMY\b/,
@@ -73,9 +80,11 @@ const GLOBAL_EXCLUSIONS: RegExp[] = [
   /\bSCOUTING GROUNDS\b/,
   /\bQUALIFIER(S)?\b/,
   /\bQUALIFYING\b/,
-  /\bDEMACIA\b/, // Demacia Cup — not part of the LPL season
-  /\bALL[- ]?STAR\b/,
-  /\bSHOWMATCH\b/,
+  // Demacia Cup is not part of the LPL season, so it must never resolve AS the
+  // LPL. Its games still come in, under `OTHER`, because LPL teams play them —
+  // see the team pass in `ingestRows`.
+  /\bDEMACIA\b/,
+  ...NON_COMPETITIVE,
 ];
 
 export const COMPETITIONS: CompetitionDefinition[] = [
@@ -216,6 +225,22 @@ export const COMPETITIONS: CompetitionDefinition[] = [
       'CIRCUITO BRASILEIRO DE LEAGUE OF LEGENDS',
     ],
   },
+  {
+    id: 'OTHER',
+    label: 'Other events',
+    short: 'Other',
+    // Never a team's home league: the team pass reads "home" from the
+    // regional competitions only, and this bucket must not feed itself.
+    scope: 'international',
+    accent: '#9aa5b8',
+    // Every other event a team from your leagues played — Demacia Cup, KeSPA
+    // Cup, invitationals, cross-league cups. Games land here by WHO played,
+    // not by league name, so there are deliberately no aliases: matching a name
+    // like `Demacia Cup` directly would also take the games it has between
+    // teams you don't follow. Predictor only, like LCK CL and CBLOL.
+    quiz: false,
+    aliases: [],
+  },
 ];
 
 export const COMPETITION_BY_ID: Record<CompetitionId, CompetitionDefinition> = Object.fromEntries(
@@ -310,6 +335,13 @@ export function resolveCompetition(rawLeague: string | null | undefined): Compet
     }
   }
   return null;
+}
+
+/** True for exhibition events (All-Star, showmatches), whoever plays in them. */
+export function isNonCompetitive(rawLeague: string | null | undefined): boolean {
+  if (!rawLeague) return false;
+  const normalized = normalizeLeagueString(rawLeague);
+  return NON_COMPETITIVE.some((rx) => rx.test(normalized));
 }
 
 export function isEligibleLeague(rawLeague: string | null | undefined): boolean {

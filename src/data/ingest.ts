@@ -5,17 +5,20 @@
  *   1. resolve the file's columns (see `oracleSchema.ts`)
  *   2. group rows by `gameid`
  *   3. build a two-sided draft from the 10 player rows + 2 team rows
- *   4. drop anything outside the configured competitions
- *   5. drop anything with an incomplete draft or no decidable winner
- *   6. second pass: infer series length -> best-of format
+ *   4. hold back anything outside the configured competitions
+ *   5. keep the held-back games a team from your leagues played, as `OTHER`
+ *   6. drop anything with an incomplete draft or no decidable winner
+ *   7. second pass: infer series length -> best-of format
  *
  * Every rejection is counted and summarized in `DatasetStats` so the import
  * screen can explain what happened to a file rather than silently shrinking it.
  */
 
 import {
+  COMPETITIONS,
   COMPETITION_IDS,
   competitionShort,
+  isNonCompetitive,
   resolveCompetition,
 } from '../domain/competitions.ts';
 import { makeChampion } from '../domain/champions.ts';
@@ -75,6 +78,19 @@ export interface IngestOptions {
   demo?: boolean;
 }
 
+/**
+ * Share of a team's games that must be in your competitions for the team to
+ * count as one of yours.
+ *
+ * Playing in one of your leagues is not enough on its own: Karmine Corp Blue
+ * appears in the 2026 export's LEC rows for eleven preseason `Versus` games,
+ * but 71 of its 82 games are LFL and EMEA Masters. Without this, following
+ * "LEC teams" would import a tier-two French league. Every regular team in
+ * the 2026 export clears it easily — the lowest is LYON at 62%, the rest
+ * being internationals — and Karmine Corp Blue sits at 13%.
+ */
+export const TEAM_HOME_SHARE = 0.5;
+
 export interface IngestResult {
   games: Game[];
   stats: DatasetStats;
@@ -120,6 +136,11 @@ export function ingestRows(
   }
 
   const allowed = new Set<CompetitionId>(options.competitions ?? COMPETITION_IDS);
+  // The leagues a team can belong to. Internationals and `OTHER` are where
+  // teams travel, never where they are from.
+  const homeLeagues = new Set<CompetitionId>(
+    COMPETITIONS.filter((c) => c.scope === 'regional' && allowed.has(c.id)).map((c) => c.id),
+  );
   const warnings = new WarningCollector();
   const grouped = groupByGame(rows, map, warnings);
 
@@ -128,25 +149,68 @@ export function ingestRows(
   const built: Game[] = [];
   const seenGameIds = new Set<string>();
 
-  for (const [gameId, gameRows] of grouped) {
-    const league = firstNonEmpty(gameRows, map, 'league');
-    const competition = resolveCompetition(league);
-    if (!competition || !allowed.has(competition)) {
-      rejectedByCompetition += 1;
-      continue;
-    }
+  const keep = (gameId: string, gameRows: RawRow[], competition: CompetitionId, league: string): boolean => {
     if (seenGameIds.has(gameId)) {
       warnings.add('duplicate_game', 'Duplicate gameid encountered; later rows ignored.', gameId);
-      continue;
+      return false;
     }
-
     const game = buildGame(gameId, gameRows, map, competition, league, warnings, options.demo);
     if (!game) {
       rejectedIncomplete += 1;
-      continue;
+      return false;
     }
     seenGameIds.add(gameId);
     built.push(game);
+    return true;
+  };
+
+  // Games from events outside the list are held until the whole file has been
+  // read, because whether one is kept depends on who played it — and a team's
+  // league is only known once all of its games have been counted.
+  const held: { gameId: string; rows: RawRow[]; league: string; teams: string[] }[] = [];
+  const teamGames = new Map<string, { all: number; listed: number; home: number }>();
+
+  for (const [gameId, gameRows] of grouped) {
+    const league = firstNonEmpty(gameRows, map, 'league');
+    const competition = resolveCompetition(league);
+    const listed = competition !== null && allowed.has(competition);
+    const teams = teamNamesOf(gameRows, map);
+    for (const team of teams) {
+      const count = teamGames.get(team) ?? { all: 0, listed: 0, home: 0 };
+      count.all += 1;
+      if (listed) count.listed += 1;
+      if (listed && homeLeagues.has(competition)) count.home += 1;
+      teamGames.set(team, count);
+    }
+
+    if (!listed) {
+      // Only games that resolve to nothing are candidates: a configured
+      // competition switched off by `options.competitions` stays off.
+      if (competition === null && allowed.has('OTHER') && !isNonCompetitive(league)) {
+        held.push({ gameId, rows: gameRows, league, teams });
+      } else {
+        rejectedByCompetition += 1;
+      }
+      continue;
+    }
+    keep(gameId, gameRows, competition, league);
+  }
+
+  // A team is one of yours when it plays in one of your leagues and most of
+  // its games are in your competitions; every other game it played comes in.
+  const ours = (team: string): boolean => {
+    const count = teamGames.get(team);
+    return !!count && count.home > 0 && count.listed / count.all >= TEAM_HOME_SHARE;
+  };
+  const otherEvents: Record<string, number> = {};
+  for (const game of held) {
+    if (!game.teams.some(ours)) {
+      rejectedByCompetition += 1;
+      continue;
+    }
+    if (keep(game.gameId, game.rows, 'OTHER', game.league)) {
+      otherEvents[game.league] = (otherEvents[game.league] ?? 0) + 1;
+    }
   }
 
   const games = applySeriesFormats(built);
@@ -155,8 +219,19 @@ export function ingestRows(
   return { games, stats: buildStats(rows.length, grouped.size, games, {
     rejectedByCompetition,
     rejectedIncomplete,
+    otherEvents,
     warnings: warnings.list(),
   }) };
+}
+
+/** The (up to two) team names in one game's rows. */
+function teamNamesOf(rows: RawRow[], map: ColumnMap): string[] {
+  const names = new Set<string>();
+  for (const row of rows) {
+    const name = cell(row, map, 'teamName');
+    if (name) names.add(name);
+  }
+  return [...names];
 }
 
 function groupByGame(
@@ -246,7 +321,7 @@ function buildGame(
     gameId,
     competition,
     sourceLeague,
-    tournamentLabel: buildTournamentLabel(competition, season, split, stage.kind),
+    tournamentLabel: buildTournamentLabel(competition, season, split, stage.kind, sourceLeague),
     season,
     split,
     date,
@@ -416,8 +491,11 @@ function buildTournamentLabel(
   season: string,
   split: string | null,
   stageKind: string,
+  sourceLeague: string,
 ): string {
-  const base = `${competitionShort(competition)} ${season}`.trim();
+  // `OTHER` is a bucket, not an event: name the game by the event it came from.
+  const name = competition === 'OTHER' && sourceLeague ? sourceLeague : competitionShort(competition);
+  const base = `${name} ${season}`.trim();
   // `Main Event` / `Play-In` are stage information, already shown separately.
   if (!split || ['main event', 'play-in', 'playin', 'playoffs'].includes(split.toLowerCase())) {
     return base;
@@ -480,6 +558,7 @@ function buildStats(
   extra: {
     rejectedByCompetition: number;
     rejectedIncomplete: number;
+    otherEvents: Record<string, number>;
     warnings: IngestWarning[];
   },
 ): DatasetStats {
@@ -505,6 +584,7 @@ function buildStats(
     rejectedByCompetition: extra.rejectedByCompetition,
     rejectedIncomplete: extra.rejectedIncomplete,
     perCompetition,
+    otherEvents: extra.otherEvents,
     patches: [...patches].sort(comparePatches),
     dateRange:
       games.length && Number.isFinite(min) && Number.isFinite(max)

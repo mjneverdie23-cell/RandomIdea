@@ -96,7 +96,8 @@ export type CompetitionId =
   | 'FIRST_STAND'
   | 'EWC'
   | 'LCK_CL'
-  | 'CBLOL';
+  | 'CBLOL'
+  | 'OTHER';
 
 export type SeriesFormat = 'BO1' | 'BO3' | 'BO5' | 'UNKNOWN';
 
@@ -207,6 +208,12 @@ export interface DatasetStats {
   rejectedByCompetition: number;
   rejectedIncomplete: number;
   perCompetition: Record<string, number>;
+  /**
+   * Games kept under `OTHER` because a team from your leagues played them,
+   * counted by the event's own name (`Demacia Cup`, `KeSPA Cup`). Optional:
+   * seasons saved before this existed simply don't carry it.
+   */
+  otherEvents?: Record<string, number>;
   patches: string[];
   dateRange: { from: string; to: string } | null;
   /** Non-fatal problems worth surfacing in the import report. */

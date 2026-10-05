@@ -23,6 +23,9 @@ import {
   QUIZ_COMPETITION_IDS,
   competitionShort,
 } from '../domain/competitions.ts';
+
+/** The competitions matched by name — `OTHER` is matched by who played instead. */
+const NAMED_COMPETITION_IDS = COMPETITION_IDS.filter((id) => id !== 'OTHER');
 import type { CompetitionId } from '../domain/types.ts';
 import { MetaIndex } from '../meta/patchMeta.ts';
 import { computeAvailability, type Availability } from '../quiz/generator.ts';
@@ -54,6 +57,8 @@ export interface ImportResult {
   rowsParsed: number;
   rejectedByCompetition: number;
   rejectedIncomplete: number;
+  /** Games kept from other events because a team from your leagues played them. */
+  otherEvents: Record<string, number>;
   label: string;
 }
 
@@ -166,7 +171,7 @@ export function DatasetProvider({ children }: { children: ReactNode }) {
         throw new IngestError(
           'No usable games found in this file.',
           stats.rejectedByCompetition > 0
-            ? `${stats.rejectedByCompetition} games were outside the ${COMPETITION_IDS.length} configured competitions (${COMPETITION_IDS.map(competitionShort).join(', ')}), and ${stats.rejectedIncomplete} had incomplete drafts.`
+            ? `${stats.rejectedByCompetition} games were outside the ${NAMED_COMPETITION_IDS.length} configured competitions (${NAMED_COMPETITION_IDS.map(competitionShort).join(', ')}) and involved none of their teams, and ${stats.rejectedIncomplete} had incomplete drafts.`
             : `${stats.rejectedIncomplete} games had incomplete drafts or no recorded winner.`,
         );
       }
@@ -204,6 +209,7 @@ export function DatasetProvider({ children }: { children: ReactNode }) {
         rowsParsed: stats.rowsParsed,
         rejectedByCompetition: stats.rejectedByCompetition,
         rejectedIncomplete: stats.rejectedIncomplete,
+        otherEvents: stats.otherEvents ?? {},
         label,
       };
     },

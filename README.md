@@ -18,8 +18,9 @@ and nothing hidden.
 
 Games come from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)
 match-data CSVs, filtered to nine competitions: **LCK, LEC, LCS, LPL, LCP,
-Worlds, First Stand, MSI, EWC** — plus **LCK CL** and **CBLOL**, which are
-imported for the Predictor alone and never appear as quiz questions.
+Worlds, First Stand, MSI, EWC** — plus **LCK CL**, **CBLOL** and every other
+event your teams played (Demacia Cup, KeSPA Cup, …), which are imported for the
+Predictor alone and never appear as quiz questions.
 
 ---
 
@@ -156,6 +157,41 @@ players' records follow them to First Stand, MSI and Worlds.
     from 58.5% in the Cup to 69.9% in Split 2 as history builds.
   - Blue side wins 59.3% of CBLOL games, so read that 63% against a strong
     "always blue" baseline.
+
+**Other events are matched by who played, not by name.** Cups and
+invitationals outside the list — Demacia Cup, KeSPA Cup, Asia Master, a
+cross-league cup — come in whenever a team from your leagues played in them.
+They're filed under **Other events** (`OTHER`), which is Predictor-only. Each
+game keeps its event's name in its tournament label, e.g. `KeSPA Cup 2026`.
+
+How the second pass decides:
+
+- **It runs after the whole file is read**, because a game outside the list is
+  kept or dropped depending on who played it.
+- **A team counts as yours** when it played in one of your regional leagues
+  (LCK, LPL, LEC, LCS, LCP, LCK CL, CBLOL) and at least half its games in the
+  file (`TEAM_HOME_SHARE`) are in your competitions.
+- **One of your teams is enough.** An LPL side against an LDL side at the
+  Demacia Cup is kept; two LDL sides at the same event are not.
+- **All-Star and showmatch games never count**, whoever plays them.
+
+The half-share rule is what keeps feeder leagues out. Karmine Corp Blue appears
+in the 2026 export's LEC rows for 11 preseason `Versus` games, but 71 of its 82
+games are LFL and EMEA Masters. Without the rule, following "LEC teams" would
+import a tier-two French league. Every regular team clears it easily: the lowest
+is LYON at 62%, with the rest of its games at internationals.
+
+On the 2026 export this adds 124 games: KeSPA Cup 61, Asia Master 44 and an
+Americas cup (`AC`) 19. The import report lists them by event.
+
+- **Splits:** they never become a player's "this split", even if a future export
+  names a split for them.
+- **Meta:** they join the meta pool like any other games. In 2026 that added 7
+  games to a 396-game window, which moved Zeri out of the bot-lane meta.
+- **Demacia Cup** isn't in the 2026 file yet (it's played around the turn of the
+  year). It comes in automatically, whatever the export calls it, as long as
+  your teams play in it. It is still in the exclusion list, which only stops it
+  from being read **as** the LPL.
 
 **PCS is deliberately not an alias for LCP.** LCP was formed in 2025 out of the
 PCS and LCO regions, so treating PCS as an old name would match how `EU LCS` and

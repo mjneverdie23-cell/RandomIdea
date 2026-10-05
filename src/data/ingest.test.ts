@@ -156,8 +156,8 @@ describe('ingestRows', () => {
   it('drops games from competitions outside the configured set', () => {
     const result = ingest([
       ...gameRows({ gameId: 'KEEP', league: 'LEC' }),
-      ...gameRows({ gameId: 'DROP', league: 'LCK CL Academy' }),
-      ...gameRows({ gameId: 'DROP2', league: 'PCS' }),
+      ...gameRows({ gameId: 'DROP', league: 'LCK CL Academy', blueTeam: 'T1 Rookies', redTeam: 'Gen.G Rookies' }),
+      ...gameRows({ gameId: 'DROP2', league: 'PCS', blueTeam: 'Ground Zero Academy', redTeam: 'SillySilly Gaming' }),
     ]);
     expect(result.games.map((g) => g.gameId)).toEqual(['KEEP']);
     expect(result.stats.rejectedByCompetition).toBe(2);
@@ -172,7 +172,7 @@ describe('ingestRows', () => {
   it('imports CBLOL, also for the predictor alone', () => {
     const result = ingest([
       ...gameRows({ gameId: 'BR', league: 'CBLOL' }),
-      ...gameRows({ gameId: 'BRA', league: 'CBLOLA' }),
+      ...gameRows({ gameId: 'BRA', league: 'CBLOLA', blueTeam: 'LOUD Academy', redTeam: 'paiN Academy' }),
     ]);
     expect(result.games.map((g) => g.competition)).toEqual(['CBLOL']);
     expect(result.stats.rejectedByCompetition).toBe(1);
@@ -209,11 +209,61 @@ describe('ingestRows', () => {
     expect(() => ingestRows(parsed.rows, parsed.headers)).toThrow(IngestError);
   });
 
+  describe('other events played by teams from your leagues', () => {
+    it('keeps them under OTHER, named after the event', () => {
+      const result = ingest([
+        ...gameRows({ gameId: 'L1', league: 'LPL', blueTeam: 'Bilibili Gaming', redTeam: 'JD Gaming' }),
+        ...gameRows({ gameId: 'L2', league: 'LPL', blueTeam: 'JD Gaming', redTeam: 'Bilibili Gaming' }),
+        // An LPL side against an LDL side: kept, because one of them is yours.
+        ...gameRows({ gameId: 'DC', league: 'Demacia Cup', split: '', blueTeam: 'Bilibili Gaming', redTeam: 'BLG Junior' }),
+        // Two LDL sides at the same event: nobody you follow, so not kept.
+        ...gameRows({ gameId: 'DC2', league: 'Demacia Cup', split: '', blueTeam: 'BLG Junior', redTeam: 'WBG Youth' }),
+      ]);
+      const cup = result.games.find((g) => g.gameId === 'DC')!;
+      expect(cup.competition).toBe('OTHER');
+      expect(cup.sourceLeague).toBe('Demacia Cup');
+      expect(cup.tournamentLabel).toBe('Demacia Cup 2024');
+      expect(result.games.map((g) => g.gameId).sort()).toEqual(['DC', 'L1', 'L2']);
+      expect(result.stats.perCompetition).toEqual({ LPL: 2, OTHER: 1 });
+      expect(result.stats.otherEvents).toEqual({ 'Demacia Cup': 1 });
+      expect(result.stats.rejectedByCompetition).toBe(1);
+    });
+
+    it('does not follow a team that only visits one of your leagues', () => {
+      // One LEC preseason game, three in a feeder league: not an LEC team.
+      const result = ingest([
+        ...gameRows({ gameId: 'V1', league: 'LEC', blueTeam: 'Karmine Corp Blue', redTeam: 'G2 Esports' }),
+        ...gameRows({ gameId: 'F1', league: 'LFL', blueTeam: 'Karmine Corp Blue', redTeam: 'Solary' }),
+        ...gameRows({ gameId: 'F2', league: 'LFL', blueTeam: 'Solary', redTeam: 'Karmine Corp Blue' }),
+        ...gameRows({ gameId: 'F3', league: 'LFL', blueTeam: 'Karmine Corp Blue', redTeam: 'Galions' }),
+      ]);
+      expect(result.games.map((g) => g.gameId)).toEqual(['V1']);
+    });
+
+    it('never keeps an exhibition', () => {
+      const result = ingest([
+        ...gameRows({ gameId: 'L1', league: 'LCK' }),
+        ...gameRows({ gameId: 'AS', league: 'LCK All-Star' }),
+        ...gameRows({ gameId: 'SM', league: 'Showmatch' }),
+      ]);
+      expect(result.games.map((g) => g.gameId)).toEqual(['L1']);
+    });
+
+    it('stays off when OTHER is not among the competitions asked for', () => {
+      const result = ingestRows(
+        parseCsvText([HEADERS, ...gameRows({ gameId: 'L1', league: 'LCK' }), ...gameRows({ gameId: 'KC', league: 'KeSPA Cup' })].join('\n')).rows,
+        parseCsvText([HEADERS, ...gameRows({ gameId: 'L1', league: 'LCK' })].join('\n')).headers,
+        { competitions: ['LCK'] },
+      );
+      expect(result.games.map((g) => g.gameId)).toEqual(['L1']);
+    });
+  });
+
   it('summarizes the import', () => {
     const result = ingest([
       ...gameRows({ gameId: 'A', league: 'LCK', patch: '14.11' }),
       ...gameRows({ gameId: 'B', league: 'LPL', patch: '14.12' }),
-      ...gameRows({ gameId: 'C', league: 'LDL' }),
+      ...gameRows({ gameId: 'C', league: 'LDL', blueTeam: 'BLG Junior', redTeam: 'WBG Youth' }),
     ]);
     expect(result.stats.gamesBuilt).toBe(3);
     expect(result.stats.gamesKept).toBe(2);

@@ -132,7 +132,11 @@ export function currentSplits(games: readonly Game[]): Map<string, string> {
     //
     // Skipping them leaves the player in the last split they really played —
     // their regional one — which is what "this split" is asking about.
-    if (!game.split) continue;
+    //
+    // The same goes for the cups and invitationals kept under `OTHER`. They
+    // are split-less in the 2026 export, but an export that names one (a
+    // `Demacia Cup` split) must not move every LPL player's "this split" there.
+    if (!game.split || game.competition === 'OTHER') continue;
     const at = Date.parse(game.date);
     const key = splitKeyOf(game);
     for (const side of [game.blue, game.red] as const) {

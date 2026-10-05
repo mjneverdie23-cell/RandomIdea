@@ -278,6 +278,18 @@ function buildPlans(): EventPlan[] {
         { split: 'Split 1', playoffs: 1, startDay: 74, endDay: 82, series: 5, bestOf: 5 },
       ],
     },
+    {
+      // A cup outside every configured league, played by LCK teams: it comes in
+      // under `OTHER` only because of who played it. Appended last and with
+      // teams that already have a strength, so it adds games without
+      // reshuffling any that came before.
+      league: 'KeSPA Cup',
+      year: 2025,
+      pool: LCK_TEAMS,
+      // Between the summer playoffs and Worlds, so the newest demo game is
+      // still a quizzable one.
+      blocks: [{ split: '', playoffs: 0, startDay: 230, endDay: 236, series: 8, bestOf: 3 }],
+    },
   ];
 }
 

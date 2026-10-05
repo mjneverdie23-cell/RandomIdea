@@ -789,6 +789,12 @@ code {
   gap: 6px;
 }
 
+.report-other {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .warnings {
   margin-top: 18px;
   font-size: 12px;

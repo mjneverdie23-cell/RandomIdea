@@ -550,6 +550,17 @@ function ImportReport({ result }: { result: ImportResult }) {
           </div>
         </div>
 
+        {Object.keys(result.otherEvents).length > 0 && (
+          <p className="report-other dim">
+            Also kept, because teams from your leagues played them:{' '}
+            {Object.entries(result.otherEvents)
+              .sort((a, b) => b[1] - a[1])
+              .map(([event, count]) => `${event} ${count.toLocaleString()}`)
+              .join(' · ')}
+            . They feed the Predictor under “Other events” and never become quiz questions.
+          </p>
+        )}
+
         <div className="report-comps">
           {result.years.map((year) => (
             <span key={year.year} className="badge badge-strong">

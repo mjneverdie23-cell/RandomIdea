@@ -3,6 +3,7 @@ import {
   COMPETITION_IDS,
   QUIZ_COMPETITION_IDS,
   isEligibleLeague,
+  isNonCompetitive,
   isQuizCompetition,
   normalizeLeagueString,
   resolveCompetition,
@@ -91,9 +92,24 @@ describe('resolveCompetition', () => {
     expect(resolveCompetition('LTA South')).toBeNull();
   });
 
+  it('never resolves OTHER by name — it is filled by who played', () => {
+    expect(resolveCompetition('Demacia Cup')).toBeNull();
+    expect(resolveCompetition('KeSPA Cup')).toBeNull();
+    expect(isQuizCompetition('OTHER')).toBe(false);
+    expect(COMPETITION_IDS).toContain('OTHER');
+  });
+
+  it('knows an exhibition when it sees one', () => {
+    expect(isNonCompetitive('LCK All-Star')).toBe(true);
+    expect(isNonCompetitive('All Star Event 2026')).toBe(true);
+    expect(isNonCompetitive('Showmatch')).toBe(true);
+    expect(isNonCompetitive('Demacia Cup')).toBe(false);
+    expect(isNonCompetitive(null)).toBe(false);
+  });
+
   it('keeps every other competition quizzed', () => {
     for (const id of COMPETITION_IDS) {
-      if (id === 'LCK_CL' || id === 'CBLOL') continue;
+      if (id === 'LCK_CL' || id === 'CBLOL' || id === 'OTHER') continue;
       expect(isQuizCompetition(id)).toBe(true);
     }
   });
