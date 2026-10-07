@@ -8,6 +8,7 @@ const LINKS = [
   { to: '/setup', label: 'Play' },
   { to: '/blind', label: 'Blind' },
   { to: '/predictor', label: 'Predictor' },
+  { to: '/teams', label: 'Team Stat' },
   { to: '/leaderboard', label: 'Leaderboard' },
   { to: '/data', label: 'Data' },
 ] as const;

@@ -7,6 +7,9 @@ import {
   SWING_GOLD,
   buildPredictorModel,
   deriveGoldSwing,
+  derivePocketProfiles,
+  isPocketPick,
+  metaByPatch,
   deriveMeta,
   MIN_CLASS_PROFILE,
   deriveClassProfiles,
@@ -1319,5 +1322,74 @@ describe('deriveGoldSwing', () => {
     const model = buildPredictorModel([game('1', 'blue', [SWING_GOLD, 0, 0, 0])]);
     expect(model.goldSwing.get('t1')![0]!.spikes).toBe(1);
     expect(model.goldSwingLeague[0]!.sample).toBe(2);
+  });
+});
+
+describe('meta by patch', () => {
+  /** `n` games on `patch` with blue's mid on `mid`. */
+  const onPatch = (patch: string, mid: string, n: number, from: number) =>
+    Array.from({ length: n }, (_, i) =>
+      makeGame({
+        id: `${patch}-${mid}-${i}`, blue: 'A', red: 'B', winner: 'blue', day: from + i, patch,
+        blueDraft: ['Aatrox', 'Viego', mid, 'Jinx', 'Thresh'],
+      }),
+    );
+  // Zed is the mid of 16.01; by 16.03 everyone has moved to Azir.
+  const games = [...onPatch('16.01', 'Zed', 10, 0), ...onPatch('16.02', 'Azir', 10, 20), ...onPatch('16.03', 'Azir', 10, 40)];
+  const meta = metaByPatch(games);
+  const first = games[0]!;
+  const last = games[games.length - 1]!;
+
+  it('judges a pick by the meta of the patch it was played on', () => {
+    expect(isPocketPick(meta, first, 'mid', 'Zed')).toBe(false);
+    expect(isPocketPick(meta, last, 'mid', 'Zed')).toBe(true);
+    // And the other way round: Azir was a pocket before it was the meta.
+    expect(isPocketPick(meta, first, 'mid', 'Azir')).toBe(true);
+    expect(isPocketPick(meta, last, 'mid', 'Azir')).toBe(false);
+  });
+
+  it('uses the patch before as part of each window, like the live meta', () => {
+    // On 16.02 Zed still counts: the window is 16.02 and 16.01.
+    expect(isPocketPick(meta, games[10]!, 'mid', 'Zed')).toBe(false);
+  });
+
+  it('cannot judge a game with no patch', () => {
+    expect(isPocketPick(meta, { ...first, patch: null }, 'mid', 'Zed')).toBeNull();
+    expect(isPocketPick(meta, { ...first, patch: '9.99' }, 'mid', 'Zed')).toBeNull();
+  });
+});
+
+describe('derivePocketProfiles', () => {
+  // Every default champion is meta on 16.01; Zed is not.
+  const meta = new Map([
+    ['16.01', new Map(ROLES.map((role, i) => [role, new Set([DEFAULT_BLUE[i]!, DEFAULT_RED[i]!])]))],
+  ]);
+  const pocketDraft = ['Aatrox', 'Viego', 'Zed', 'Jinx', 'Thresh'];
+  const games = [
+    makeGame({ id: 'p1', blue: 'A', red: 'B', winner: 'blue', day: 0, blueDraft: pocketDraft, durationSeconds: 2000 }),
+    makeGame({ id: 'p2', blue: 'A', red: 'B', winner: 'red', day: 1, blueDraft: pocketDraft, durationSeconds: 2400 }),
+    makeGame({ id: 'm1', blue: 'A', red: 'B', winner: 'blue', day: 2, durationSeconds: 1800 }),
+    makeGame({ id: 'x', blue: 'A', red: 'B', winner: 'blue', day: 3, patch: '15.24' }),
+  ];
+
+  it('splits a team into pocket and all-meta games, by patch', () => {
+    const a = derivePocketProfiles(games, meta).get('a')!;
+    expect(a).toEqual({
+      games: 3,
+      pocketGames: 2,
+      pocketWins: 1,
+      pocketPicks: 2,
+      metaGames: 1,
+      metaWins: 1,
+      pocketSeconds: 2200,
+      metaSeconds: 1800,
+    });
+    // The opponent drafted all-meta every time; the unjudged patch is skipped.
+    expect(derivePocketProfiles(games, meta).get('b')!.metaGames).toBe(3);
+  });
+
+  it('is part of the model, over the form season', () => {
+    const model = buildPredictorModel(games);
+    expect(model.pocketProfiles.get('a')!.games).toBeGreaterThan(0);
   });
 });

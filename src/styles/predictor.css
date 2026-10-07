@@ -769,6 +769,55 @@
   color: var(--text-dim);
 }
 
+.tendency-pocket {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.tendency-pocket h4 {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.tendency-pocket h4 .dim {
+  font-weight: 400;
+  font-size: 0.76rem;
+}
+
+.tendency-pocket dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.84rem;
+}
+
+.tendency-pocket dl > div {
+  display: flex;
+  gap: 8px;
+}
+
+.tendency-pocket dt {
+  flex: none;
+  width: 76px;
+  color: var(--text-faint);
+}
+
+.tendency-pocket dd {
+  margin: 0;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.tendency-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--blue-bright);
+}
+
 .lane {
   display: flex;
   gap: 10px;

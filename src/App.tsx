@@ -11,6 +11,7 @@ import { ResultsPage } from './pages/ResultsPage.tsx';
 import { LeaderboardPage } from './pages/LeaderboardPage.tsx';
 import { DataPage } from './pages/DataPage.tsx';
 import { PredictorPage } from './pages/PredictorPage.tsx';
+import { TeamStatPage } from './pages/TeamStatPage.tsx';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
                 <Route path="/blind" element={<BlindPage />} />
                 <Route path="/results" element={<ResultsPage />} />
                 <Route path="/predictor" element={<PredictorPage />} />
+                <Route path="/teams" element={<TeamStatPage />} />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
                 <Route path="/data" element={<DataPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

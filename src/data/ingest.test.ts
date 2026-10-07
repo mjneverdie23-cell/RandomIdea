@@ -259,6 +259,26 @@ describe('ingestRows', () => {
     });
   });
 
+  it('reads each team\'s own gold at the marks and in total', () => {
+    // Team rows carry the values; player rows leave them blank. A game that
+    // ended before 25 minutes has nothing at that mark.
+    const withGold = gameRows().map((row, index) => {
+      if (index === 10) return `${row},15210,24890,,58120`;
+      if (index === 11) return `${row},14980,23100,,51340`;
+      return `${row},,,,`;
+    });
+    const parsed = parseCsvText([`${HEADERS},goldat10,goldat15,goldat25,totalgold`, ...withGold].join('\n'));
+    const [game] = ingestRows(parsed.rows, parsed.headers).games;
+    // goldat20 is missing from the file entirely, so it is null rather than shifted.
+    expect(game!.blue.gold).toEqual({ at: [15210, 24890, null, null], total: 58120 });
+    expect(game!.red.gold).toEqual({ at: [14980, 23100, null, null], total: 51340 });
+  });
+
+  it('leaves team gold empty when the export has none', () => {
+    const [game] = ingest(gameRows()).games;
+    expect(game!.blue.gold).toBeNull();
+  });
+
   it('summarizes the import', () => {
     const result = ingest([
       ...gameRows({ gameId: 'A', league: 'LCK', patch: '14.11' }),

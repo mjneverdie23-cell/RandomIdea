@@ -1187,3 +1187,217 @@ code {
     grid-area: remove;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Team Stat                                                           */
+/* ------------------------------------------------------------------ */
+
+.team-stat-controls .field {
+  min-width: 220px;
+}
+
+.team-stat-comps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.team-stat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.team-stat-table th,
+.team-stat-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-stat-table th:first-child,
+.team-stat-table td:first-child {
+  text-align: left;
+}
+
+.team-stat-table thead th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.team-stat-table tbody th {
+  font-weight: 600;
+}
+
+.team-stat-table td {
+  font-family: var(--font-mono);
+}
+
+.team-stat-table .is-pos {
+  color: var(--green);
+}
+
+.team-stat-table .is-neg {
+  color: var(--red-bright);
+}
+
+.team-stat-table tr.is-missing th,
+.team-stat-table tr.is-missing td {
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-style: italic;
+  text-align: left;
+}
+
+.team-stat-pockets {
+  margin-top: 18px;
+}
+
+.team-stat-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.team-stat-champ {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.team-stat-icon {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.team-stat-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Hidden until it has really loaded, so a failed image leaves the initials. */
+  opacity: 0;
+  transition: opacity var(--dur);
+}
+
+.team-stat-icon img.is-loaded {
+  opacity: 1;
+}
+
+/* The shared art fallback is sized for a tall pick card; shrink it to fit. */
+.team-stat-icon .pick-fallback {
+  inset: 0;
+  height: 100%;
+  font-size: 9px;
+}
+
+.team-stat-icon {
+  display: grid;
+  place-items: center;
+}
+
+.team-stat-players {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.team-stat-player {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-deep);
+}
+
+.team-stat-player header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.team-stat-player header .dim {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+.team-stat-style,
+.team-stat-pocketline {
+  margin: 0;
+  font-size: 13px;
+}
+
+.team-stat-pocketline {
+  font-size: 12px;
+}
+
+.team-stat-pool {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.team-stat-pool li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-stat-pool li .num {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.team-stat-tag {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+.team-stat-others > summary {
+  cursor: pointer;
+  padding: 0 20px 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .team-stat-controls .field {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .team-stat-table th,
+  .team-stat-table td {
+    padding: 6px 6px;
+  }
+
+  .team-stat-pockets th:nth-child(3),
+  .team-stat-pockets td:nth-child(3) {
+    display: none;
+  }
+}

@@ -238,6 +238,29 @@ export interface GoldSwingPoint {
 /** One point per checkpoint, in minute order; a mark no game reached is absent. */
 export type GoldSwing = GoldSwingPoint[];
 
+/** One patch's meta: per role, the champions contested often enough. */
+export type PatchMeta = Map<Role, Set<string>>;
+
+/**
+ * How a team does when it drafts a pocket pick — a champion off the meta of
+ * the patch the game was played on — against when it drafts all-meta.
+ */
+export interface PocketProfile {
+  /** Games whose patch could be judged at all. */
+  games: number;
+  /** Games with at least one pocket pick, and how many of those were won. */
+  pocketGames: number;
+  pocketWins: number;
+  /** Pocket picks across every judged game (a game can have several). */
+  pocketPicks: number;
+  /** Games where all five picks were meta for their patch. */
+  metaGames: number;
+  metaWins: number;
+  /** Average game length in seconds, on pocket and all-meta games; `null` without lengths. */
+  pocketSeconds: number | null;
+  metaSeconds: number | null;
+}
+
 /**
  * How a team spends the early game, and what happens when it starts badly.
  *
@@ -327,6 +350,8 @@ export interface PredictorModel {
   goldSwing: Map<string, GoldSwing>;
   /** The same counts over every team, as the baseline to compare against. */
   goldSwingLeague: GoldSwing;
+  /** Pocket picks against all-meta drafts, per team, over the form season. */
+  pocketProfiles: Map<string, PocketProfile>;
   /** What each player usually drafts, by champion class. */
   classProfiles: Map<string, ClassProfile>;
   /** Champion pool and favourite archetype, keyed `player|role`. */

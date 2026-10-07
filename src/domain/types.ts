@@ -61,6 +61,20 @@ export interface TeamSide {
    * its throw/comeback reads rather than guessing.
    */
   goldDiff?: GoldDiffTrack | null;
+  /**
+   * This side's own gold at the 10/15/20/25-minute marks and at the end.
+   * `null` when the export omits the columns; absent on games imported before
+   * it was captured, which only the Team Stat page reads and tolerates.
+   */
+  gold?: TeamGold | null;
+}
+
+/** A team's own gold through a game. */
+export interface TeamGold {
+  /** Same order as `GOLD_CHECKPOINTS`; `null` where the game ended before the mark. */
+  at: (number | null)[];
+  /** Gold earned over the whole game (`totalgold`). */
+  total: number | null;
 }
 
 /** Minute marks Oracle's Elixir reports gold at. There is no 5-minute bucket. */

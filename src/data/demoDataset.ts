@@ -298,7 +298,17 @@ const CSV_COLUMNS = [
   'participantid', 'side', 'position', 'playername', 'playerid', 'teamname', 'teamid', 'champion',
   'ban1', 'ban2', 'ban3', 'ban4', 'ban5', 'gamelength', 'result',
   'golddiffat10', 'golddiffat15', 'golddiffat20', 'golddiffat25',
+  'goldat10', 'goldat15', 'goldat20', 'goldat25', 'totalgold',
 ];
+
+/**
+ * Typical team gold at 10/15/20/25 minutes in pro play. Demo team gold is this
+ * plus half the gold difference, and total gold follows game length — derived
+ * from values already drawn, so adding it consumed no randomness and changed
+ * no existing demo game.
+ */
+const DEMO_GOLD_BASE = [15_500, 24_800, 34_300, 43_900];
+const DEMO_GOLD_PER_MINUTE = 1_820;
 
 function csvEscape(value: string | number): string {
   const text = String(value);
@@ -455,8 +465,9 @@ function renderGameRows(input: RenderInput): string[] {
         '', '', '', '', '',
         gameLength,
         entry.win ? 1 : 0,
-        // Gold diff is a team-level read; player rows leave it blank.
+        // Gold is a team-level read; player rows leave it blank.
         '', '', '', '',
+        '', '', '', '', '',
       ]);
     });
   }
@@ -475,6 +486,8 @@ function renderGameRows(input: RenderInput): string[] {
       gameLength,
       entry.win ? 1 : 0,
       ...entry.gold,
+      ...entry.gold.map((diff, index) => Math.round(DEMO_GOLD_BASE[index]! + diff / 2)),
+      Math.round((gameLength / 60) * DEMO_GOLD_PER_MINUTE + (entry.win ? 3_000 : -3_000)),
     ]);
   }
 

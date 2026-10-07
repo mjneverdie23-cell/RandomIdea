@@ -1250,6 +1250,61 @@ scale that minimises log-loss on the same games (`STAKING_SCALE = 3.75`, with
 maximises expected log-wealth. The game probability is clamped to 15–85% and
 carried to the series from the current score. The report itself is unchanged.
 
+### Pocket picks in the report
+
+The **Usual behaviour** panel carries a pocket-pick block for each team, over
+the form season:
+
+- **Drafted:** how often the team drafts a pocket pick, and how many per game.
+- **Win rate:** with a pocket pick, against all-meta drafts.
+- **Game time:** the average length of those games, against all-meta games.
+
+Each team links to its **Team Stat** page. The block is reported, not scored.
+The model's own pocket term is unchanged.
+
+---
+
+## Team Stat
+
+The **Team Stat** tab, next to the Predictor, shows one team in more depth than
+a matchup report. Pick a team (grouped by home league) and a season (the team's
+current one by default, or all). It shows:
+
+- **Overview:** record, average game time (overall, in wins, in losses),
+  end-of-game gold and gold per minute, and pocket picks per game.
+- **Gold by minute:** average team gold and the average lead or deficit at 10,
+  15, 20 and 25 minutes. **Oracle's Elixir records gold at those marks only,
+  so there is nothing at 5 or 30 minutes.** The table says so rather than
+  inventing a number. End-of-game gold comes from `totalgold`.
+- **Pocket picks:** how often the team drafts one, its win rate and game time
+  with one against all-meta drafts, and every champion it played as a pocket
+  pick, with player, record and average game time.
+- **Players:** the newest lineup first, then anyone else who played for the
+  team. For each player:
+  - their style, meaning the archetype they draft most in their role;
+  - their pocket-pick rate and win rate;
+  - their champion pool, each champion tagged with how many of its games were
+    pocket picks.
+
+**Pocket picks are judged against the meta of the patch each game was played
+on**, never against today's. `metaByPatch` gives every patch its own meta using
+the Predictor's exact rule: picked or banned in at least 5% of games, with at
+least 4 appearances, over that patch and the one before. A champion that was a
+pocket pick on 16.12 and meta by 16.13 counts as a pocket in the first game and
+as meta in the second. It works the other way round after a nerf.
+
+What a patch's meta was is judged across every loaded game, not just this
+team's. Pocket stats count per game: a game with two pocket picks is still one
+game won or lost.
+
+Team gold at the marks (`goldat10`…`goldat25`, `totalgold`) is read at import.
+Seasons imported before this was added still show the lead/deficit column, and
+the page says how many games are missing team gold. Re-import the CSV on the
+Data page to fill it in.
+
+The numbers are built by `src/predictor/teamStats.ts`, which is pure and
+tested.
+
 ---
 
 ## Patch meta
@@ -1365,7 +1420,8 @@ src/
   storage/         IndexedDB key-value store, dataset persistence
   components/      draft board, quiz controls, meta panel, predictor composer
                    and report, layout
-  pages/           Home, Setup, Quiz, Results, Predictor, Leaderboard, Data
+  pages/           Home, Setup, Quiz, Results, Predictor, Team Stat,
+                   Leaderboard, Data
   styles/          tokens, base, layout, draft, quiz, predictor, pages
   lib/             display formatting
 ```

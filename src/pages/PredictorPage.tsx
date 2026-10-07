@@ -336,6 +336,8 @@ export function PredictorPage() {
             formSeason={model.formSeason}
             ratingsLabel={ratings.label}
             unratedTeams={unratedTeams}
+            pocketBlue={blue.team ? model.pocketProfiles.get(blue.team.toLowerCase()) : null}
+            pocketRed={red.team ? model.pocketProfiles.get(red.team.toLowerCase()) : null}
           />
           <PositionCalculator
             prediction={prediction}

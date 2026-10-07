@@ -37,6 +37,8 @@ import { archetypeOf, archetypeProfileKey, type Archetype } from './championArch
 import type {
   GoldSwing,
   GoldSwingPoint,
+  PatchMeta,
+  PocketProfile,
   GoldTempo,
   ArchetypeProfile,
   ChampionScaling,
@@ -1347,6 +1349,131 @@ function deriveChampionPools(games: readonly Game[]): Map<Role, Champion[]> {
 /* Entry point                                                         */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Meta by patch, and pocket picks                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The meta of every patch in `games`, each judged on its own window — that
+ * patch and the one before it — by exactly the rule `deriveMeta` applies to
+ * the newest patches.
+ *
+ * Anything that looks back needs this. A pick has to be judged against the
+ * meta of the patch it was played on, not today's: a pocket pick on 16.12 can
+ * be meta on 16.13 once everyone has copied it, and yesterday's meta champion
+ * can be a surprise again after a nerf. Reading old games against the current
+ * meta would get both wrong.
+ */
+export function metaByPatch(games: readonly Game[]): Map<string, PatchMeta> {
+  const byPatch = new Map<string, Game[]>();
+  for (const game of games) {
+    if (!game.patch) continue;
+    const list = byPatch.get(game.patch);
+    if (list) list.push(game);
+    else byPatch.set(game.patch, [game]);
+  }
+  const patches = [...byPatch.keys()].sort(comparePatches); // newest first
+  const meta = new Map<string, PatchMeta>();
+  patches.forEach((patch, index) => {
+    const window = patches.slice(index, index + META_PATCH_COUNT).flatMap((p) => byPatch.get(p)!);
+    meta.set(patch, deriveMeta(window).metaByRole);
+  });
+  return meta;
+}
+
+/**
+ * Whether a pick was a pocket pick — off the meta of its game's patch. `null`
+ * when the game has no patch, or one the table doesn't cover.
+ */
+export function isPocketPick(
+  meta: ReadonlyMap<string, PatchMeta>,
+  game: Game,
+  role: Role,
+  championId: string,
+): boolean | null {
+  const patch = game.patch ? meta.get(game.patch) : undefined;
+  if (!patch) return null;
+  return !(patch.get(role)?.has(championId) ?? false);
+}
+
+export function emptyPocketProfile(): PocketProfile {
+  return {
+    games: 0,
+    pocketGames: 0,
+    pocketWins: 0,
+    pocketPicks: 0,
+    metaGames: 0,
+    metaWins: 0,
+    pocketSeconds: null,
+    metaSeconds: null,
+  };
+}
+
+/**
+ * Pocket picks against all-meta drafts, per team (lower-case name).
+ *
+ * Counted per game rather than per pick: the question is what happens to a
+ * team when it goes off-script, and a game with two pocket picks is still one
+ * game won or lost.
+ */
+export function derivePocketProfiles(
+  games: readonly Game[],
+  meta: ReadonlyMap<string, PatchMeta>,
+): Map<string, PocketProfile> {
+  interface Acc {
+    profile: PocketProfile;
+    pocketTime: number;
+    pocketTimed: number;
+    metaTime: number;
+    metaTimed: number;
+  }
+  const acc = new Map<string, Acc>();
+  for (const game of games) {
+    for (const side of [game.blue, game.red] as const) {
+      const flags = side.players.map((p) => isPocketPick(meta, game, p.role, p.champion.id));
+      if (flags.some((flag) => flag === null)) continue;
+      const key = side.teamName.toLowerCase();
+      const entry = acc.get(key) ?? {
+        profile: emptyPocketProfile(),
+        pocketTime: 0,
+        pocketTimed: 0,
+        metaTime: 0,
+        metaTimed: 0,
+      };
+      const pockets = flags.filter(Boolean).length;
+      const won = game.winner === side.side;
+      const length = game.durationSeconds;
+      entry.profile.games += 1;
+      entry.profile.pocketPicks += pockets;
+      if (pockets > 0) {
+        entry.profile.pocketGames += 1;
+        if (won) entry.profile.pocketWins += 1;
+        if (length) {
+          entry.pocketTime += length;
+          entry.pocketTimed += 1;
+        }
+      } else {
+        entry.profile.metaGames += 1;
+        if (won) entry.profile.metaWins += 1;
+        if (length) {
+          entry.metaTime += length;
+          entry.metaTimed += 1;
+        }
+      }
+      acc.set(key, entry);
+    }
+  }
+  const out = new Map<string, PocketProfile>();
+  for (const [key, entry] of acc) {
+    out.set(key, {
+      ...entry.profile,
+      pocketSeconds: entry.pocketTimed ? entry.pocketTime / entry.pocketTimed : null,
+      metaSeconds: entry.metaTimed ? entry.metaTime / entry.metaTimed : null,
+    });
+  }
+  return out;
+}
+
 /** Recent league games that vote on which season is the current one. */
 export const SEASON_WINDOW = 50;
 
@@ -1404,6 +1531,9 @@ export function buildPredictorModel(
   const { byCompetition: standingsByCompetition, overall: standingsOverall } = deriveStandings(runs);
   const { byCompetition: teamsByCompetition, all: allTeams } = deriveTeams(games);
   const goldSwing = deriveGoldSwing(formGames);
+  // Each form-season pick is judged against its own patch, with every loaded
+  // game informing what that patch's meta was.
+  const pocketProfiles = derivePocketProfiles(formGames, metaByPatch(games));
 
   return {
     playerSplitRecord: records.playerSplit,
@@ -1427,6 +1557,7 @@ export function buildPredictorModel(
     earlyGold: deriveEarlyGold(formGames),
     goldSwing: goldSwing.byTeam,
     goldSwingLeague: goldSwing.league,
+    pocketProfiles,
     // Class preference is a durable habit, so it reads all scoped history.
     classProfiles: deriveClassProfiles(games),
     archetypeProfiles: deriveArchetypeProfiles(games),
@@ -1476,6 +1607,7 @@ export function emptyPredictorModel(): PredictorModel {
     earlyGold: new Map(),
     goldSwing: new Map(),
     goldSwingLeague: [],
+    pocketProfiles: new Map(),
     classProfiles: new Map(),
     archetypeProfiles: new Map(),
     standingsByCompetition: new Map(),

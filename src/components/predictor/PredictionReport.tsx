@@ -1,10 +1,13 @@
+import { Link } from 'react-router-dom';
 import { ChampionArt } from '../ChampionArt.tsx';
 import { archetypeLabel } from '../../predictor/championArchetypes.ts';
 import { ROLE_SHORT, type Side } from '../../domain/types.ts';
+import { formatDuration } from '../../lib/format.ts';
 import type {
   ChampionScaling,
   Notice,
   PickLine,
+  PocketProfile,
   Prediction,
   ScalingRead,
   SideScore,
@@ -37,6 +40,9 @@ interface PredictionReportProps {
   ratingsLabel: string;
   /** Teams in this matchup that the ratings table doesn't list. */
   unratedTeams: string[];
+  /** How each team does with pocket picks over the form season, when it has games. */
+  pocketBlue?: PocketProfile | null;
+  pocketRed?: PocketProfile | null;
 }
 
 export function PredictionReport({
@@ -47,6 +53,8 @@ export function PredictionReport({
   formSeason,
   ratingsLabel,
   unratedTeams,
+  pocketBlue = null,
+  pocketRed = null,
 }: PredictionReportProps) {
   const { favourite, margin } = prediction;
   const leader = favourite === 'blue' ? blueTeam : favourite === 'red' ? redTeam : null;
@@ -146,8 +154,8 @@ export function PredictionReport({
           </p>
         </header>
         <div className="tendency-grid">
-          <TendencyColumn side="blue" team={blueTeam} lines={prediction.tendencyBlue} />
-          <TendencyColumn side="red" team={redTeam} lines={prediction.tendencyRed} />
+          <TendencyColumn side="blue" team={blueTeam} lines={prediction.tendencyBlue} pocket={pocketBlue} />
+          <TendencyColumn side="red" team={redTeam} lines={prediction.tendencyRed} pocket={pocketRed} />
         </div>
       </section>
 
@@ -258,7 +266,17 @@ function NoticeRow({ notice }: { notice: Notice }) {
   );
 }
 
-function TendencyColumn({ side, team, lines }: { side: Side; team: string; lines: string[] }) {
+function TendencyColumn({
+  side,
+  team,
+  lines,
+  pocket,
+}: {
+  side: Side;
+  team: string;
+  lines: string[];
+  pocket: PocketProfile | null;
+}) {
   return (
     <div className={`tendency tendency--${side}`}>
       <h3>{team || '—'}</h3>
@@ -267,6 +285,50 @@ function TendencyColumn({ side, team, lines }: { side: Side; team: string; lines
           <li key={index}>{line}</li>
         ))}
       </ul>
+      {pocket && pocket.games > 0 && <PocketSummary pocket={pocket} />}
+      {team && (
+        <Link className="tendency-link" to={`/teams?team=${encodeURIComponent(team)}`}>
+          Team stats →
+        </Link>
+      )}
+    </div>
+  );
+}
+
+const share = (part: number, whole: number) => (whole > 0 ? `${Math.round((part / whole) * 100)}%` : '—');
+
+/**
+ * Pocket picks — champions off the meta of the patch each game was played on —
+ * against all-meta drafts: how often, how they went, how long they ran.
+ */
+function PocketSummary({ pocket }: { pocket: PocketProfile }) {
+  return (
+    <div className="tendency-pocket">
+      <h4>
+        Pocket picks <span className="dim">off-meta for their patch</span>
+      </h4>
+      <dl>
+        <div>
+          <dt>Drafted</dt>
+          <dd>
+            in {share(pocket.pocketGames, pocket.games)} of {pocket.games} games ·{' '}
+            {(pocket.pocketPicks / pocket.games).toFixed(2)} per game
+          </dd>
+        </div>
+        <div>
+          <dt>Win rate</dt>
+          <dd>
+            {share(pocket.pocketWins, pocket.pocketGames)} with one ({pocket.pocketGames}) ·{' '}
+            {share(pocket.metaWins, pocket.metaGames)} all-meta ({pocket.metaGames})
+          </dd>
+        </div>
+        <div>
+          <dt>Game time</dt>
+          <dd>
+            {formatDuration(pocket.pocketSeconds)} with one · {formatDuration(pocket.metaSeconds)} all-meta
+          </dd>
+        </div>
+      </dl>
     </div>
   );
 }

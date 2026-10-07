@@ -60,6 +60,12 @@ export const COLUMN_ALIASES = {
    * that wins from behind; files without them simply lose those two reads.
    */
   goldDiff: ['golddiffat10', 'golddiffat15', 'golddiffat20', 'golddiffat25'],
+  /**
+   * Optional: the team's own gold at the same marks, and at the end of the
+   * game. Oracle's Elixir has nothing at 5 or 30 minutes.
+   */
+  goldAt: ['goldat10', 'goldat15', 'goldat20', 'goldat25'],
+  totalGold: ['totalgold'],
 } as const;
 
 export type LogicalField = keyof typeof COLUMN_ALIASES;
@@ -89,14 +95,16 @@ export type ColumnMap = Partial<Record<LogicalField, ColumnKey>> & {
    * value onto the wrong mark.
    */
   goldDiffColumns: { minute: GoldCheckpoint; column: ColumnKey }[];
+  /** The team's own gold, keyed by minute the same way. */
+  goldAtColumns: { minute: GoldCheckpoint; column: ColumnKey }[];
 };
 
 /** Fields whose aliases are a list of sibling columns, not preference order. */
-const MULTI_COLUMN_FIELDS = new Set<LogicalField>(['bans', 'picks', 'goldDiff']);
+const MULTI_COLUMN_FIELDS = new Set<LogicalField>(['bans', 'picks', 'goldDiff', 'goldAt']);
 
 export function buildColumnMap(headers: string[]): ColumnMap {
   const present = new Set(headers.map(normalizeHeader));
-  const map: ColumnMap = { banColumns: [], pickColumns: [], goldDiffColumns: [] };
+  const map: ColumnMap = { banColumns: [], pickColumns: [], goldDiffColumns: [], goldAtColumns: [] };
 
   for (const [field, aliases] of Object.entries(COLUMN_ALIASES) as [
     LogicalField,
@@ -115,6 +123,10 @@ export function buildColumnMap(headers: string[]): ColumnMap {
   map.goldDiffColumns = GOLD_CHECKPOINTS.map((minute) => ({
     minute,
     column: normalizeHeader(`golddiffat${minute}`),
+  })).filter((entry) => present.has(entry.column));
+  map.goldAtColumns = GOLD_CHECKPOINTS.map((minute) => ({
+    minute,
+    column: normalizeHeader(`goldat${minute}`),
   })).filter((entry) => present.has(entry.column));
   return map;
 }

@@ -31,6 +31,7 @@ import {
   type Game,
   type GoldDiffTrack,
   type IngestWarning,
+  type TeamGold,
   type PlayerSlot,
   type Role,
   type Side,
@@ -48,6 +49,7 @@ import {
   parseRole,
   parseSide,
   roleFromParticipantId,
+  type ColumnKey,
   type ColumnMap,
   type LogicalField,
   type RawRow,
@@ -374,7 +376,27 @@ function buildTeamSide(
     players,
     bans: readBans(teamRow, rows, map),
     goldDiff: readGoldDiff(teamRow, map),
+    gold: readTeamGold(teamRow, map),
   };
+}
+
+/**
+ * The team's own gold at each mark, and in total, from the team row. Same
+ * rule as the diffs: a mark the game never reached is `null`, never zero.
+ */
+function readTeamGold(teamRow: RawRow | undefined, map: ColumnMap): TeamGold | null {
+  if (!teamRow) return null;
+  const number = (column: ColumnKey | undefined): number | null => {
+    const raw = column ? teamRow[column] : undefined;
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  };
+  const byMinute = new Map(map.goldAtColumns.map(({ minute, column }) => [minute, number(column)]));
+  const at = GOLD_CHECKPOINTS.map((minute) => byMinute.get(minute) ?? null);
+  const total = number(map.totalGold);
+  if (total === null && at.every((value) => value === null)) return null;
+  return { at, total };
 }
 
 /**
