@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChampionArt } from '../components/ChampionArt.tsx';
+import { GameTimeRange, GoldLeadChart, WinsByLength } from '../components/teamstats/TeamCharts.tsx';
 import { competitionLabel, competitionShort } from '../domain/competitions.ts';
 import { ROLE_LABEL, ROLE_SHORT, type CompetitionId } from '../domain/types.ts';
-import { formatCount, formatDuration } from '../lib/format.ts';
+import { formatCount, formatDate, formatDuration } from '../lib/format.ts';
 import { archetypeLabel } from '../predictor/championArchetypes.ts';
 import { deriveArchetypeProfiles, metaByPatch } from '../predictor/derive.ts';
 import {
@@ -12,6 +13,7 @@ import {
   teamSeasons,
   teamStats,
   type ChampionUse,
+  type GameLength,
   type PlayerStats,
   type TeamOption,
   type TeamStats,
@@ -191,8 +193,8 @@ function TeamReport({ stats }: { stats: TeamStats }) {
           <Stat label="Games" value={`${stats.wins}–${stats.games - stats.wins}`} sub={`${pct(stats.wins, stats.games)} won`} />
           <Stat
             label="Average game time"
-            value={formatDuration(stats.duration.average)}
-            sub={`wins ${formatDuration(stats.duration.wins)} · losses ${formatDuration(stats.duration.losses)}`}
+            value={formatDuration(stats.duration.all.average)}
+            sub={`wins ${formatDuration(stats.duration.wins.average)} · losses ${formatDuration(stats.duration.losses.average)}`}
           />
           <Stat
             label="End-of-game gold"
@@ -209,10 +211,46 @@ function TeamReport({ stats }: { stats: TeamStats }) {
 
       <section className="panel">
         <div className="panel-header">
+          <h2>Game time</h2>
+          <span className="dim">{formatCount(stats.duration.all.sample, 'game')} with a recorded length</span>
+        </div>
+        <div className="panel-pad team-stat-time">
+          <div className="team-stat-tiles">
+            <div className="team-stat-tilegroup">
+              <h3>All games</h3>
+              <div className="stat-grid">
+                <Stat label="Average" value={formatDuration(stats.duration.all.average)} />
+                <Stat label="Shortest" value={formatDuration(stats.duration.all.shortest?.seconds ?? null)} sub={gameNote(stats.duration.all.shortest)} />
+                <Stat label="Longest" value={formatDuration(stats.duration.all.longest?.seconds ?? null)} sub={gameNote(stats.duration.all.longest)} />
+              </div>
+            </div>
+            <div className="team-stat-tilegroup">
+              <h3>Wins</h3>
+              <div className="stat-grid">
+                <Stat label="Average win" value={formatDuration(stats.duration.wins.average)} sub={`${stats.duration.wins.sample} wins`} />
+                <Stat label="Fastest win" value={formatDuration(stats.duration.wins.shortest?.seconds ?? null)} sub={gameNote(stats.duration.wins.shortest)} />
+                <Stat label="Longest win" value={formatDuration(stats.duration.wins.longest?.seconds ?? null)} sub={gameNote(stats.duration.wins.longest)} />
+              </div>
+            </div>
+          </div>
+          <GameTimeRange
+            rows={[
+              { label: 'All games', summary: stats.duration.all },
+              { label: 'Wins', summary: stats.duration.wins },
+              { label: 'Losses', summary: stats.duration.losses },
+            ]}
+          />
+          <WinsByLength buckets={stats.lengthBuckets} />
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
           <h2>Gold by minute</h2>
           <span className="dim">team gold, and lead or deficit against the opponent</span>
         </div>
         <div className="panel-pad">
+          <GoldLeadChart marks={stats.gold} />
           <table className="team-stat-table">
             <thead>
               <tr>
@@ -276,6 +314,12 @@ function TeamReport({ stats }: { stats: TeamStats }) {
       </section>
     </>
   );
+}
+
+/** Which game a shortest/longest figure was: opponent, date, result. */
+function gameNote(game: GameLength | null): string | undefined {
+  if (!game) return undefined;
+  return `vs ${game.opponent} · ${formatDate(game.date)} · ${game.won ? 'won' : 'lost'}`;
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {

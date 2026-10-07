@@ -115,7 +115,34 @@ describe('teamStats', () => {
     ], new Map())!;
     expect(stats.games).toBe(4);
     expect(stats.wins).toBe(2);
-    expect(stats.duration).toEqual({ average: 2066.6666666666665, wins: 1900, losses: 2400, sample: 3 });
+    expect(stats.duration.all).toMatchObject({ average: 2066.6666666666665, sample: 3 });
+    expect(stats.duration.wins.average).toBe(1900);
+    expect(stats.duration.losses.average).toBe(2400);
+  });
+
+  it('names the shortest and longest game, overall and in wins', () => {
+    const stats = teamStats('T1', [
+      game({ id: 'a', day: 0, winner: 'blue', seconds: 1500 }),
+      game({ id: 'b', day: 1, winner: 'red', seconds: 2900, red: 'G2 Esports' }),
+      game({ id: 'c', day: 2, winner: 'blue', seconds: 2100, red: 'KT Rolster' }),
+    ], new Map())!;
+    expect(stats.duration.all.shortest).toMatchObject({ seconds: 1500, opponent: 'Gen.G', won: true });
+    expect(stats.duration.all.longest).toMatchObject({ seconds: 2900, opponent: 'G2 Esports', won: false });
+    // The longest WIN is a different game from the longest game.
+    expect(stats.duration.wins.longest).toMatchObject({ seconds: 2100, opponent: 'KT Rolster' });
+    expect(stats.duration.losses.shortest!.seconds).toBe(2900);
+  });
+
+  it('buckets games by length, split by result', () => {
+    const minutes = [24, 27, 29.99, 30, 34, 36, 41, 52];
+    const stats = teamStats('T1', minutes.map((m, i) => game({ id: `g${i}`, day: i, winner: i % 2 ? 'red' : 'blue', seconds: m * 60 })), new Map())!;
+    expect(stats.lengthBuckets.map((b) => [b.from, b.to, b.wins, b.losses])).toEqual([
+      [null, 25, 1, 0],
+      [25, 30, 1, 1],
+      [30, 35, 1, 1],
+      [35, 40, 0, 1],
+      [40, null, 1, 1],
+    ]);
   });
 
   it('averages team gold at each mark, skipping marks a game never reached', () => {

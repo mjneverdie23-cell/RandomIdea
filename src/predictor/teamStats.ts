@@ -140,17 +140,47 @@ export interface PlayerStats {
   style: ArchetypeProfile | null;
 }
 
+/** One game's length, with enough context to say which game it was. */
+export interface GameLength {
+  seconds: number;
+  opponent: string;
+  date: string;
+  won: boolean;
+}
+
+/** Average, shortest and longest game over a set of games. */
+export interface DurationSummary {
+  average: number | null;
+  shortest: GameLength | null;
+  longest: GameLength | null;
+  /** Games with a recorded length. */
+  sample: number;
+}
+
+/** Games in one game-length bucket, split by result. */
+export interface LengthBucket {
+  /** Minutes, inclusive; `null` at the open end. */
+  from: number | null;
+  to: number | null;
+  wins: number;
+  losses: number;
+}
+
+/**
+ * Edges of the game-length buckets, in minutes. Pro games cluster between 25
+ * and 40 minutes, so the middle is cut in fives and both tails are open.
+ */
+export const LENGTH_EDGES = [25, 30, 35, 40] as const;
+
 export interface TeamStats {
   team: string;
   games: number;
   wins: number;
   competitions: { id: CompetitionId; games: number }[];
-  duration: {
-    average: number | null;
-    wins: number | null;
-    losses: number | null;
-    sample: number;
-  };
+  /** Game time over all games, the wins and the losses. */
+  duration: { all: DurationSummary; wins: DurationSummary; losses: DurationSummary };
+  /** Wins and losses by game length, shortest bucket first. */
+  lengthBuckets: LengthBucket[];
   /** At 10/15/20/25 minutes — Oracle's Elixir records nothing at 5 or 30. */
   gold: GoldMark[];
   endGold: { average: number | null; perMinute: number | null; sample: number };
@@ -221,6 +251,39 @@ const finishChampion = (entry: ChampionAcc): ChampionUse => ({
 const byGames = (a: { games: number; name?: string }, b: { games: number; name?: string }) =>
   b.games - a.games || (a.name ?? '').localeCompare(b.name ?? '');
 
+function summarize(lengths: GameLength[]): DurationSummary {
+  if (lengths.length === 0) return { average: null, shortest: null, longest: null, sample: 0 };
+  let shortest = lengths[0]!;
+  let longest = lengths[0]!;
+  for (const length of lengths) {
+    if (length.seconds < shortest.seconds) shortest = length;
+    if (length.seconds > longest.seconds) longest = length;
+  }
+  return {
+    average: mean(lengths.map((l) => l.seconds)),
+    shortest,
+    longest,
+    sample: lengths.length,
+  };
+}
+
+function bucketLengths(lengths: GameLength[]): LengthBucket[] {
+  const edges = [null, ...LENGTH_EDGES, null];
+  const buckets: LengthBucket[] = edges.slice(0, -1).map((from, index) => ({
+    from,
+    to: edges[index + 1] ?? null,
+    wins: 0,
+    losses: 0,
+  }));
+  for (const length of lengths) {
+    const minutes = length.seconds / 60;
+    const index = LENGTH_EDGES.filter((edge) => minutes >= edge).length;
+    if (length.won) buckets[index]!.wins += 1;
+    else buckets[index]!.losses += 1;
+  }
+  return buckets;
+}
+
 /**
  * Stats for `team` over `games`.
  *
@@ -243,9 +306,7 @@ export function teamStats(
 
   let wins = 0;
   const comps = new Map<CompetitionId, number>();
-  const lengths: number[] = [];
-  const winLengths: number[] = [];
-  const lossLengths: number[] = [];
+  const lengths: GameLength[] = [];
   const goldAt = GOLD_CHECKPOINTS.map(() => [] as number[]);
   const diffAt = GOLD_CHECKPOINTS.map(() => [] as number[]);
   const totals: number[] = [];
@@ -271,8 +332,8 @@ export function teamStats(
 
     const seconds = game.durationSeconds;
     if (seconds) {
-      lengths.push(seconds);
-      (won ? winLengths : lossLengths).push(seconds);
+      const opponent = side === game.blue ? game.red.teamName : game.blue.teamName;
+      lengths.push({ seconds, opponent, date: game.date, won });
     }
 
     if (side.gold) {
@@ -349,7 +410,12 @@ export function teamStats(
     games: played.length,
     wins,
     competitions: [...comps].map(([id, count]) => ({ id, games: count })).sort((a, b) => b.games - a.games),
-    duration: { average: mean(lengths), wins: mean(winLengths), losses: mean(lossLengths), sample: lengths.length },
+    duration: {
+      all: summarize(lengths),
+      wins: summarize(lengths.filter((g) => g.won)),
+      losses: summarize(lengths.filter((g) => !g.won)),
+    },
+    lengthBuckets: bucketLengths(lengths),
     gold: GOLD_CHECKPOINTS.map((minute, index) => ({
       minute,
       gold: mean(goldAt[index]!),

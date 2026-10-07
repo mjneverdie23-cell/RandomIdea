@@ -1272,8 +1272,16 @@ current one by default, or all). It shows:
 
 - **Overview:** record, average game time (overall, in wins, in losses),
   end-of-game gold and gold per minute, and pocket picks per game.
-- **Gold by minute:** average team gold and the average lead or deficit at 10,
-  15, 20 and 25 minutes. **Oracle's Elixir records gold at those marks only,
+- **Game time:**
+  - headline figures for all games and for wins: average, shortest and longest,
+    each naming the opponent, date and result;
+  - a range chart (shortest → longest with the average marked) for all games,
+    wins and losses on one minute axis;
+  - a chart of wins and losses by game length (under 25, 25–30, 30–35, 35–40,
+    40+ minutes), wins at the baseline so they compare across buckets, with the
+    win rate under each bar.
+- **Gold by minute:** a chart of the average lead (up) or deficit (down), and a
+  table of average team gold and lead or deficit, at 10, 15, 20 and 25 minutes. **Oracle's Elixir records gold at those marks only,
   so there is nothing at 5 or 30 minutes.** The table says so rather than
   inventing a number. End-of-game gold comes from `totalgold`.
 - **Pocket picks:** how often the team drafts one, its win rate and game time
@@ -1304,6 +1312,20 @@ Data page to fill it in.
 
 The numbers are built by `src/predictor/teamStats.ts`, which is pure and
 tested.
+
+**How the charts are drawn** (`src/components/teamstats/TeamCharts.tsx`):
+
+- **Inline SVG**, laid out at the container's measured width, so text stays at
+  reading size on a phone. Minute ticks drop from every 5 to every 10 minutes
+  when there's no room.
+- **Colour:** each chart uses one accent for the data it is about and a gray for
+  context. The accent is `#3987e5`, the reference palette's dark-mode slot 1,
+  validated at 5:1 on the panel. The gray clears 3.7:1.
+- **Marks:** thin bars with rounded data-ends and solid hairline gridlines.
+  Values sit on the marks that matter.
+- **No colour- or hover-only values.** Every mark has a hover and keyboard-focus
+  tooltip, and every chart has a "Show as table" equivalent (the gold chart sits
+  directly above its table).
 
 ---
 

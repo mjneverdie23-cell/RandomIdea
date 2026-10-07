@@ -1401,3 +1401,256 @@ code {
     display: none;
   }
 }
+
+/* Team Stat charts ------------------------------------------------- */
+
+.team-stat-page {
+  /* Emphasis: one accent for the data a chart is about, one gray for context.
+     #3987e5 is the reference palette's dark-mode slot 1, validated on the
+     panel surface (5:1); the gray clears 3.7:1 on every panel shade. */
+  --viz-accent: #3987e5;
+  --viz-context: #64748f;
+  --viz-grid: rgba(148, 172, 214, 0.12);
+  --viz-axis: rgba(148, 172, 214, 0.32);
+}
+
+.team-stat-time {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.team-stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px 28px;
+}
+
+.team-stat-tilegroup h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.viz {
+  margin: 0;
+}
+
+.viz + .team-stat-table {
+  margin-top: 18px;
+}
+
+.viz figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+
+.viz-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.viz-caption {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.viz-legend {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px 8px;
+  flex-wrap: wrap;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.viz-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-left: 6px;
+}
+
+.viz-key--accent {
+  background: var(--viz-accent);
+}
+
+.viz-key--context {
+  background: var(--viz-context);
+}
+
+.viz-key--dot {
+  border-radius: 50%;
+  background: var(--viz-accent);
+}
+
+.viz-key--hollow {
+  border-radius: 50%;
+  border: 2px solid var(--viz-accent);
+  width: 9px;
+  height: 9px;
+}
+
+.viz-plot {
+  position: relative;
+  width: 100%;
+}
+
+.viz-svg {
+  display: block;
+  overflow: visible;
+}
+
+.viz-svg text {
+  font-family: var(--font-ui);
+}
+
+.viz-grid {
+  stroke: var(--viz-grid);
+  stroke-width: 1;
+}
+
+.viz-axis {
+  stroke: var(--viz-axis);
+  stroke-width: 1;
+}
+
+.viz-tick {
+  fill: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-tick--strong {
+  fill: var(--text-dim);
+}
+
+.viz-label {
+  fill: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.viz-value {
+  fill: var(--text-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-value--strong {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.viz-hit {
+  fill: transparent;
+}
+
+.viz-range {
+  stroke: var(--viz-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+/* Hollow ends and a filled average, each ringed in the surface colour. */
+.viz-end {
+  fill: var(--panel);
+  stroke: var(--viz-accent);
+  stroke-width: 2;
+}
+
+.viz-avg {
+  fill: var(--viz-accent);
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.viz-bar--accent {
+  fill: var(--viz-accent);
+}
+
+.viz-bar--context {
+  fill: var(--viz-context);
+}
+
+.viz-row,
+.viz-col {
+  cursor: default;
+  outline: none;
+}
+
+.viz-row:hover .viz-hit,
+.viz-row:focus-visible .viz-hit,
+.viz-col:hover .viz-hit,
+.viz-col:focus-visible .viz-hit {
+  fill: rgba(148, 172, 214, 0.06);
+}
+
+.viz-col:hover .viz-bar,
+.viz-col:focus-visible .viz-bar {
+  filter: brightness(1.18);
+}
+
+.viz-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  min-width: 150px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--panel-raised);
+  box-shadow: var(--shadow-lift);
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.viz-tip-title {
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+
+.viz-tip-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-dim);
+}
+
+.viz-tip-row strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-table {
+  margin-top: 6px;
+}
+
+.viz-table > summary {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.viz-table .team-stat-table {
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .team-stat-tiles {
+    grid-template-columns: 1fr;
+  }
+
+  .viz-legend {
+    margin-left: 0;
+  }
+}
