@@ -879,6 +879,18 @@ deliberately:
   current-form reads; averaging five seasons together would wash out exactly
   the signal they exist to provide.
 
+  "Most recent" means the season most of the latest **50 league games** belong
+  to (`SEASON_WINDOW`), not the highest season label in the data. Oracle's
+  Elixir opens some leagues' next season early: the 2026 export carries 92
+  games labelled 2027, played in August and September. Cups and other events
+  can carry next year's label too.
+  - **Old rule:** a handful of such games made 2027 the current season, which
+    left every other team with no form edge and "No games in the loaded seasons
+    for a behavioural read".
+  - **Now:** only regional league games vote, so a few early labels are
+    outvoted. A real new season still takes over within days of the leagues
+    starting.
+
 ### Backtesting: paste matches instead of clicking them
 
 Composing a matchup by hand takes about a minute — fine for one prediction,

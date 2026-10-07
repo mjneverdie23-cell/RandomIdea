@@ -168,6 +168,43 @@ describe('latestSeason', () => {
     ];
     expect(latestSeason(games)).toBe('2026');
   });
+
+  /** `n` league games in `season`, starting on `from`. */
+  const league = (n: number, season: string, from: number, competition: Game['competition'] = 'LCK') =>
+    Array.from({ length: n }, (_, i) =>
+      makeGame({ id: `${competition}-${season}-${from + i}`, blue: 'A', red: 'B', winner: 'blue', day: from + i, season, competition }),
+    );
+
+  it('is not taken over by next season\'s early games', () => {
+    // The 2026 export labels some August games 2027: a cup kept under OTHER,
+    // or a league opening its next season early. Neither may make 2027 current.
+    expect(latestSeason([...league(60, '2026', 0), ...league(5, '2027', 100, 'OTHER')])).toBe('2026');
+    expect(latestSeason([...league(60, '2026', 0), ...league(5, '2027', 100)])).toBe('2026');
+  });
+
+  it('moves to the new season once the leagues do', () => {
+    expect(latestSeason([...league(60, '2026', 0), ...league(30, '2027', 100)])).toBe('2027');
+  });
+
+  it('falls back to every game when there are no league games', () => {
+    expect(latestSeason(league(3, '2026', 0, 'WORLDS'))).toBe('2026');
+    expect(latestSeason([])).toBeNull();
+  });
+
+  it('keeps the form reads of teams still in the current season', () => {
+    // The reported case: LCP and LCS teams read "2027 season, no games".
+    const games = [
+      ...Array.from({ length: 12 }, (_, i) =>
+        makeGame({ id: `lcp-${i}`, blue: 'GAM Esports', red: 'Shopify Rebellion', winner: i % 2 ? 'blue' : 'red', day: i * 3, season: '2026', competition: 'LCP' }),
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        makeGame({ id: `cup-${i}`, blue: 'X', red: 'Y', winner: 'blue', day: 60 + i, season: '2027', competition: 'OTHER', split: null }),
+      ),
+    ];
+    const model = buildPredictorModel(games);
+    expect(model.formSeason).toBe('2026');
+    expect(model.behavior.has('gam esports')).toBe(true);
+  });
 });
 
 describe('deriveMeta', () => {

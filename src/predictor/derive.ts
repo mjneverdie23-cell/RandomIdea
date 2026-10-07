@@ -20,6 +20,7 @@
  */
 
 import { comparePatches } from '../data/ingest.ts';
+import { COMPETITION_BY_ID } from '../domain/competitions.ts';
 import { makeSeriesKey, partitionSeries } from '../data/stage.ts';
 import {
   GOLD_CHECKPOINTS,
@@ -1346,13 +1347,45 @@ function deriveChampionPools(games: readonly Game[]): Map<Role, Champion[]> {
 /* Entry point                                                         */
 /* ------------------------------------------------------------------ */
 
-/** Most recent season present, which scopes the current-form reads. */
+/** Recent league games that vote on which season is the current one. */
+export const SEASON_WINDOW = 50;
+
+/**
+ * The season current form is read from: the one most of the latest league
+ * games belong to.
+ *
+ * Not simply the highest season label present. Oracle's Elixir opens some
+ * leagues' next season months early — the 2026 export carries 92 games
+ * labelled 2027, played in August and September — and the cups and other
+ * events kept under `OTHER` can carry next year's label too. Taking the
+ * highest label let a handful of those games declare 2027 the current season,
+ * which left every other team with no form edge and "No games in the loaded
+ * seasons for a behavioural read".
+ *
+ * So only regional league games vote, and only the newest `SEASON_WINDOW` of
+ * them. A stray early label is outvoted, while a real new season still takes
+ * over within days of the leagues starting, because league games come thick
+ * and fast. Ties go to the newer season. With no league games at all, every
+ * game votes.
+ */
 export function latestSeason(games: readonly Game[]): string | null {
-  let latest: string | null = null;
-  for (const game of games) {
-    if (latest === null || game.season > latest) latest = game.season;
+  if (games.length === 0) return null;
+  const league = games.filter((game) => COMPETITION_BY_ID[game.competition]?.scope === 'regional');
+  const recent = [...(league.length > 0 ? league : games)]
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, SEASON_WINDOW);
+
+  const votes = new Map<string, number>();
+  for (const game of recent) votes.set(game.season, (votes.get(game.season) ?? 0) + 1);
+  let current: string | null = null;
+  let most = 0;
+  for (const [season, count] of votes) {
+    if (count > most || (count === most && current !== null && season > current)) {
+      current = season;
+      most = count;
+    }
   }
-  return latest;
+  return current;
 }
 
 export function buildPredictorModel(
