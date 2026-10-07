@@ -1654,3 +1654,187 @@ code {
     margin-left: 0;
   }
 }
+
+/* Team Stat: trend (stock-style) and donuts ------------------------- */
+
+.viz-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+}
+
+.viz-quote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 10px;
+}
+
+.viz-quote-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-quote-label,
+.viz-quote-change {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-key--line {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--viz-accent);
+}
+
+.viz-trend {
+  cursor: crosshair;
+  outline: none;
+  touch-action: pan-y;
+}
+
+.viz-trend:focus-visible {
+  outline: 2px solid var(--viz-accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.viz-wash-stop {
+  stop-color: var(--viz-accent);
+}
+
+.viz-line {
+  fill: none;
+  stroke: var(--viz-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* The latest value, tagged on the axis like a last price. Dark text on the
+   accent clears 5:1. */
+.viz-tag rect {
+  fill: var(--viz-accent);
+}
+
+.viz-tag text {
+  fill: var(--panel);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-cross line {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+}
+
+.viz-bar.is-active {
+  filter: brightness(1.35);
+}
+
+.viz-tip--below {
+  transform: translate(-50%, 14px);
+}
+
+.team-stat-donuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 26px 32px;
+}
+
+.viz-donut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+}
+
+.viz-donut .viz-svg {
+  flex: none;
+}
+
+/* A 2px surface gap between slices. */
+.viz-slice {
+  stroke: var(--panel);
+  stroke-width: 2;
+  outline: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.viz-slice.is-dim {
+  opacity: 0.35;
+}
+
+.viz-slice:focus-visible {
+  stroke: var(--text);
+}
+
+.viz-donut-total {
+  fill: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-donut-unit {
+  fill: var(--text-dim);
+  font-size: 12px;
+}
+
+.viz-donut-legend {
+  flex: 1 1 170px;
+  max-width: 300px;
+  min-width: 150px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.viz-donut-legend th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding: 5px 8px 5px 0;
+  white-space: nowrap;
+}
+
+.viz-donut-legend td {
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  padding: 5px 0 5px 12px;
+}
+
+.viz-donut-legend td + td {
+  color: var(--text-dim);
+}
+
+.viz-donut-legend tr.is-active th {
+  color: var(--text);
+}
+
+.viz-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 8px;
+  vertical-align: -1px;
+}
+
+@media (max-width: 640px) {
+  .team-stat-donuts {
+    grid-template-columns: 1fr;
+  }
+
+  .viz-quote-value {
+    font-size: 24px;
+  }
+}

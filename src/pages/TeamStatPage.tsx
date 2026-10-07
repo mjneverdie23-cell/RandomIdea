@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChampionArt } from '../components/ChampionArt.tsx';
-import { GameTimeRange, GoldLeadChart, WinsByLength } from '../components/teamstats/TeamCharts.tsx';
+import {
+  CompetitionDonut,
+  GameTimeRange,
+  GoldLeadChart,
+  LengthDonut,
+  PocketDonut,
+  TrendChart,
+  WinsByLength,
+} from '../components/teamstats/TeamCharts.tsx';
 import { competitionLabel, competitionShort } from '../domain/competitions.ts';
 import { ROLE_LABEL, ROLE_SHORT, type CompetitionId } from '../domain/types.ts';
 import { formatCount, formatDate, formatDuration } from '../lib/format.ts';
@@ -206,6 +214,28 @@ function TeamReport({ stats }: { stats: TeamStats }) {
             value={pocket.games ? (pocket.pocketPicks / pocket.games).toFixed(2) : '—'}
             sub={`per game · in ${pct(pocket.pocketGames, pocket.games)} of drafts`}
           />
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <h2>Over time</h2>
+          <span className="dim">oldest game on the left, newest on the right</span>
+        </div>
+        <div className="panel-pad">
+          <TrendChart games={stats.timeline} />
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <h2>Breakdown</h2>
+          <span className="dim">how the games split</span>
+        </div>
+        <div className="panel-pad team-stat-donuts">
+          <LengthDonut buckets={stats.lengthBuckets} />
+          <PocketDonut split={stats.pocketSplit} />
+          {stats.competitions.length > 1 && <CompetitionDonut competitions={stats.competitions} />}
         </div>
       </section>
 

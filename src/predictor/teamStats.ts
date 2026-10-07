@@ -172,6 +172,35 @@ export interface LengthBucket {
  */
 export const LENGTH_EDGES = [25, 30, 35, 40] as const;
 
+/** One game in a team's history, for charts over time. */
+export interface TimelineGame {
+  date: string;
+  opponent: string;
+  competition: CompetitionId;
+  won: boolean;
+  seconds: number | null;
+  /** Gold lead (+) or deficit (−) at 15 minutes; `null` when not recorded. */
+  gold15: number | null;
+  /** Pocket picks in this draft; `null` when the patch couldn't be judged. */
+  pocketPicks: number | null;
+}
+
+/** Games a rolling average spans. */
+export const ROLLING_GAMES = 10;
+
+/**
+ * The mean of the last `window` values at each position, skipping nulls.
+ * Early positions average what there is so far; `null` when there is nothing.
+ */
+export function rollingMean(values: readonly (number | null)[], window = ROLLING_GAMES): (number | null)[] {
+  return values.map((_, index) => {
+    const present = values
+      .slice(Math.max(0, index - window + 1), index + 1)
+      .filter((value): value is number => value !== null);
+    return present.length ? present.reduce((a, b) => a + b, 0) / present.length : null;
+  });
+}
+
 export interface TeamStats {
   team: string;
   games: number;
@@ -181,6 +210,10 @@ export interface TeamStats {
   duration: { all: DurationSummary; wins: DurationSummary; losses: DurationSummary };
   /** Wins and losses by game length, shortest bucket first. */
   lengthBuckets: LengthBucket[];
+  /** Every game, oldest first. */
+  timeline: TimelineGame[];
+  /** Judged drafts by how many pocket picks they had. */
+  pocketSplit: { allMeta: number; one: number; twoPlus: number };
   /** At 10/15/20/25 minutes — Oracle's Elixir records nothing at 5 or 30. */
   gold: GoldMark[];
   endGold: { average: number | null; perMinute: number | null; sample: number };
@@ -324,6 +357,9 @@ export function teamStats(
     champions: Map<string, ChampionAcc>;
   }>();
 
+  const timeline: TimelineGame[] = [];
+  const pocketSplit = { allMeta: 0, one: 0, twoPlus: 0 };
+
   for (const game of played) {
     const side = keyOf(game.blue.teamName) === key ? game.blue : game.red;
     const won = game.winner === side.side;
@@ -331,10 +367,25 @@ export function teamStats(
     comps.set(game.competition, (comps.get(game.competition) ?? 0) + 1);
 
     const seconds = game.durationSeconds;
-    if (seconds) {
-      const opponent = side === game.blue ? game.red.teamName : game.blue.teamName;
-      lengths.push({ seconds, opponent, date: game.date, won });
+    const opponent = side === game.blue ? game.red.teamName : game.blue.teamName;
+    if (seconds) lengths.push({ seconds, opponent, date: game.date, won });
+
+    const flags = side.players.map((slot) => isPocketPick(meta, game, slot.role, slot.champion.id));
+    const pocketPicks = flags.some((flag) => flag === null) ? null : flags.filter(Boolean).length;
+    if (pocketPicks !== null) {
+      if (pocketPicks === 0) pocketSplit.allMeta += 1;
+      else if (pocketPicks === 1) pocketSplit.one += 1;
+      else pocketSplit.twoPlus += 1;
     }
+    timeline.push({
+      date: game.date,
+      opponent,
+      competition: game.competition,
+      won,
+      seconds: seconds ?? null,
+      gold15: side.goldDiff?.checkpoints?.[1] ?? null,
+      pocketPicks,
+    });
 
     if (side.gold) {
       side.gold.at.forEach((value, index) => {
@@ -416,6 +467,9 @@ export function teamStats(
       losses: summarize(lengths.filter((g) => !g.won)),
     },
     lengthBuckets: bucketLengths(lengths),
+    // `played` is newest first; charts read left to right in time.
+    timeline: timeline.reverse(),
+    pocketSplit,
     gold: GOLD_CHECKPOINTS.map((minute, index) => ({
       minute,
       gold: mean(goldAt[index]!),

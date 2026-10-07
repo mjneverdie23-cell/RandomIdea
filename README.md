@@ -1272,6 +1272,28 @@ current one by default, or all). It shows:
 
 - **Overview:** record, average game time (overall, in wins, in losses),
   end-of-game gold and gold per minute, and pocket picks per game.
+- **Over time:** a stock-style chart of the team's last 10 games, rolling
+  forward through the season:
+  - a measure switch: **Form** (win rate), **Game time** (average minutes) or
+    **Gold @15** (average gold lead or deficit at 15 minutes);
+  - a headline with the current value and its change on the 10 games before,
+    like a price quote (`40% · ▼ 10 pts on the 10 before`);
+  - the average as a line over a light wash, with the latest value tagged on
+    the right axis;
+  - one bar per game underneath, up for a win and down for a loss, where a
+    price chart shows volume;
+  - zoom presets (**Last 20**, **Last 50**, **All**);
+  - a crosshair that follows the pointer and names the game, its result and
+    the average at that point. With the chart focused, the arrow keys (and
+    Home/End) step through the games.
+
+  With 20 or more games, the line starts at the 10th game so it never shows an
+  average of one or two games. The bars still start at the first game.
+- **Breakdown:** donut charts of how the games split, each with the total in the
+  middle and a legend table of counts and shares:
+  - games by length, using the same buckets as the bar chart;
+  - drafts by pocket picks (all meta, one, two or more);
+  - games by competition, shown when the team played in more than one.
 - **Game time:**
   - headline figures for all games and for wins: average, shortest and longest,
     each naming the opponent, date and result;
@@ -1318,14 +1340,19 @@ tested.
 - **Inline SVG**, laid out at the container's measured width, so text stays at
   reading size on a phone. Minute ticks drop from every 5 to every 10 minutes
   when there's no room.
-- **Colour:** each chart uses one accent for the data it is about and a gray for
-  context. The accent is `#3987e5`, the reference palette's dark-mode slot 1,
-  validated at 5:1 on the panel. The gray clears 3.7:1.
+- **Colour:** each bar and line chart uses one accent for the data it is about
+  and a gray for context. The accent is `#3987e5`, the reference palette's
+  dark-mode slot 1, validated at 5:1 on the panel. The gray clears 3.7:1.
+  Donuts whose slices have an order (length, pocket picks) use a light-to-dark
+  blue ramp. The competition donut uses five distinct hues. Past five
+  competitions, the smallest are folded into one gray slice. Each palette is
+  validated on the panel surface.
 - **Marks:** thin bars with rounded data-ends and solid hairline gridlines.
   Values sit on the marks that matter.
 - **No colour- or hover-only values.** Every mark has a hover and keyboard-focus
-  tooltip, and every chart has a "Show as table" equivalent (the gold chart sits
-  directly above its table).
+  tooltip, and every chart has a table equivalent: "Show as table" under each
+  chart, the legend table beside each donut, and the gold table directly under
+  the gold chart.
 
 ---
 

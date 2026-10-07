@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeChampion } from '../domain/champions.ts';
 import { ROLES, type Game, type Role, type Side, type TeamGold } from '../domain/types.ts';
 import { archetypeProfileKey } from './championArchetypes.ts';
-import { currentTeamSeason, teamOptions, teamSeasons, teamStats } from './teamStats.ts';
+import { currentTeamSeason, rollingMean, teamOptions, teamSeasons, teamStats } from './teamStats.ts';
 import type { ArchetypeProfile, PatchMeta } from './types.ts';
 
 const DRAFT = ['Aatrox', 'Viego', 'Azir', 'Jinx', 'Thresh'];
@@ -202,5 +202,33 @@ describe('teamStats', () => {
     ]);
     expect(stats.players[3]!.style).toBe(style);
     expect(stats.players[0]!.games).toBe(2);
+  });
+});
+
+describe('timeline', () => {
+  it('lists every game oldest first, with the 15-minute lead and pocket count', () => {
+    // Zed is off-meta on 16.03.
+    const meta = new Map([...metaFor(['16.01']), ...metaFor(['16.03'], { mid: 'Zed' })]);
+    const stats = teamStats('T1', [
+      game({ id: 'b', day: 5, winner: 'red', patch: '16.03', draft: ['Aatrox', 'Viego', 'Zed', 'Jinx', 'Thresh'], diffs: [-200, -900, null, null] }),
+      game({ id: 'a', day: 0, winner: 'blue', patch: '16.01', diffs: [300, 1200, 2000, 2500] }),
+      game({ id: 'c', day: 9, winner: 'blue', patch: '9.99' }),
+    ], meta)!;
+    expect(stats.timeline.map((g) => [g.won, g.gold15, g.pocketPicks])).toEqual([
+      [true, 1200, 0],
+      [false, -900, 1],
+      [true, null, null],
+    ]);
+    expect(stats.timeline[0]!.opponent).toBe('Gen.G');
+    // The unjudged patch counts nowhere in the split.
+    expect(stats.pocketSplit).toEqual({ allMeta: 1, one: 1, twoPlus: 0 });
+  });
+});
+
+describe('rollingMean', () => {
+  it('averages the last N values, skipping gaps, and starts with what it has', () => {
+    expect(rollingMean([1, 0, 1, 1], 3)).toEqual([1, 0.5, 2 / 3, 2 / 3]);
+    expect(rollingMean([null, 4, null, 8], 2)).toEqual([null, 4, 4, 8]);
+    expect(rollingMean([])).toEqual([]);
   });
 });
