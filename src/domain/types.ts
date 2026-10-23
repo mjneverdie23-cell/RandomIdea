@@ -67,6 +67,28 @@ export interface TeamSide {
    * it was captured, which only the Team Stat page reads and tolerates.
    */
   gold?: TeamGold | null;
+  /**
+   * Kills, structures, epic monsters and firsts, from the team row. `null`
+   * when the export has none of the columns; absent on games imported before
+   * it was captured, which only the Tournament page reads and tolerates.
+   */
+  objectives?: TeamObjectives | null;
+}
+
+/** What a team took in one game. Each count is `null` when its column is missing. */
+export interface TeamObjectives {
+  kills: number | null;
+  towers: number | null;
+  /** Elemental drakes and elders together, as Oracle's Elixir counts `dragons`. */
+  dragons: number | null;
+  barons: number | null;
+  heralds: number | null;
+  voidGrubs: number | null;
+  inhibitors: number | null;
+  firstBlood: boolean | null;
+  firstTower: boolean | null;
+  firstDragon: boolean | null;
+  firstBaron: boolean | null;
 }
 
 /** A team's own gold through a game. */

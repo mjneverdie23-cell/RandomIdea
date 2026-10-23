@@ -1356,6 +1356,109 @@ tested.
 
 ---
 
+## Tournament
+
+The **Tournament** tab, next to Team Stat, covers one event at a time. Pick a
+tournament from the list. International events (Worlds, MSI, First Stand, EWC)
+come first, one per season, then league splits and other events. The newest
+international event is the default. Then pick a stage:
+
+- **Event:** the whole event, or the main event without the play-in.
+- **Play-In**, when there was one.
+- **Swiss stage:** all rounds, or Round 1 to Round 5.
+- **Knockout stage:** all knockouts, or the quarterfinals, semifinals or final.
+
+A league split offers its regular season and playoffs instead. A group stage
+that isn't a Swiss is one stage, with no rounds. The page link
+(`/tournament?t=…&stage=…`) keeps both choices, so it can be bookmarked or
+shared.
+
+For the chosen stage it shows:
+
+- **Overview:** series, games, teams, blue-side win rate, average game time and
+  the patches played.
+- **Expected and unexpected:** how often the Predictor called the series and
+  the games right, and how many upsets and toss-ups there were. Every upset is
+  listed, both by series and by single game, with the favourite's chance and
+  the round. Series that went as expected are listed under a fold.
+- **Most played by lane:** the champions picked in each role, with games and
+  wins–losses. Every lane uses one bar scale, so a bar means the same number
+  of games in every lane.
+- **Bans and presence:** the most banned champions, and the highest presence
+  (picked or banned, as a share of games).
+- **Pocket picks:** how often a draft had one and its win rate against
+  all-meta drafts, plus every pocket pick with who played it. Picks are judged
+  against the meta of their own patch, across every loaded league: the same
+  rule as the Predictor and Team Stat.
+- **Records:** the biggest comebacks (deficit and minute), the biggest gold
+  leads at 15 minutes and whether they held, and the fastest and longest
+  games.
+- **Series and games:** every series by round, with its Swiss pool (`1–1
+  pool`), score and the Predictor's call. Open a series to see each game:
+  - both drafts, with pocket picks tagged;
+  - a gold graph, with the blue side ahead above the line and the red side
+    below, coloured by whoever leads;
+  - each side's biggest lead and when, the winner's comeback (how far down and
+    at what minute), and the gold gap at the end;
+  - kills, towers, dragons, Barons, void grubs, Heralds, inhibitors, and who
+    took first blood, first tower, first dragon and first Baron.
+
+**How rounds are worked out.** Oracle's Elixir has no round column. Each game
+has a split (`Play-In`, `Main Event`), a playoffs flag and its game number in
+the series, so the structure is rebuilt from the games:
+
+- **Phase:** play-in, knockout (playoffs flag, or a named knockout round), and
+  everything else as the group phase.
+- **Swiss rounds:** in a Swiss, every team still in plays once a round, so a
+  team's third series is Round 3. The group phase counts as a Swiss only when
+  that holds for at least 90% of series, and the pairings are between teams on
+  the same record (1–0 against 1–0). A round robin fails the second test.
+- **Knockout rounds:** in single elimination, a team's first knockout series is
+  the first round. The bracket's size (the Swiss qualifiers, or twice the
+  number of opening series) names that round: 8 teams means quarterfinals.
+  This also works on the first quarterfinal day, before the rest of the
+  bracket exists. A double-elimination bracket (a loser plays again) isn't split
+  into rounds. Round names in the export are used as they are.
+
+**How the calls are made.** Each game is scored by the Predictor with both
+drafts, the stage, the best-of and the series score going into the game. The
+model is built only from games played before that match day began. One model
+per match day keeps a whole Worlds to a couple of dozen models; a later series
+doesn't see an earlier one from the same day, which can leave information out
+but never lets a result in. A knockout series is scored at its competition's
+knockout format, so a Bo5 that ended 3–0 is still a Bo5. A group series is a
+Bo1 when it was one game and a Bo3 when it was more. The series call is the
+Predictor's chance to win the series once the game-1 draft was in.
+
+- **Toss-up:** under 55% either way.
+- **Upset:** the favourite lost.
+- **Big upset:** the favourite lost at 70% or more.
+
+Team ratings are the table the Predictor is using now, not a snapshot from
+before the event. Scoring runs in the background with a progress line, and is
+kept until the data or the ratings change.
+
+**Gold** comes from Oracle's Elixir's `golddiffat10/15/20/25` and each team's
+`totalgold`. That gives five measured points: four marks and the end. The line
+between them is a straight join, and the graph says so. A comeback is the
+winner's deepest deficit at a mark.
+
+**Objectives** (`kills`, `towers`, `dragons`, `barons`, `heralds`,
+`void_grubs`, `inhibitors`, `firstblood`, `firsttower`, `firstdragon`,
+`firstbaron`) are read from the team rows at import. Seasons imported before
+this was added show a note instead; re-import the CSV on the Data page to fill
+them in.
+
+The demo Worlds is built like the real one: a play-in, a 16-team Swiss with
+record-matched pools (Bo1 until a place is at stake, then Bo3), and an
+eight-team Bo5 bracket. Its splits and flags are the ones Oracle's Elixir
+writes, with no round names, so the page has to infer the rounds there too.
+
+The structure, stats and calls are built by `src/predictor/tournament.ts`,
+which is pure and tested.
+
+---
+
 ## Patch meta
 
 The **Patch Meta** panel on the quiz screen is computed from the loaded dataset
@@ -1470,7 +1573,7 @@ src/
   components/      draft board, quiz controls, meta panel, predictor composer
                    and report, layout
   pages/           Home, Setup, Quiz, Results, Predictor, Team Stat,
-                   Leaderboard, Data
+                   Tournament, Leaderboard, Data
   styles/          tokens, base, layout, draft, quiz, predictor, pages
   lib/             display formatting
 ```

@@ -156,8 +156,18 @@ interface EventPlan {
     endDay: number;
     series: number;
     bestOf: 1 | 3 | 5;
+    /**
+     * How matchups are drawn. `random` (the default) pairs any two teams for
+     * `series` series. The rest play real series to a winner: `play-in` is the
+     * last seed against `playIn` for the last main-event spot, `swiss` is a
+     * 16-team Swiss (record-matched pools, Bo1 until a place is at stake, then
+     * Bo3), and `bracket` is single elimination between the Swiss qualifiers.
+     */
+    draw?: 'random' | 'play-in' | 'swiss' | 'bracket';
   }[];
   pool: RosterTemplate[];
+  /** The challenger in a `play-in` block. */
+  playIn?: RosterTemplate;
 }
 
 /** Day 0 of the synthetic calendar. */
@@ -256,15 +266,18 @@ function buildPlans(): EventPlan[] {
       ],
     },
     {
+      // Shaped like the real thing, so the Tournament page has a Swiss and a
+      // bracket to read: the splits and playoffs flags are what Oracle's Elixir
+      // writes, with no round names, so the rounds have to be inferred.
       league: 'WLDs',
       year: 2025,
       pool: internationalPool(),
+      // Not in `pool`, so team strengths are drawn in the same order as before.
+      playIn: CBLOL_TEAMS[0]!,
       blocks: [
-        { split: 'Play-In', playoffs: 0, startDay: 262, endDay: 266, series: 8, bestOf: 1 },
-        { split: 'Swiss Stage', playoffs: 0, startDay: 268, endDay: 278, series: 20, bestOf: 3 },
-        { split: 'Quarterfinal', playoffs: 1, startDay: 284, endDay: 287, series: 4, bestOf: 5 },
-        { split: 'Semifinal', playoffs: 1, startDay: 291, endDay: 292, series: 2, bestOf: 5 },
-        { split: 'Final', playoffs: 1, startDay: 298, endDay: 298, series: 1, bestOf: 5 },
+        { split: 'Play-In', playoffs: 0, startDay: 262, endDay: 262, series: 1, bestOf: 5, draw: 'play-in' },
+        { split: 'Main Event', playoffs: 0, startDay: 268, endDay: 281, series: 33, bestOf: 1, draw: 'swiss' },
+        { split: 'Main Event', playoffs: 1, startDay: 286, endDay: 298, series: 7, bestOf: 5, draw: 'bracket' },
       ],
     },
     {
@@ -299,6 +312,8 @@ const CSV_COLUMNS = [
   'ban1', 'ban2', 'ban3', 'ban4', 'ban5', 'gamelength', 'result',
   'golddiffat10', 'golddiffat15', 'golddiffat20', 'golddiffat25',
   'goldat10', 'goldat15', 'goldat20', 'goldat25', 'totalgold',
+  'kills', 'towers', 'dragons', 'barons', 'heralds', 'void_grubs', 'inhibitors',
+  'firstblood', 'firsttower', 'firstdragon', 'firstbaron',
 ];
 
 /**
@@ -347,8 +362,81 @@ export function generateDemoCsv(seed: string = DEMO_SEED): string {
   const lines: string[] = [CSV_COLUMNS.join(',')];
   let gameCounter = 0;
 
+  /** Rows for one game, decided by the two teams' strengths plus noise. */
+  const playGame = (
+    plan: EventPlan,
+    block: EventPlan['blocks'][number],
+    blue: RosterTemplate,
+    red: RosterTemplate,
+    gameNumber: number,
+    timestamp: number,
+  ): boolean => {
+    gameCounter += 1;
+    const gameId = `DEMO-${plan.league}-${plan.year}-${String(gameCounter).padStart(5, '0')}`;
+    const blueStrength = strengths.get(blue.team) ?? 0.5;
+    const redStrength = strengths.get(red.team) ?? 0.5;
+    // Blue side keeps a small historical edge on top of team strength.
+    const blueWinChance = 0.52 + (blueStrength - redStrength) * 0.9;
+    const blueWins = rng.next() < clamp(blueWinChance, 0.12, 0.88);
+    lines.push(...renderGameRows({ gameId, plan, block, gameNumber, timestamp, blue, red, blueWins, rng }));
+    return blueWins;
+  };
+
+  /** A series played to a winner; `slot` staggers series on the same day. */
+  const playSeries = (
+    plan: EventPlan,
+    block: EventPlan['blocks'][number],
+    teamA: RosterTemplate,
+    teamB: RosterTemplate,
+    day: number,
+    slot: number,
+    bestOf: 1 | 3 | 5,
+  ): RosterTemplate => {
+    const target = Math.ceil(bestOf / 2);
+    let winsA = 0;
+    let winsB = 0;
+    for (let g = 1; winsA < target && winsB < target; g += 1) {
+      const blue = g % 2 === 1 ? teamA : teamB;
+      const red = g % 2 === 1 ? teamB : teamA;
+      const timestamp = SEASON_START + day * DAY_MS + slot * 3 * 60 * 60 * 1000 + (g - 1) * 55 * 60 * 1000;
+      const blueWins = playGame(plan, block, blue, red, g, timestamp);
+      if ((blueWins ? blue : red) === teamA) winsA += 1;
+      else winsB += 1;
+    }
+    return winsA > winsB ? teamA : teamB;
+  };
+
   for (const plan of plans) {
+    let mainEvent = plan.pool;
+    let qualifiers: RosterTemplate[] = [];
     for (const block of plan.blocks) {
+      if (block.draw === 'play-in' && plan.playIn) {
+        const seed = plan.pool.at(-1)!;
+        const winner = playSeries(plan, block, seed, plan.playIn, block.startDay, 0, block.bestOf);
+        mainEvent = [...plan.pool.slice(0, -1), winner];
+        continue;
+      }
+      if (block.draw === 'swiss') {
+        qualifiers = playSwiss(rng, mainEvent, (a, b, round, slot, bestOf) =>
+          playSeries(plan, block, a, b, block.startDay + round * 3 + Math.floor(slot / 4), slot % 4, bestOf),
+        );
+        continue;
+      }
+      if (block.draw === 'bracket') {
+        let bracket = qualifiers;
+        let day = block.startDay;
+        while (bracket.length > 1) {
+          const next: RosterTemplate[] = [];
+          for (let i = 0; i < bracket.length / 2; i += 1) {
+            next.push(playSeries(plan, block, bracket[i]!, bracket[bracket.length - 1 - i]!, day, 0, block.bestOf));
+            day += 1;
+          }
+          bracket = next;
+          day += 3;
+        }
+        continue;
+      }
+
       const span = Math.max(1, block.endDay - block.startDay);
       for (let s = 0; s < block.series; s += 1) {
         const day = block.startDay + Math.floor((s / block.series) * span);
@@ -357,38 +445,62 @@ export function generateDemoCsv(seed: string = DEMO_SEED): string {
           block.bestOf === 1 ? 1 : block.bestOf === 3 ? 2 + rng.int(2) : 3 + rng.int(3);
 
         for (let g = 1; g <= gamesInSeries; g += 1) {
-          gameCounter += 1;
-          const gameId = `DEMO-${plan.league}-${plan.year}-${String(gameCounter).padStart(5, '0')}`;
           // Sides alternate through a series, as they do in a real bracket.
           const blue = g % 2 === 1 ? teamA : teamB;
           const red = g % 2 === 1 ? teamB : teamA;
           const timestamp = SEASON_START + day * DAY_MS + (g - 1) * 55 * 60 * 1000 + rng.int(90) * 60 * 1000;
-
-          const blueStrength = strengths.get(blue.team) ?? 0.5;
-          const redStrength = strengths.get(red.team) ?? 0.5;
-          // Blue side keeps a small historical edge on top of team strength.
-          const blueWinChance = 0.52 + (blueStrength - redStrength) * 0.9;
-          const blueWins = rng.next() < clamp(blueWinChance, 0.12, 0.88);
-
-          lines.push(
-            ...renderGameRows({
-              gameId,
-              plan,
-              block,
-              gameNumber: g,
-              timestamp,
-              blue,
-              red,
-              blueWins,
-              rng,
-            }),
-          );
+          playGame(plan, block, blue, red, g, timestamp);
         }
       }
     }
   }
 
   return lines.join('\n');
+}
+
+/**
+ * A 16-team Swiss: each round pairs teams on the same record (shuffled within
+ * the pool), out at three wins or three losses, Bo1 until a team's place is at
+ * stake and Bo3 from then on. Returns the qualifiers, best record first.
+ */
+function playSwiss(
+  rng: Rng,
+  teams: RosterTemplate[],
+  play: (a: RosterTemplate, b: RosterTemplate, round: number, slot: number, bestOf: 1 | 3) => RosterTemplate,
+): RosterTemplate[] {
+  const record = new Map(teams.map((team) => [team.team, { wins: 0, losses: 0 }]));
+  let alive = [...teams];
+  for (let round = 0; alive.length > 1 && round < 5; round += 1) {
+    const pools = new Map<string, RosterTemplate[]>();
+    for (const team of alive) {
+      const { wins, losses } = record.get(team.team)!;
+      const key = `${wins}-${losses}`;
+      pools.set(key, [...(pools.get(key) ?? []), team]);
+    }
+    let slot = 0;
+    for (const members of pools.values()) {
+      for (let i = members.length - 1; i > 0; i -= 1) {
+        const j = rng.int(i + 1);
+        [members[i], members[j]] = [members[j]!, members[i]!];
+      }
+      for (let i = 0; i + 1 < members.length; i += 2) {
+        const [a, b] = [members[i]!, members[i + 1]!];
+        const standing = record.get(a.team)!;
+        const atStake = standing.wins === 2 || standing.losses === 2;
+        const winner = play(a, b, round, slot, atStake ? 3 : 1);
+        slot += 1;
+        record.get(winner.team)!.wins += 1;
+        record.get((winner === a ? b : a).team)!.losses += 1;
+      }
+    }
+    alive = alive.filter((team) => {
+      const { wins, losses } = record.get(team.team)!;
+      return wins < 3 && losses < 3;
+    });
+  }
+  return teams
+    .filter((team) => record.get(team.team)!.wins === 3)
+    .sort((a, b) => record.get(a.team)!.losses - record.get(b.team)!.losses);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -465,14 +577,24 @@ function renderGameRows(input: RenderInput): string[] {
         '', '', '', '', '',
         gameLength,
         entry.win ? 1 : 0,
-        // Gold is a team-level read; player rows leave it blank.
+        // Gold and objectives are team-level reads; player rows leave them blank.
         '', '', '', '',
         '', '', '', '', '',
+        '', '', '', '', '', '', '',
+        '', '', '', '',
       ]);
     });
   }
 
-  for (const entry of sides) {
+  const objectives = sides.map((entry) => demoObjectives(entry.gold, entry.win, gameLength));
+  // Exactly one side takes the first Baron, when anyone takes one at all.
+  const firstBaron = objectives.map((own, index) => {
+    const other = objectives[1 - index]!;
+    return own.barons > 0 && (sides[index]!.win || other.barons === 0) ? 1 : 0;
+  });
+
+  for (const [index, entry] of sides.entries()) {
+    const own = objectives[index]!;
     emit([
       entry.teamId,
       entry.side,
@@ -488,10 +610,45 @@ function renderGameRows(input: RenderInput): string[] {
       ...entry.gold,
       ...entry.gold.map((diff, index) => Math.round(DEMO_GOLD_BASE[index]! + diff / 2)),
       Math.round((gameLength / 60) * DEMO_GOLD_PER_MINUTE + (entry.win ? 3_000 : -3_000)),
+      own.kills,
+      own.towers,
+      own.dragons,
+      own.barons,
+      own.heralds,
+      own.voidGrubs,
+      own.inhibitors,
+      own.firstBlood,
+      own.firstTower,
+      own.firstDragon,
+      firstBaron[index]!,
     ]);
   }
 
   return rows;
+}
+
+/**
+ * Kills, structures and monsters for one side, read off values already drawn
+ * — its gold curve, the result and the game length — so adding them used no
+ * randomness and changed no existing demo game. Plausible, not simulated.
+ */
+function demoObjectives(gold: readonly number[], win: boolean, gameLength: number) {
+  const minutes = gameLength / 60;
+  const at25 = gold[3]!;
+  const ahead = (value: number) => (value > 0 ? 1 : 0);
+  const towers = win ? clamp(7 + Math.round(at25 / 2500), 6, 11) : clamp(3 + Math.round(at25 / 2500), 0, 7);
+  return {
+    kills: Math.max(1, Math.round(minutes * 0.35 + at25 / 900 + (win ? 4 : 0))),
+    towers,
+    dragons: win ? 3 + (at25 > 3000 ? 1 : 0) : 1 + (at25 > -1500 ? 1 : 0),
+    barons: win ? (minutes > 27 ? 1 : 0) + (minutes > 38 ? 1 : 0) : minutes > 35 && at25 > -1000 ? 1 : 0,
+    heralds: ahead(gold[1]!),
+    voidGrubs: gold[0]! > 0 ? 4 : 2,
+    inhibitors: win ? 1 + (minutes > 33 ? 1 : 0) : 0,
+    firstBlood: ahead(gold[0]!),
+    firstTower: ahead(gold[1]!),
+    firstDragon: ahead(gold[0]! + gold[1]!),
+  };
 }
 
 /**

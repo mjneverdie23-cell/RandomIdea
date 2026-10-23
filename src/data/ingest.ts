@@ -32,6 +32,7 @@ import {
   type GoldDiffTrack,
   type IngestWarning,
   type TeamGold,
+  type TeamObjectives,
   type PlayerSlot,
   type Role,
   type Side,
@@ -377,7 +378,34 @@ function buildTeamSide(
     bans: readBans(teamRow, rows, map),
     goldDiff: readGoldDiff(teamRow, map),
     gold: readTeamGold(teamRow, map),
+    objectives: readObjectives(teamRow, map),
   };
+}
+
+/**
+ * Kills, structures, epic monsters and firsts from the team row — player rows
+ * carry their own share, so only the team row is read. Each value stays `null`
+ * when its column is missing or blank; the whole read is `null` when the
+ * export has none of them.
+ */
+function readObjectives(teamRow: RawRow | undefined, map: ColumnMap): TeamObjectives | null {
+  if (!teamRow) return null;
+  const count = (field: LogicalField) => cellNumber(teamRow, map, field);
+  const first = (field: LogicalField) => cellBoolean(teamRow, map, field);
+  const objectives: TeamObjectives = {
+    kills: count('kills'),
+    towers: count('towers'),
+    dragons: count('dragons'),
+    barons: count('barons'),
+    heralds: count('heralds'),
+    voidGrubs: count('voidGrubs'),
+    inhibitors: count('inhibitors'),
+    firstBlood: first('firstBlood'),
+    firstTower: first('firstTower'),
+    firstDragon: first('firstDragon'),
+    firstBaron: first('firstBaron'),
+  };
+  return Object.values(objectives).every((value) => value === null) ? null : objectives;
 }
 
 /**

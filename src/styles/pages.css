@@ -1404,7 +1404,8 @@ code {
 
 /* Team Stat charts ------------------------------------------------- */
 
-.team-stat-page {
+.team-stat-page,
+.tournament-page {
   /* Emphasis: one accent for the data a chart is about, one gray for context.
      #3987e5 is the reference palette's dark-mode slot 1, validated on the
      panel surface (5:1); the gray clears 3.7:1 on every panel shade. */
@@ -1836,5 +1837,492 @@ code {
 
   .viz-quote-value {
     font-size: 24px;
+  }
+}
+
+/* Tournament -------------------------------------------------------- */
+
+.tournament-controls {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.tournament-dates {
+  font-size: 12px;
+  padding-bottom: 10px;
+}
+
+.tournament-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 28px;
+}
+
+.tournament-stage-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tournament-stage-label,
+.tournament-subhead {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.tournament-subhead {
+  margin-bottom: 10px;
+}
+
+.tournament-subhead .dim {
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-weight: 500;
+}
+
+.tournament-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.tournament-calls,
+.tournament-pair,
+.tournament-records {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 22px 32px;
+}
+
+.tournament-calls {
+  margin-top: 20px;
+}
+
+.tournament-page .stat-grid + .tournament-calls {
+  margin-top: 22px;
+}
+
+.call-list,
+.record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.call-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 13px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.call-row .dim {
+  font-size: 12px;
+}
+
+.call-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.call-badge--upset {
+  border-color: var(--viz-accent);
+  color: var(--text);
+}
+
+.call-badge--big-upset {
+  border-color: var(--viz-accent);
+  background: color-mix(in srgb, var(--viz-accent) 22%, transparent);
+  color: var(--text);
+}
+
+.call-badge--toss-up {
+  border-style: dashed;
+  color: var(--text-faint);
+}
+
+.tournament-calls + .team-stat-others,
+.tournament-page .team-stat-others .call-list {
+  margin-top: 16px;
+}
+
+.tournament-lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 22px 26px;
+}
+
+.champ-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* Name, bar, count, record — the bar is the only mark, in the accent. */
+.champ-bars li {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) minmax(40px, 1fr) 30px minmax(44px, max-content);
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.champ-bars li .team-stat-champ {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.champ-bars .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.champ-bar {
+  height: 8px;
+  background: rgba(148, 172, 214, 0.08);
+  border-radius: 0 4px 4px 0;
+  overflow: hidden;
+}
+
+.champ-bar > span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--viz-accent);
+  border-radius: 0 4px 4px 0;
+}
+
+.tournament-more {
+  margin-top: 8px;
+}
+
+.tournament-more > summary,
+.series-row > summary {
+  cursor: pointer;
+}
+
+.tournament-more > summary {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.record-list li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 2px 10px;
+  font-size: 13px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.record-list li > .dim {
+  grid-column: 2;
+  font-size: 12px;
+}
+
+.record-list li > strong.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.tournament-series {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.series-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  background: rgba(148, 172, 214, 0.02);
+}
+
+.series-row[open] {
+  border-color: var(--line-strong);
+}
+
+.series-row > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.series-pool {
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.series-teams {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--text-dim);
+}
+
+.series-teams .is-winner {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.series-score {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.series-date {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.series-games {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 14px 16px;
+}
+
+.game-card {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.game-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.game-card-head .call-badge {
+  margin-left: 6px;
+}
+
+.draft-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.draft-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 8px 14px;
+  align-items: start;
+  padding-left: 10px;
+  border-left: 3px solid var(--line-strong);
+}
+
+.draft-row--blue {
+  border-left-color: var(--blue);
+}
+
+.draft-row--red {
+  border-left-color: var(--red);
+}
+
+.draft-team {
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.draft-win {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+.draft-row ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.draft-row li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.draft-row li > .dim {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-row li .team-stat-tag {
+  align-self: flex-start;
+}
+
+.gold-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.gold-notes-label {
+  display: inline-block;
+  min-width: 112px;
+  margin-right: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.game-objectives {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: 12px 28px;
+  align-items: start;
+}
+
+.game-objectives td.is-lead {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.game-objectives td {
+  color: var(--text-dim);
+}
+
+/* Gold graph: the side ahead colours the line, its wash and its dots. */
+.viz-key--blue {
+  background: var(--blue);
+}
+
+.viz-key--red {
+  background: var(--red);
+}
+
+.gold-wash--blue {
+  fill: var(--blue);
+  opacity: 0.12;
+}
+
+.gold-wash--red {
+  fill: var(--red);
+  opacity: 0.12;
+}
+
+.gold-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.gold-line--blue {
+  stroke: var(--blue);
+}
+
+.gold-line--red {
+  stroke: var(--red);
+}
+
+.gold-dot {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.gold-dot--blue {
+  fill: var(--blue);
+}
+
+.gold-dot--red {
+  fill: var(--red);
+}
+
+.gold-dot--even {
+  fill: var(--text-dim);
+}
+
+.viz-cross-line {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+}
+
+@media (max-width: 640px) {
+  .draft-row {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-row ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .game-objectives {
+    grid-template-columns: 1fr;
+  }
+
+  .series-date {
+    margin-left: 0;
+  }
+
+  .tournament-calls,
+  .tournament-pair,
+  .tournament-records {
+    grid-template-columns: 1fr;
+  }
+
+  .tournament-page .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }

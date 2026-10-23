@@ -279,6 +279,37 @@ describe('ingestRows', () => {
     expect(game!.blue.gold).toBeNull();
   });
 
+  it('reads kills, structures, monsters and firsts from the team rows only', () => {
+    // Player rows carry their own kills; only the team row's count is the team's.
+    const columns = 'kills,towers,dragons,barons,void_grubs,firstblood,firsttower';
+    const withObjectives = gameRows().map((row, index) => {
+      if (index === 10) return `${row},18,9,4,1,4,1,0`;
+      if (index === 11) return `${row},7,3,1,0,2,0,1`;
+      return `${row},3,,,,,0,`;
+    });
+    const parsed = parseCsvText([`${HEADERS},${columns}`, ...withObjectives].join('\n'));
+    const [game] = ingestRows(parsed.rows, parsed.headers).games;
+    expect(game!.blue.objectives).toEqual({
+      kills: 18,
+      towers: 9,
+      dragons: 4,
+      barons: 1,
+      heralds: null,
+      voidGrubs: 4,
+      inhibitors: null,
+      firstBlood: true,
+      firstTower: false,
+      firstDragon: null,
+      firstBaron: null,
+    });
+    expect(game!.red.objectives?.firstTower).toBe(true);
+  });
+
+  it('leaves objectives empty when the export has none', () => {
+    const [game] = ingest(gameRows()).games;
+    expect(game!.blue.objectives).toBeNull();
+  });
+
   it('summarizes the import', () => {
     const result = ingest([
       ...gameRows({ gameId: 'A', league: 'LCK', patch: '14.11' }),

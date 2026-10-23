@@ -66,6 +66,18 @@ export const COLUMN_ALIASES = {
    */
   goldAt: ['goldat10', 'goldat15', 'goldat20', 'goldat25'],
   totalGold: ['totalgold'],
+  /** Optional, team rows: what each side took, for the Tournament page. */
+  kills: ['kills', 'teamkills'],
+  towers: ['towers'],
+  dragons: ['dragons'],
+  barons: ['barons'],
+  heralds: ['heralds'],
+  voidGrubs: ['voidgrubs'],
+  inhibitors: ['inhibitors'],
+  firstBlood: ['firstblood'],
+  firstTower: ['firsttower'],
+  firstDragon: ['firstdragon'],
+  firstBaron: ['firstbaron'],
 } as const;
 
 export type LogicalField = keyof typeof COLUMN_ALIASES;

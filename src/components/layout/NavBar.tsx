@@ -9,6 +9,7 @@ const LINKS = [
   { to: '/blind', label: 'Blind' },
   { to: '/predictor', label: 'Predictor' },
   { to: '/teams', label: 'Team Stat' },
+  { to: '/tournament', label: 'Tournament' },
   { to: '/leaderboard', label: 'Leaderboard' },
   { to: '/data', label: 'Data' },
 ] as const;

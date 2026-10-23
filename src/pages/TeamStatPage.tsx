@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChampionArt } from '../components/ChampionArt.tsx';
+import { ChampionLabel } from '../components/ChampionLabel.tsx';
 import {
   CompetitionDonut,
   GameTimeRange,
@@ -471,17 +471,5 @@ function PlayerCard({ player }: { player: PlayerStats }) {
         ))}
       </ul>
     </article>
-  );
-}
-
-function ChampionLabel({ id, name }: { id: string; name: string }) {
-  const champion = { id, name };
-  return (
-    <span className="team-stat-champ">
-      <span className="team-stat-icon">
-        <ChampionArt champion={champion} variant="icon" />
-      </span>
-      {name}
-    </span>
   );
 }
