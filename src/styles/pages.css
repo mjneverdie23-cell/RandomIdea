@@ -2569,3 +2569,14 @@ code {
     position: static;
   }
 }
+
+/* The team slot sits apart from the five roles. */
+.lookup-slot--team {
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lookup-card--team {
+  border-color: var(--line-strong);
+}

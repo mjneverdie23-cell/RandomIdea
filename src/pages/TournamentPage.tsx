@@ -5,7 +5,7 @@ import { ChampionLookup } from '../components/tournament/ChampionLookup.tsx';
 import { GoldGraph } from '../components/tournament/GoldGraph.tsx';
 import { ROLES, ROLE_LABEL, ROLE_SHORT, type Champion, type Game, type Role, type TeamObjectives } from '../domain/types.ts';
 import { formatCount, formatDate, formatDuration } from '../lib/format.ts';
-import { decodePicks, encodePicks, rolePools, type LookupPicks } from '../predictor/championLookup.ts';
+import { decodePicks, encodePicks, rolePools, type LookupQuery } from '../predictor/championLookup.ts';
 import { buildPredictorModel, isPocketPick, metaByPatch } from '../predictor/derive.ts';
 import { ratingsFromStored, type StoredRatings } from '../predictor/ratings.ts';
 import {
@@ -150,13 +150,21 @@ export function TournamentPage() {
   // The lookup offers every champion seen in each role, not only this event's.
   const pools = useMemo(() => rolePools(games), [games]);
 
-  // Looked-up champions ride along in the link, so they survive a change of
-  // stage or tournament and a shared link opens on the same lookup.
-  const picks = useMemo(() => decodePicks(params.get('picks')), [params]);
-  const go = (t: string, stageId: string | undefined, nextPicks: LookupPicks) => {
-    const encoded = encodePicks(nextPicks);
+  // The lookup's champions and team ride along in the link, so they survive a
+  // change of stage or tournament and a shared link opens on the same lookup.
+  const lookup = useMemo<LookupQuery>(
+    () => ({ picks: decodePicks(params.get('picks')), team: params.get('team') || null }),
+    [params],
+  );
+  const go = (t: string, stageId: string | undefined, next: LookupQuery) => {
+    const encoded = encodePicks(next.picks);
     setParams(
-      { t, ...(stageId && stageId !== 'all' ? { stage: stageId } : {}), ...(encoded ? { picks: encoded } : {}) },
+      {
+        t,
+        ...(stageId && stageId !== 'all' ? { stage: stageId } : {}),
+        ...(next.team ? { team: next.team } : {}),
+        ...(encoded ? { picks: encoded } : {}),
+      },
       { replace: true },
     );
   };
@@ -166,10 +174,10 @@ export function TournamentPage() {
     } catch {
       // Remembering the tournament is a convenience.
     }
-    go(next, undefined, picks);
+    go(next, undefined, lookup);
   };
-  const chooseStage = (id: string) => go(key, id, picks);
-  const choosePicks = (next: LookupPicks) => go(key, stage?.id, next);
+  const chooseStage = (id: string) => go(key, id, lookup);
+  const chooseLookup = (next: LookupQuery) => go(key, stage?.id, next);
 
   return (
     <div className="page tournament-page">
@@ -212,8 +220,8 @@ export function TournamentPage() {
             calls={calls}
             progress={progress}
             pools={pools}
-            picks={picks}
-            onPicks={choosePicks}
+            lookup={lookup}
+            onLookup={chooseLookup}
           />
         </>
       )}
@@ -294,8 +302,8 @@ function StageReport({
   calls,
   progress,
   pools,
-  picks,
-  onPicks,
+  lookup,
+  onLookup,
 }: {
   stage: StageOption;
   scope: string;
@@ -303,8 +311,8 @@ function StageReport({
   calls: Map<string, GameCall> | null;
   progress: { done: number; total: number } | null;
   pools: Record<Role, { champion: Champion; picks: number }[]>;
-  picks: LookupPicks;
-  onPicks: (picks: LookupPicks) => void;
+  lookup: LookupQuery;
+  onLookup: (lookup: LookupQuery) => void;
 }) {
   const games = useMemo(() => stageGames(stage), [stage]);
   const records = useMemo(() => tournamentRecords(games), [games]);
@@ -343,7 +351,7 @@ function StageReport({
         </div>
       </section>
 
-      <ChampionLookup games={games} allPools={pools} picks={picks} onChange={onPicks} scope={scope} roundOf={roundOf} />
+      <ChampionLookup games={games} allPools={pools} query={lookup} onChange={onLookup} scope={scope} roundOf={roundOf} />
       <CallsPanel stage={stage} calls={calls} progress={progress} />
       <LanesPanel lanes={lanes} />
       <BansPanel contested={contested} games={games.length} />

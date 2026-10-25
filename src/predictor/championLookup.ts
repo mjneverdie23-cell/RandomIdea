@@ -8,6 +8,9 @@
  * of (wins + 1) / (games + 2), so one 1–0 doesn't outrank a 6–1; the records
  * shown are always the raw ones.
  *
+ * A team narrows everything to that team's own drafts: its record on the
+ * champions, its players, what it drafted around them and what beat it.
+ *
  * Pure: no React, no storage.
  */
 
@@ -15,6 +18,12 @@ import { ROLES, type Champion, type Game, type Role, type TeamSide } from '../do
 
 /** The champion id chosen for each role; roles left out are open. */
 export type LookupPicks = Partial<Record<Role, string>>;
+
+/** What the lookup is asked: champions by role, and optionally one team's drafts only. */
+export interface LookupQuery {
+  picks: LookupPicks;
+  team: string | null;
+}
 
 /** One team's draft in one game. */
 export interface DraftHit {
@@ -40,13 +49,21 @@ export function chosenRoles(picks: LookupPicks): Role[] {
   return ROLES.filter((role) => picks[role]);
 }
 
-/** Every draft that had each chosen champion in its role, newest first. */
-export function draftsWith(games: readonly Game[], picks: LookupPicks): DraftHit[] {
+const sameTeam = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+const isTeam = (side: TeamSide, team: string | null | undefined) => !team || sameTeam(side.teamName, team);
+
+/**
+ * Every draft that had each chosen champion in its role, newest first. With a
+ * team, only that team's drafts — and with a team and no champions, all of
+ * them. With neither, nothing.
+ */
+export function draftsWith(games: readonly Game[], picks: LookupPicks, team?: string | null): DraftHit[] {
   const wanted = chosenRoles(picks);
-  if (wanted.length === 0) return [];
+  if (wanted.length === 0 && !team) return [];
   const hits: DraftHit[] = [];
   for (const game of games) {
     for (const side of [game.blue, game.red]) {
+      if (!isTeam(side, team)) continue;
       if (!wanted.every((role) => slotOf(side, role)?.champion.id === picks[role])) continue;
       hits.push({ game, side, opponent: side === game.blue ? game.red : game.blue, won: game.winner === side.side });
     }
@@ -124,6 +141,8 @@ export interface ChampionReport extends DraftSummary {
   bans: number;
   /** Picked in any role or banned, as a share of games in scope. */
   presence: number;
+  /** With a team: its games, how often it picked the champion in any role, and the bans either way. */
+  team: { games: number; picked: number; bannedBy: number; bannedAgainst: number } | null;
   /** Best record first. */
   players: PlayerLine[];
   /** Champions on the same team, best record together first. */
@@ -145,9 +164,14 @@ function addPartner(map: Map<string, Partner>, role: Role, champion: Champion, w
 const best = <T extends WinLoss>(a: T, b: T) => shrunk(b) - shrunk(a) || b.games - a.games;
 const worst = <T extends WinLoss>(a: T, b: T) => shrunk(a) - shrunk(b) || b.games - a.games;
 
-/** One champion in one role, across the games in scope. */
-export function championReport(games: readonly Game[], role: Role, championId: string): ChampionReport {
-  const hits = draftsWith(games, { [role]: championId });
+/** One champion in one role, across the games in scope — or across one team's drafts. */
+export function championReport(
+  games: readonly Game[],
+  role: Role,
+  championId: string,
+  team?: string | null,
+): ChampionReport {
+  const hits = draftsWith(games, { [role]: championId }, team);
   const players = new Map<string, PlayerLine>();
   const teammates = new Map<string, Partner>();
   const counters = new Map<string, Partner>();
@@ -171,10 +195,20 @@ export function championReport(games: readonly Game[], role: Role, championId: s
 
   let bans = 0;
   let anyRole = 0;
+  const forTeam = team ? { games: 0, picked: 0, bannedBy: 0, bannedAgainst: 0 } : null;
+  const banned = (side: TeamSide) => side.bans.some((ban) => ban.id === championId);
+  const picked = (side: TeamSide) => side.players.some((player) => player.champion.id === championId);
   for (const game of games) {
     for (const side of [game.blue, game.red]) {
-      if (side.bans.some((ban) => ban.id === championId)) bans += 1;
-      if (side.players.some((player) => player.champion.id === championId)) anyRole += 1;
+      if (banned(side)) bans += 1;
+      if (picked(side)) anyRole += 1;
+      if (forTeam && isTeam(side, team)) {
+        const opponent = side === game.blue ? game.red : game.blue;
+        forTeam.games += 1;
+        if (picked(side)) forTeam.picked += 1;
+        if (banned(side)) forTeam.bannedBy += 1;
+        if (banned(opponent)) forTeam.bannedAgainst += 1;
+      }
     }
   }
 
@@ -185,6 +219,7 @@ export function championReport(games: readonly Game[], role: Role, championId: s
     scope: games.length,
     bans,
     presence: games.length ? (anyRole + bans) / games.length : 0,
+    team: forTeam,
     players: [...players.values()].sort(best),
     teammates: [...teammates.values()].sort(best),
     counters: [...counters.values()].sort(worst),
@@ -197,27 +232,31 @@ export interface PairLine extends WinLoss {
 }
 
 /** Every pair of the chosen picks, with their record together. */
-export function pairRecords(games: readonly Game[], picks: LookupPicks): PairLine[] {
+export function pairRecords(games: readonly Game[], picks: LookupPicks, team?: string | null): PairLine[] {
   const roles = chosenRoles(picks);
   const pairs: PairLine[] = [];
   for (let i = 0; i < roles.length; i += 1) {
     for (let j = i + 1; j < roles.length; j += 1) {
       const [a, b] = [roles[i]!, roles[j]!];
-      const hits = draftsWith(games, { [a]: picks[a], [b]: picks[b] });
+      const hits = draftsWith(games, { [a]: picks[a], [b]: picks[b] }, team);
       pairs.push({ roles: [a, b], games: hits.length, wins: hits.filter((hit) => hit.won).length });
     }
   }
   return pairs;
 }
 
-/** Champions seen in each role, most picked first — the options for each slot. */
-export function rolePools(games: readonly Game[]): Record<Role, { champion: Champion; picks: number }[]> {
+/** Champions seen in each role, most picked first — the options for each slot. With a team, its picks only. */
+export function rolePools(
+  games: readonly Game[],
+  team?: string | null,
+): Record<Role, { champion: Champion; picks: number }[]> {
   const counts = Object.fromEntries(ROLES.map((role) => [role, new Map<string, { champion: Champion; picks: number }>()])) as Record<
     Role,
     Map<string, { champion: Champion; picks: number }>
   >;
   for (const game of games) {
     for (const side of [game.blue, game.red]) {
+      if (!isTeam(side, team)) continue;
       for (const player of side.players) {
         const entry = counts[player.role].get(player.champion.id) ?? { champion: player.champion, picks: 0 };
         entry.picks += 1;
@@ -231,6 +270,77 @@ export function rolePools(games: readonly Game[]): Record<Role, { champion: Cham
       [...counts[role].values()].sort((a, b) => b.picks - a.picks || a.champion.name.localeCompare(b.champion.name)),
     ]),
   ) as Record<Role, { champion: Champion; picks: number }[]>;
+}
+
+/* ------------------------------------------------------------------ */
+/* Teams                                                               */
+/* ------------------------------------------------------------------ */
+
+/** Teams that played in scope, most games first — the options for the team slot. */
+export function lookupTeams(games: readonly Game[]): { team: string; games: number }[] {
+  const teams = new Map<string, { team: string; games: number }>();
+  for (const game of games) {
+    for (const side of [game.blue, game.red]) {
+      const key = side.teamName.trim().toLowerCase();
+      const entry = teams.get(key) ?? { team: side.teamName, games: 0 };
+      entry.games += 1;
+      teams.set(key, entry);
+    }
+  }
+  return [...teams.values()].sort((a, b) => b.games - a.games || a.team.localeCompare(b.team));
+}
+
+export interface BanLine {
+  champion: Champion;
+  count: number;
+}
+
+export interface TeamLookup extends DraftSummary {
+  /** As the data spells it, or as asked when the team didn't play in scope. */
+  team: string;
+  /** Its champions in each role, most played first. */
+  roles: Record<Role, Partner[]>;
+  /** What it banned, and what its opponents banned against it, most first. */
+  bannedBy: BanLine[];
+  bannedAgainst: BanLine[];
+  /** Its record against each opponent, most games first. */
+  opponents: { team: string; games: number; wins: number }[];
+}
+
+function addBan(map: Map<string, BanLine>, champion: Champion) {
+  const entry = map.get(champion.id) ?? { champion, count: 0 };
+  entry.count += 1;
+  map.set(champion.id, entry);
+}
+
+const mostPlayed = (a: Partner, b: Partner) => b.games - a.games || shrunk(b) - shrunk(a) || a.champion.name.localeCompare(b.champion.name);
+const mostBanned = (a: BanLine, b: BanLine) => b.count - a.count || a.champion.name.localeCompare(b.champion.name);
+
+/** One team across the games in scope: record, champions by role, bans both ways, opponents. */
+export function teamLookup(games: readonly Game[], team: string): TeamLookup {
+  const hits = draftsWith(games, {}, team);
+  const roles = Object.fromEntries(ROLES.map((role) => [role, new Map<string, Partner>()])) as Record<Role, Map<string, Partner>>;
+  const bannedBy = new Map<string, BanLine>();
+  const bannedAgainst = new Map<string, BanLine>();
+  const opponents = new Map<string, { team: string; games: number; wins: number }>();
+  for (const hit of hits) {
+    for (const player of hit.side.players) addPartner(roles[player.role], player.role, player.champion, hit.won);
+    for (const ban of hit.side.bans) addBan(bannedBy, ban);
+    for (const ban of hit.opponent.bans) addBan(bannedAgainst, ban);
+    const key = hit.opponent.teamName.trim().toLowerCase();
+    const entry = opponents.get(key) ?? { team: hit.opponent.teamName, games: 0, wins: 0 };
+    entry.games += 1;
+    if (hit.won) entry.wins += 1;
+    opponents.set(key, entry);
+  }
+  return {
+    ...summarize(hits),
+    team: hits[0]?.side.teamName ?? team,
+    roles: Object.fromEntries(ROLES.map((role) => [role, [...roles[role].values()].sort(mostPlayed)])) as Record<Role, Partner[]>,
+    bannedBy: [...bannedBy.values()].sort(mostBanned),
+    bannedAgainst: [...bannedAgainst.values()].sort(mostBanned),
+    opponents: [...opponents.values()].sort((a, b) => b.games - a.games || b.wins - a.wins || a.team.localeCompare(b.team)),
+  };
 }
 
 /** `jungle:Nocturne,mid:Akali` <-> picks, for the page link. Unknown roles are dropped. */

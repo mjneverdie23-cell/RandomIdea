@@ -1394,11 +1394,18 @@ For the chosen stage it shows:
   drafted all of them in their roles. It gives the record, game time, gold at
   15 and sides, which teams drafted it, and each game with the rest of that
   team's draft. With three or more picks it also gives each pair's record.
+  A **Team** slot above the roles narrows everything to that team's drafts:
+  its record on each champion, its players on it, what it drafted around them,
+  and how often it picked or banned the champion and how often opponents banned
+  it against them. Each role slot then lists the team's own champions first. A
+  team on its own shows its profile for the stage: record, game time, gold at
+  15, sides, recent results, its champions in each role, what it banned, what
+  was banned against it, and its record against each opponent.
   Lists are ranked with a small-sample discount, a win rate of
   (wins + 1) / (games + 2), so a 1–0 doesn't outrank a 6–1; the records shown
-  are the real ones. The picks are kept in the page link
-  (`&picks=jungle:Nocturne,mid:Akali`), so they stay when you switch stage or
-  tournament.
+  are the real ones. The picks and team are kept in the page link
+  (`&team=T1&picks=jungle:Nocturne,mid:Akali`), so they stay when you switch
+  stage or tournament.
 - **Expected and unexpected:** how often the Predictor called the series and
   the games right, and how many upsets and toss-ups there were. Every upset is
   listed, both by series and by single game, with the favourite's chance and

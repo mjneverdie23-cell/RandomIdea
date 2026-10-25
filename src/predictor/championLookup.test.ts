@@ -6,9 +6,11 @@ import {
   decodePicks,
   draftsWith,
   encodePicks,
+  lookupTeams,
   pairRecords,
   rolePools,
   summarize,
+  teamLookup,
 } from './championLookup.ts';
 
 const BLUE = ['Aatrox', 'Nocturne', 'Akali', 'Jinx', 'Rell'];
@@ -192,5 +194,49 @@ describe('rolePools and links', () => {
     expect(encodePicks({ mid: 'Akali', jungle: 'Nocturne' })).toBe('jungle:Nocturne,mid:Akali');
     expect(decodePicks('jungle:Nocturne,mid:Akali,feeder:Teemo,top:')).toEqual({ jungle: 'Nocturne', mid: 'Akali' });
     expect(decodePicks(null)).toEqual({});
+  });
+});
+
+describe('with a team', () => {
+  it('narrows drafts to that team, whatever the case of its name', () => {
+    expect(draftsWith(games, { jungle: 'Nocturne' }, 'hle').map((hit) => hit.game.gameId)).toEqual(['c']);
+    // A team on its own is every draft it played; neither is nothing.
+    expect(draftsWith(games, {}, 'T1').map((hit) => hit.game.gameId)).toEqual(['d', 'b', 'a']);
+    expect(draftsWith(games, {}, null)).toEqual([]);
+  });
+
+  it('reports a champion for that team, with how often it picked it and the bans either way', () => {
+    const report = championReport(games, 'jungle', 'Nocturne', 'T1');
+    expect(report).toMatchObject({ games: 2, wins: 1 });
+    // Gen.G banned Nocturne against T1 in game d.
+    expect(report.team).toEqual({ games: 3, picked: 2, bannedBy: 0, bannedAgainst: 1 });
+    expect(report.players.map((line) => line.player)).toEqual(['T1-jungle']);
+    expect(championReport(games, 'jungle', 'Nocturne').team).toBeNull();
+  });
+
+  it('gives pair records and slot options for that team only', () => {
+    expect(pairRecords(games, { jungle: 'Nocturne', bot: 'Jinx' }, 'T1')).toEqual([
+      { roles: ['jungle', 'bot'], games: 2, wins: 1 },
+    ]);
+    expect(rolePools(games, 'T1').mid.map((entry) => [entry.champion.id, entry.picks])).toEqual([['Akali', 3]]);
+  });
+
+  it('profiles the team: record, champions by role, bans both ways and opponents', () => {
+    const genG = teamLookup(games, 'gen.g');
+    expect(genG).toMatchObject({ team: 'Gen.G', games: 3, wins: 1 });
+    expect(genG.roles.jungle.map((partner) => [partner.champion.id, partner.games, partner.wins])).toEqual([['Vi', 3, 1]]);
+    expect(genG.bannedBy.map((line) => [line.champion.id, line.count])).toEqual([['Nocturne', 1]]);
+    expect(genG.bannedAgainst).toEqual([]);
+    expect(genG.opponents).toEqual([{ team: 'T1', games: 3, wins: 1 }]);
+    expect(teamLookup(games, 'Fnatic')).toMatchObject({ team: 'Fnatic', games: 0 });
+  });
+
+  it('lists the teams in scope, most games first', () => {
+    expect(lookupTeams(games)).toEqual([
+      { team: 'Gen.G', games: 3 },
+      { team: 'T1', games: 3 },
+      { team: 'G2', games: 1 },
+      { team: 'HLE', games: 1 },
+    ]);
   });
 });
