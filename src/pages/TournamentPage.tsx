@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChampionLabel } from '../components/ChampionLabel.tsx';
+import { ChampionLookup } from '../components/tournament/ChampionLookup.tsx';
 import { GoldGraph } from '../components/tournament/GoldGraph.tsx';
-import { ROLES, ROLE_LABEL, ROLE_SHORT, type Game, type Role, type TeamObjectives } from '../domain/types.ts';
+import { ROLES, ROLE_LABEL, ROLE_SHORT, type Champion, type Game, type Role, type TeamObjectives } from '../domain/types.ts';
 import { formatCount, formatDate, formatDuration } from '../lib/format.ts';
+import { decodePicks, encodePicks, rolePools, type LookupPicks } from '../predictor/championLookup.ts';
 import { buildPredictorModel, isPocketPick, metaByPatch } from '../predictor/derive.ts';
 import { ratingsFromStored, type StoredRatings } from '../predictor/ratings.ts';
 import {
@@ -145,16 +147,29 @@ export function TournamentPage() {
   // What a patch's meta was is judged across every loaded game, not just this event's.
   const meta = useMemo(() => metaByPatch(games), [games]);
   const { calls, progress } = useTournamentCalls(games, key, structure.series, ratings, ratingsStatus === 'ready');
+  // The lookup offers every champion seen in each role, not only this event's.
+  const pools = useMemo(() => rolePools(games), [games]);
 
+  // Looked-up champions ride along in the link, so they survive a change of
+  // stage or tournament and a shared link opens on the same lookup.
+  const picks = useMemo(() => decodePicks(params.get('picks')), [params]);
+  const go = (t: string, stageId: string | undefined, nextPicks: LookupPicks) => {
+    const encoded = encodePicks(nextPicks);
+    setParams(
+      { t, ...(stageId && stageId !== 'all' ? { stage: stageId } : {}), ...(encoded ? { picks: encoded } : {}) },
+      { replace: true },
+    );
+  };
   const chooseTournament = (next: string) => {
     try {
       localStorage.setItem(TOURNAMENT_KEY, next);
     } catch {
       // Remembering the tournament is a convenience.
     }
-    setParams({ t: next }, { replace: true });
+    go(next, undefined, picks);
   };
-  const chooseStage = (id: string) => setParams(id === 'all' ? { t: key } : { t: key, stage: id }, { replace: true });
+  const chooseStage = (id: string) => go(key, id, picks);
+  const choosePicks = (next: LookupPicks) => go(key, stage?.id, next);
 
   return (
     <div className="page tournament-page">
@@ -189,7 +204,17 @@ export function TournamentPage() {
       ) : (
         <>
           <StagePicker stages={structure.stages} value={stage.id} onChange={chooseStage} />
-          <StageReport key={`${key}|${stage.id}`} stage={stage} meta={meta} calls={calls} progress={progress} />
+          <StageReport
+            key={`${key}|${stage.id}`}
+            stage={stage}
+            scope={`${option.label} · ${stage.section === 'Event' ? stage.label : `${stage.section} ${stage.label}`}`}
+            meta={meta}
+            calls={calls}
+            progress={progress}
+            pools={pools}
+            picks={picks}
+            onPicks={choosePicks}
+          />
         </>
       )}
     </div>
@@ -264,14 +289,22 @@ function StagePicker({ stages, value, onChange }: { stages: StageOption[]; value
 
 function StageReport({
   stage,
+  scope,
   meta,
   calls,
   progress,
+  pools,
+  picks,
+  onPicks,
 }: {
   stage: StageOption;
+  scope: string;
   meta: ReadonlyMap<string, PatchMeta>;
   calls: Map<string, GameCall> | null;
   progress: { done: number; total: number } | null;
+  pools: Record<Role, { champion: Champion; picks: number }[]>;
+  picks: LookupPicks;
+  onPicks: (picks: LookupPicks) => void;
 }) {
   const games = useMemo(() => stageGames(stage), [stage]);
   const records = useMemo(() => tournamentRecords(games), [games]);
@@ -310,6 +343,7 @@ function StageReport({
         </div>
       </section>
 
+      <ChampionLookup games={games} allPools={pools} picks={picks} onChange={onPicks} scope={scope} roundOf={roundOf} />
       <CallsPanel stage={stage} calls={calls} progress={progress} />
       <LanesPanel lanes={lanes} />
       <BansPanel contested={contested} games={games.length} />

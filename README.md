@@ -1377,6 +1377,28 @@ For the chosen stage it shows:
 
 - **Overview:** series, games, teams, blue-side win rate, average game time and
   the patches played.
+- **Champion lookup:** half a draft on the left, one slot per role, any of them
+  optional. Each slot lists the champions played in that role in the stage
+  first, with their game counts, then every other champion seen in the role.
+  For each champion you pick, it shows how it did *in that role* (Akali mid is
+  not Akali top):
+  - record, average game time, average gold lead at 15 minutes, record by side,
+    bans and presence;
+  - the last ten results, newest first;
+  - best players on it;
+  - best teammates ("Best with");
+  - the enemy champions it did worst against ("Struggles against");
+  - lane opponents, worst matchup first.
+
+  With two or more picks, a **Together** card covers every game where one team
+  drafted all of them in their roles. It gives the record, game time, gold at
+  15 and sides, which teams drafted it, and each game with the rest of that
+  team's draft. With three or more picks it also gives each pair's record.
+  Lists are ranked with a small-sample discount, a win rate of
+  (wins + 1) / (games + 2), so a 1–0 doesn't outrank a 6–1; the records shown
+  are the real ones. The picks are kept in the page link
+  (`&picks=jungle:Nocturne,mid:Akali`), so they stay when you switch stage or
+  tournament.
 - **Expected and unexpected:** how often the Predictor called the series and
   the games right, and how many upsets and toss-ups there were. Every upset is
   listed, both by series and by single game, with the favourite's chance and
@@ -1454,8 +1476,9 @@ record-matched pools (Bo1 until a place is at stake, then Bo3), and an
 eight-team Bo5 bracket. Its splits and flags are the ones Oracle's Elixir
 writes, with no round names, so the page has to infer the rounds there too.
 
-The structure, stats and calls are built by `src/predictor/tournament.ts`,
-which is pure and tested.
+The structure, stats and calls are built by `src/predictor/tournament.ts`, and
+the champion lookup by `src/predictor/championLookup.ts`. Both are pure and
+tested.
 
 ---
 
