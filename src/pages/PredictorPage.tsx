@@ -6,6 +6,7 @@ import { DraftComposer } from '../components/predictor/DraftComposer.tsx';
 import { PredictionReport } from '../components/predictor/PredictionReport.tsx';
 import { PositionCalculator } from '../components/predictor/PositionCalculator.tsx';
 import { MatchPaste } from '../components/predictor/MatchPaste.tsx';
+import { LiveDraftPanel } from '../components/predictor/LiveDraftPanel.tsx';
 import { PolymarketPanel, usePolymarket } from '../components/predictor/PolymarketPanel.tsx';
 import { livePrices } from '../predictor/polymarket.ts';
 import { predict } from '../predictor/engine.ts';
@@ -164,6 +165,7 @@ export function PredictorPage() {
         </p>
       )}
 
+      <LiveDraftPanel />
       <MatchPaste />
 
       <section className="context-bar" aria-label="Series context">

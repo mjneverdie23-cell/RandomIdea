@@ -1001,6 +1001,41 @@ the pass-through at another server, such as a local mock.
 Gamma's prices can trail Polymarket's live order book by a few seconds. Treat
 the panel as a fast read, not a fill price.
 
+### Following a live match in the Predictor
+
+The **Live draft** panel at the top of the Predictor follows a match on LoL
+Esports and keeps the composer filled from it:
+
+1. **Find live matches** lists what is live now: league, teams, series score,
+   best-of and stage. Matches between teams in your data come first, and any
+   team your data doesn't know is named.
+2. **Follow** reads the match every 10 seconds while the tab is visible.
+   - **When a game starts:** the composer gets the competition, both teams on
+     their sides, the best-of, the stage and the series score going into the
+     game.
+   - **When the game loads:** all ten champions arrive (from the live stats
+     window), with a line of in-game gold, kills and towers.
+   - **Between games:** it says which game is next; when the series is over,
+     it stops.
+3. **Fill the composer automatically** (on by default) fills it whenever the
+   feed changes: a new game, or the champions arriving. A change you make by
+   hand stands until the feed changes again. **Fill now** re-applies the feed
+   at any time. Following survives a page reload in the same tab, and **Stop
+   following** hands the composer back.
+
+**Champion select isn't covered.** LoL Esports' feeds don't publish it pick
+by pick, so the champions appear when the game loads, not while they are
+being picked. The followed match goes through the same importer as a pasted
+one, so team names are matched to your data the same way
+(`scripts/lolesports-aliases.json` for any that don't match). Like a paste, it
+never reads the result of the game being predicted.
+
+Once the teams are filled in, the **Polymarket** panel finds the match on its
+own, so a followed game gets live prices with no typing. Under `npm run dev` /
+`npm run preview`, the Vite server passes the requests through and adds the
+site's public key. The same `LOLESPORTS_API_BASE`, `LOLESPORTS_FEED_BASE` and
+`LOLESPORTS_API_KEY` overrides as the command-line puller apply.
+
 ### Pulling a live draft from LoL Esports (test version)
 
 `npm run draft:live` reads a pro game that is live right now from the feeds
