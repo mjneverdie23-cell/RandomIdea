@@ -959,6 +959,48 @@ The confidence table underneath breaks the record down by what the model
 claimed, so a band that says 80% and delivers 56% is visible rather than
 averaged away. **Every call** lists each match, and clicking one loads it into
 the composer.
+
+### Live Polymarket prices
+
+With both teams picked, the Predictor shows a **Polymarket** panel and keeps it
+live:
+
+- **Finding the match.** It searches Polymarket's public Gamma API for an open
+  LoL match between the two teams (`LoL: Gen.G vs T1 (BO5) - …`), either way
+  round. If it doesn't turn up, paste the match link from polymarket.com
+  (`polymarket.com/esports/league-of-legends/worlds/lol-gen-t1-…` or
+  `polymarket.com/event/…`) or just its slug. The link is remembered for that
+  matchup in that tab, like the calculator's prices.
+- **Reading prices.** It reads the match again every 10 seconds (5, 10, 30 or
+  60; Pause stops all requests), and only while the tab is visible. For the
+  series and every "Game N Winner" market it shows each team's **buy** price
+  (best ask) and **sell** price (best bid). Gamma quotes the order book for
+  the first outcome only, so the second team's buy price is 1 − best bid. The
+  game being drafted is marked **now**; settled games are greyed out.
+  Handicap, total games and other markets are listed under a fold.
+- **Model and edge.** On the series row and the current game's row, the panel
+  shows the Predictor's fair price for each team and the better edge (fair
+  price minus buy price).
+- **Feeding the calculator.** The position calculator gets a **Prices from:
+  Live / Typed** switch. On Live, its two price fields show the live buy prices
+  for whatever it is pricing (the series, or the game being drafted) and size
+  the position from them. When Polymarket has no open market for that game
+  yet, it says so and uses the typed prices.
+- **Stale or failed reads.** A failed read keeps the last good prices on screen
+  with the error beside them. Prices more than 60 seconds old are flagged as
+  stale.
+
+**How the requests get out.** Under `npm run dev` or `npm run preview`, the
+Vite server passes the requests through (`/__draftcall/polymarket/gamma/…` →
+`https://gamma-api.polymarket.com/…`; GET only, listing endpoints only,
+nothing cached). That way the browser's cross-site rules don't get in the
+way. Served as static files, the app calls Gamma directly, which works only
+if Polymarket allows it from your page. Set `POLYMARKET_GAMMA_BASE` to point
+the pass-through at another server, such as a local mock.
+
+Gamma's prices can trail Polymarket's live order book by a few seconds. Treat
+the panel as a fast read, not a fill price.
+
 ### Pulling a live draft from LoL Esports (test version)
 
 `npm run draft:live` reads a pro game that is live right now from the feeds

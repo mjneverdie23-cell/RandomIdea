@@ -3,9 +3,11 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 // @ts-expect-error -- plain ESM plugin, typed loosely on purpose.
 import { dataFolderPlugin } from './scripts/vite-data-folder.mjs';
+// @ts-expect-error -- plain ESM plugin, typed loosely on purpose.
+import { polymarketProxyPlugin } from './scripts/vite-polymarket-proxy.mjs';
 
 export default defineConfig({
-  plugins: [react(), dataFolderPlugin({ dir: 'data' })],
+  plugins: [react(), dataFolderPlugin({ dir: 'data' }), polymarketProxyPlugin()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

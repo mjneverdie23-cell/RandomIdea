@@ -1823,3 +1823,205 @@
     grid-column: 1 / -1;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Polymarket live odds                                                */
+/* ------------------------------------------------------------------ */
+
+.pm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+
+.pm-link {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.pm-link .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pm-every {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.pm-every .select {
+  width: auto;
+}
+
+.pm-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pm-note.is-error {
+  color: var(--red-bright);
+}
+
+.pm-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent);
+}
+
+.pm-live.is-stale {
+  color: var(--red-bright);
+}
+
+.pm-live.is-stale .pm-dot {
+  background: var(--red-bright);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pm-live:not(.is-stale) .pm-dot {
+    animation: pm-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes pm-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.pm-event {
+  margin: 4px 0 12px;
+  font-size: 14px;
+}
+
+.pm-event a {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* A wide table scrolls inside its card on a phone rather than widening the page. */
+.pm-table-wrap {
+  overflow-x: auto;
+}
+
+.pm-table {
+  min-width: 620px;
+}
+
+.pm-table .pm-team.is-blue {
+  color: var(--blue-bright);
+}
+
+.pm-table .pm-team.is-red {
+  color: var(--red-bright);
+}
+
+.pm-quote {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+
+.pm-quote strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pm-quote .dim {
+  font-size: 11px;
+}
+
+.pm-tag {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.pm-tag.is-muted {
+  color: var(--text-faint);
+}
+
+.pm-table tr.is-current {
+  background: rgba(61, 139, 253, 0.07);
+}
+
+.pm-table tr.is-closed td,
+.pm-table tr.is-closed th {
+  color: var(--text-faint);
+}
+
+.pm-edge {
+  white-space: nowrap;
+}
+
+.pm-edge.is-positive {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.pm-other {
+  margin-top: 10px;
+}
+
+.pm-other > summary {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.pm-other ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.pm-other li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  justify-content: space-between;
+}
+
+/* Calculator prices fed live from Polymarket are shown, not typed. */
+.position-affix .input.is-live {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--line));
+  color: var(--text);
+}
+
+.position-hint.is-live {
+  color: var(--green);
+}

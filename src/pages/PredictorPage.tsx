@@ -6,6 +6,8 @@ import { DraftComposer } from '../components/predictor/DraftComposer.tsx';
 import { PredictionReport } from '../components/predictor/PredictionReport.tsx';
 import { PositionCalculator } from '../components/predictor/PositionCalculator.tsx';
 import { MatchPaste } from '../components/predictor/MatchPaste.tsx';
+import { PolymarketPanel, usePolymarket } from '../components/predictor/PolymarketPanel.tsx';
+import { livePrices } from '../predictor/polymarket.ts';
 import { predict } from '../predictor/engine.ts';
 import { lookupRating } from '../predictor/ratings.ts';
 import { PREDICTABLE_STAGES, STAGE_LABEL, formatFor } from '../predictor/formats.ts';
@@ -58,6 +60,13 @@ export function PredictorPage() {
   );
 
   const ready = blue.team !== null && red.team !== null;
+
+  // Live Polymarket prices for this matchup, read while the page is open.
+  const feed = usePolymarket(blue.team, red.team);
+  const live = useMemo(
+    () => (feed.board && feed.at !== null && !feed.paused ? livePrices(feed.board, gameNumber, feed.at) : null),
+    [feed.board, feed.at, feed.paused, gameNumber],
+  );
 
   /** Teams in this matchup the ratings table has no entry for. */
   const unratedTeams = useMemo(
@@ -339,6 +348,13 @@ export function PredictorPage() {
             pocketBlue={blue.team ? model.pocketProfiles.get(blue.team.toLowerCase()) : null}
             pocketRed={red.team ? model.pocketProfiles.get(red.team.toLowerCase()) : null}
           />
+          <PolymarketPanel
+            feed={feed}
+            blueTeam={blue.team ?? ''}
+            redTeam={red.team ?? ''}
+            prediction={prediction}
+            gameNumber={gameNumber}
+          />
           <PositionCalculator
             prediction={prediction}
             blueTeam={blue.team ?? ''}
@@ -346,6 +362,7 @@ export function PredictorPage() {
             seriesLength={seriesLength}
             goldSwing={model.goldSwing}
             goldSwingLeague={model.goldSwingLeague}
+            live={live}
           />
         </>
       ) : (

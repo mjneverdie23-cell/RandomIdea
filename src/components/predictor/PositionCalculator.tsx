@@ -20,6 +20,7 @@ import {
 } from '../../predictor/position.ts';
 import { SWING_GOLD } from '../../predictor/derive.ts';
 import type { GoldSwing, Prediction, SeriesLength } from '../../predictor/types.ts';
+import type { LivePrices } from '../../predictor/polymarket.ts';
 import { readTabScoped, writeTabScoped } from '../../storage/tabScoped.ts';
 
 /**
@@ -47,19 +48,22 @@ interface Prefs {
   bankroll: string;
   /** The most the person will pay for a share, in cents as typed; blank for no ceiling. */
   maxEntry: string;
+  /** Take the prices from the live Polymarket feed when there is one. */
+  useLive: boolean;
 }
 
 /** Most people who set a ceiling set it here; the field is always editable. */
 const DEFAULT_MAX_ENTRY = '60';
 
 function loadPrefs(): Prefs {
-  const prefs: Prefs = { bankroll: '', maxEntry: DEFAULT_MAX_ENTRY };
+  const prefs: Prefs = { bankroll: '', maxEntry: DEFAULT_MAX_ENTRY, useLive: true };
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as { bankroll?: unknown; maxEntry?: unknown };
+      const parsed = JSON.parse(raw) as { bankroll?: unknown; maxEntry?: unknown; useLive?: unknown };
       if (typeof parsed.bankroll === 'string') prefs.bankroll = parsed.bankroll;
       if (typeof parsed.maxEntry === 'string') prefs.maxEntry = parsed.maxEntry;
+      if (typeof parsed.useLive === 'boolean') prefs.useLive = parsed.useLive;
     }
   } catch {
     // Storage is a convenience; fall through to defaults.
@@ -125,6 +129,8 @@ interface Props {
   /** Real gold leads and deficits by minute, per team (lower-case name). */
   goldSwing: Map<string, GoldSwing>;
   goldSwingLeague: GoldSwing;
+  /** Buy prices from the live Polymarket feed, when one is linked. */
+  live?: LivePrices | null;
 }
 
 export function PositionCalculator({
@@ -134,6 +140,7 @@ export function PositionCalculator({
   seriesLength,
   goldSwing,
   goldSwingLeague,
+  live = null,
 }: Props) {
   const teams = `${blueTeam}|${redTeam}`;
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
@@ -162,8 +169,16 @@ export function PositionCalculator({
   const modelBlue = modelProbability(prediction, market);
   const reportBlue = market === 'series' ? prediction.seriesProbBlue : prediction.gameProbBlue;
 
-  const priceBlue = parseCents(match.priceBlue);
-  const priceRed = parseCents(match.priceRed);
+  // Live prices win when the feed has an open market for what is being priced;
+  // otherwise the typed ones stand. A best-of-one's game is its series market.
+  const liveQuote =
+    live && prefs.useLive
+      ? market === 'series'
+        ? live.series
+        : (live.game ?? (seriesLength === 'BO1' ? live.series : null))
+      : null;
+  const priceBlue = liveQuote ? liveQuote.blue : parseCents(match.priceBlue);
+  const priceRed = liveQuote ? liveQuote.red : parseCents(match.priceRed);
   const sure = parseSureness(match.sure);
   const pickSide: Side | null =
     match.pick === blueTeam ? 'blue' : match.pick === redTeam ? 'red' : null;
@@ -274,6 +289,31 @@ export function PositionCalculator({
             )}
           </label>
 
+          {live && (
+            <div className="field">
+              <span className="field-label">Prices from</span>
+              <div className="position-seg" role="group" aria-label="Prices from">
+                {([true, false] as const).map((useLive) => (
+                  <button
+                    key={String(useLive)}
+                    id={`position-source-${useLive ? 'live' : 'typed'}`}
+                    type="button"
+                    aria-pressed={prefs.useLive === useLive}
+                    onClick={() => setPrefs((p) => ({ ...p, useLive }))}
+                  >
+                    {useLive ? 'Live' : 'Typed'}
+                  </button>
+                ))}
+              </div>
+              {prefs.useLive && !liveQuote && (
+                <span className="field-hint position-hint">
+                  No open Polymarket price for {market === 'series' ? 'the series' : `game ${live.gameNumber}`} — using typed
+                  prices
+                </span>
+              )}
+            </div>
+          )}
+
           {(['blue', 'red'] as const).map((side) => {
             const raw = side === 'blue' ? match.priceBlue : match.priceRed;
             const other = side === 'blue' ? priceRed : priceBlue;
@@ -286,6 +326,7 @@ export function PositionCalculator({
                 raw={raw}
                 parsed={side === 'blue' ? priceBlue : priceRed}
                 complement={raw.trim() === '' && other !== null ? 1 - other : null}
+                live={liveQuote ? (side === 'blue' ? liveQuote.blue : liveQuote.red) : undefined}
                 onChange={(value) => update(side === 'blue' ? { priceBlue: value } : { priceRed: value })}
               />
             );
@@ -373,6 +414,7 @@ function PriceField({
   raw,
   parsed,
   complement,
+  live,
   onChange,
 }: {
   id: string;
@@ -382,8 +424,24 @@ function PriceField({
   parsed: number | null;
   /** The other side's complement, shown and used when this one is left blank. */
   complement: number | null;
+  /** The live buy price, when prices come from Polymarket; `undefined` when they're typed. */
+  live?: number | null;
   onChange: (value: string) => void;
 }) {
+  if (live !== undefined) {
+    return (
+      <label className="field">
+        <span className={`field-label position-price-label is-${tone}`} title={team}>
+          {team}
+        </span>
+        <span className="position-affix">
+          <input id={id} className="input num is-live" value={live === null ? '' : cents(live).slice(0, -1)} placeholder="no ask" readOnly />
+          <span aria-hidden="true">¢</span>
+        </span>
+        <span className="field-hint position-hint is-live">Polymarket buy</span>
+      </label>
+    );
+  }
   const invalid = raw.trim() !== '' && parsed === null;
   // Echo only a price typed in another form (0.40, $0.40), so it is never a guess.
   const echo = parsed !== null && raw.trim().replace(/\s*(¢|c)$/i, '') !== cents(parsed).slice(0, -1);
