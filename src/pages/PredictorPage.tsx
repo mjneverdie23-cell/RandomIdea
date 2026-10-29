@@ -9,12 +9,14 @@ import { MatchPaste } from '../components/predictor/MatchPaste.tsx';
 import { LiveDraftPanel } from '../components/predictor/LiveDraftPanel.tsx';
 import { PolymarketPanel, usePolymarket } from '../components/predictor/PolymarketPanel.tsx';
 import { livePrices } from '../predictor/polymarket.ts';
+import { gamesBefore } from '../predictor/derive.ts';
+import { currentTournament, pickFacts, type PickFacts } from '../predictor/tournamentFacts.ts';
 import { predict } from '../predictor/engine.ts';
 import { lookupRating } from '../predictor/ratings.ts';
 import { PREDICTABLE_STAGES, STAGE_LABEL, formatFor } from '../predictor/formats.ts';
 import { gameNumberOf, swapDraftSides, type DraftSide } from '../predictor/draft.ts';
 import { COMPETITIONS } from '../domain/competitions.ts';
-import type { CompetitionId, Side, StageKind } from '../domain/types.ts';
+import type { CompetitionId, Role, Side, StageKind } from '../domain/types.ts';
 import { SERIES_TARGET, type SeriesLength, type WinRequirement } from '../predictor/types.ts';
 import { formatCount } from '../lib/format.ts';
 
@@ -22,7 +24,7 @@ const SERIES_LENGTHS: SeriesLength[] = ['BO1', 'BO3', 'BO5'];
 
 export function PredictorPage() {
   const { dataset, isDemo } = useDataset();
-  const { model, ratings, draft, setDraft, resetDraft } = usePredictor();
+  const { model, ratings, draft, setDraft, resetDraft, asOf } = usePredictor();
   const { blue, red, stage, seriesLength, seriesTouched, scoreBlue, scoreRed, winRequirement } =
     draft;
 
@@ -113,6 +115,26 @@ export function PredictorPage() {
     scoreRed,
     winRequirement,
   ]);
+
+  // What each pick has done at the tournament being played, from the same
+  // history the model is cut to — so a backtested game only hears about
+  // games played before it.
+  const history = useMemo(() => {
+    const all = dataset?.games ?? [];
+    return asOf === null ? all : gamesBefore(all, asOf);
+  }, [dataset, asOf]);
+  const tournament = useMemo(
+    () => currentTournament(history, blue.competition ?? red.competition, asOf ?? Date.now()),
+    [history, blue.competition, red.competition, asOf],
+  );
+  const tournamentFacts = useMemo(() => {
+    if (!tournament || !prediction) return null;
+    const forSide = (picks: typeof prediction.blue.picks) =>
+      Object.fromEntries(
+        picks.map((pick) => [pick.role, pickFacts(tournament, pick.champion.id, pick.champion.name, pick.role, pick.player)]),
+      ) as Partial<Record<Role, PickFacts>>;
+    return { blue: forSide(prediction.blue.picks), red: forSide(prediction.red.picks) };
+  }, [tournament, prediction]);
 
   if (!dataset || dataset.games.length === 0) {
     return (
@@ -349,6 +371,14 @@ export function PredictorPage() {
             unratedTeams={unratedTeams}
             pocketBlue={blue.team ? model.pocketProfiles.get(blue.team.toLowerCase()) : null}
             pocketRed={red.team ? model.pocketProfiles.get(red.team.toLowerCase()) : null}
+            tournamentFacts={tournamentFacts}
+            tournamentNote={
+              tournament
+                ? `${tournament.label}: ${tournament.games.length} games loaded, up to ${new Date(
+                    tournament.games.at(-1)!.date,
+                  ).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+                : null
+            }
           />
           <PolymarketPanel
             feed={feed}

@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { ChampionArt } from '../ChampionArt.tsx';
 import { archetypeLabel } from '../../predictor/championArchetypes.ts';
-import { ROLE_SHORT, type Side } from '../../domain/types.ts';
+import { ROLE_SHORT, type Role, type Side } from '../../domain/types.ts';
+import type { PickFacts } from '../../predictor/tournamentFacts.ts';
 import { formatDuration } from '../../lib/format.ts';
 import type {
   ChampionScaling,
@@ -43,6 +44,10 @@ interface PredictionReportProps {
   /** How each team does with pocket picks over the form season, when it has games. */
   pocketBlue?: PocketProfile | null;
   pocketRed?: PocketProfile | null;
+  /** What each pick has done at the tournament being played, by side and role. */
+  tournamentFacts?: Record<Side, Partial<Record<Role, PickFacts>>> | null;
+  /** Which tournament those facts come from, and how far the loaded games go. */
+  tournamentNote?: string | null;
 }
 
 export function PredictionReport({
@@ -55,6 +60,8 @@ export function PredictionReport({
   unratedTeams,
   pocketBlue = null,
   pocketRed = null,
+  tournamentFacts = null,
+  tournamentNote = null,
 }: PredictionReportProps) {
   const { favourite, margin } = prediction;
   const leader = favourite === 'blue' ? blueTeam : favourite === 'red' ? redTeam : null;
@@ -162,10 +169,11 @@ export function PredictionReport({
       <section className="panel">
         <header className="panel-head">
           <h2>Per-lane detail</h2>
+          {tournamentNote && <p className="dim">Tournament lines from {tournamentNote} · reported, not scored.</p>}
         </header>
         <div className="lane-grid">
-          <LaneColumn score={prediction.blue} side="blue" />
-          <LaneColumn score={prediction.red} side="red" />
+          <LaneColumn score={prediction.blue} side="blue" facts={tournamentFacts?.blue} />
+          <LaneColumn score={prediction.red} side="red" facts={tournamentFacts?.red} />
         </div>
       </section>
     </div>
@@ -377,7 +385,15 @@ function scalingDetail(read: ScalingRead): string {
   );
 }
 
-function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
+function LaneColumn({
+  score,
+  side,
+  facts,
+}: {
+  score: SideScore;
+  side: Side;
+  facts?: Partial<Record<Role, PickFacts>>;
+}) {
   if (score.picks.length === 0) {
     return (
       <div className={`lanes lanes--${side}`}>
@@ -440,6 +456,7 @@ function LaneColumn({ score, side }: { score: SideScore; side: Side }) {
             <LaneArchetype pick={pick} />
             <LaneRecords pick={pick} />
             <LaneLastPlayed pick={pick} />
+            <LaneTournament facts={facts?.[pick.role]} />
             {(pick.counters.length > 0 || pick.counteredBy.length > 0 || pick.synergy.length > 0) && (
               <div className="lane-edges">
                 <EdgeList label="counters" tone="good" champions={pick.counters} />
@@ -598,6 +615,26 @@ function LaneLastPlayed({ pick }: { pick: PickLine }) {
         </span>
       )}
     </p>
+  );
+}
+
+/**
+ * What this pick has done at the tournament being played: a first, its record
+ * there, how the last one went, the run it is on, and this player on it.
+ */
+function LaneTournament({ facts }: { facts: PickFacts | undefined }) {
+  if (!facts || facts.lines.length === 0) return null;
+  return (
+    <div className="lane-tourney">
+      <span className="lane-last-label">{facts.tournament}</span>
+      <ul>
+        {facts.lines.map((line) => (
+          <li key={line} className={line.startsWith('First') || line.endsWith(`first ${facts.champion} at ${facts.tournament}`) ? 'is-first' : undefined}>
+            {line}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

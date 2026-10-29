@@ -960,6 +960,24 @@ claimed, so a band that says 80% and delivers 56% is visible rather than
 averaged away. **Every call** lists each match, and clicking one loads it into
 the composer.
 
+### What each pick did at this tournament
+
+Under each pick, **Per-lane detail** lists what that champion has done at the
+tournament being played. That's the newest event of the composer's
+competition, as long as it had a game in the last 45 days. For example:
+
+- *First Akali pick at Worlds 2026 — banned 9× before*
+- *First Akali support at Worlds 2026 — 4 games in other roles*
+- *Akali at Worlds 2026: 2–2 (1–2 as mid) · banned 5×*
+- *Last Akali pick lost — T1 vs HLE, Round 3, Oct 14*
+- *Lost its last 2 at Worlds 2026*, or *Unbeaten at Worlds 2026 (3–0)*
+- *Faker on Akali at Worlds 2026: 1–2*, or *Faker's first Akali at Worlds 2026*
+
+Rounds are named the way the Tournament tab names them. The lines are reported,
+not scored, and are built from the same history as the model: in a backtest,
+only games played before the match's kickoff. The panel heading says which
+tournament they come from and how far the loaded games go.
+
 ### Live Polymarket prices
 
 With both teams picked, the Predictor shows a **Polymarket** panel and keeps it
