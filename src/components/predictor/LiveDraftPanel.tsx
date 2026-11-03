@@ -20,7 +20,6 @@ const EVERY_SECONDS = 10;
 interface Follow {
   matchId: string;
   label: string;
-  autoFill: boolean;
 }
 
 /** Aliases from `scripts/lolesports-aliases.json`, the same file `npm run draft:live` reads. */
@@ -31,7 +30,7 @@ const ALIASES: Record<string, string> = Object.fromEntries(
 function loadFollow(): Follow | null {
   try {
     const parsed = JSON.parse(readTabScoped(FOLLOW_KEY) ?? 'null') as Follow | null;
-    return parsed && typeof parsed.matchId === 'string' ? { ...parsed, autoFill: parsed.autoFill !== false } : null;
+    return parsed && typeof parsed.matchId === 'string' ? { matchId: parsed.matchId, label: String(parsed.label ?? '') } : null;
   } catch {
     return null;
   }
@@ -44,13 +43,14 @@ const pair = (values: [number | null, number | null], format: (value: number | n
 /**
  * Follow a match on LoL Esports and keep the composer filled from it.
  *
- * Every few seconds it reads the match, and the live game's stats window once
- * one is in progress. Whenever what the composer should hold changes — a new
- * game, the champions arriving — it fills the composer, unless filling is
- * switched off, in which case "Fill now" does it on demand. Edits made by hand
- * stand until the feed changes again.
+ * Shown only in Live mode, where the feed is in charge of the composer: every
+ * few seconds it reads the match, and the live game's stats window once one is
+ * in progress, and fills the composer whenever what it should hold changes — a
+ * new game, the champions arriving. Switching to Manual unmounts it, which
+ * stops the reads; the followed match is kept, so switching back picks it up
+ * again and refills the composer straight away.
  */
-export function LiveDraftPanel() {
+export function LiveDraftPanel({ onFollowingChange }: { onFollowingChange?: (following: boolean) => void }) {
   const { dataset } = useDataset();
   const { setDraft } = usePredictor();
   const games = useMemo(() => dataset?.games ?? [], [dataset]);
@@ -70,6 +70,7 @@ export function LiveDraftPanel() {
   const [filledAt, setFilledAt] = useState<number | null>(null);
 
   useEffect(() => writeTabScoped(FOLLOW_KEY, JSON.stringify(follow)), [follow]);
+  useEffect(() => onFollowingChange?.(follow !== null), [follow, onFollowingChange]);
 
   const fill = (next: LiveRead) => {
     if (!next.composer || !next.fingerprint) return;
@@ -103,6 +104,8 @@ export function LiveDraftPanel() {
       if (stopped || document.hidden) return;
       try {
         const detailsJson = await lolApi('getEventDetails', { id: follow.matchId });
+        // Switched to Manual (or stopped) while that was in flight: read nothing more.
+        if (stopped) return;
         const details = readEventDetails(detailsJson);
         const game = details ? liveGame(details) : null;
         const windowJson = game ? await lolWindow(game.id) : null;
@@ -115,7 +118,7 @@ export function LiveDraftPanel() {
         setRead(next);
         setAt(Date.now());
         setError(null);
-        if (follow.autoFill && next.fingerprint && next.fingerprint !== applied.current) fillRef.current(next);
+        if (next.fingerprint && next.fingerprint !== applied.current) fillRef.current(next);
         if (next.state === 'finished' && timer !== undefined) window.clearInterval(timer);
       } catch (reason) {
         if (!stopped) setError(reason instanceof FeedError ? reason.message : 'Could not read the match.');
@@ -145,7 +148,6 @@ export function LiveDraftPanel() {
     setFollow({
       matchId: match.matchId,
       label: `${match.league?.name ?? 'Match'} · ${a?.name ?? '?'} vs ${b?.name ?? '?'}${match.bestOf ? ` · BO${match.bestOf}` : ''}`,
-      autoFill: follow?.autoFill ?? true,
     });
   };
 
@@ -234,25 +236,9 @@ export function LiveDraftPanel() {
               ))}
             </ul>
           )}
-          <div className="live-draft-actions">
-            <label className="live-draft-auto">
-              <input
-                type="checkbox"
-                checked={follow.autoFill}
-                onChange={(event) => setFollow({ ...follow, autoFill: event.target.checked })}
-              />{' '}
-              Fill the composer automatically
-            </label>
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={!read?.composer}
-              onClick={() => read && fill(read)}
-            >
-              Fill now
-            </button>
-            {filledAt && <span className="dim">Filled at {new Date(filledAt).toLocaleTimeString()}</span>}
-          </div>
+          {filledAt && (
+            <p className="live-draft-actions dim">Composer filled at {new Date(filledAt).toLocaleTimeString()}.</p>
+          )}
         </div>
       )}
     </section>

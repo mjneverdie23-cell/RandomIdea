@@ -2146,3 +2146,59 @@
   color: var(--text);
   font-weight: 600;
 }
+
+/* ------------------------------------------------------------------ */
+/* Draft input: Manual / Live API                                      */
+/* ------------------------------------------------------------------ */
+
+.input-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+}
+
+.input-mode-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* The fieldset only exists to lock the draft controls in Live mode. */
+.draft-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+
+.draft-fieldset:disabled .context-bar,
+.draft-fieldset:disabled .composer-board {
+  opacity: 0.88;
+}
+
+.draft-fieldset:disabled .search-select-field {
+  border-style: dashed;
+}
+
+.draft-locked-note {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--green) 40%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--green) 7%, transparent);
+  font-size: 0.84rem;
+  color: var(--text-dim);
+}
+
+.predictor-page .page-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

@@ -60,6 +60,7 @@ import {
 } from '../predictor/backtest.ts';
 import type { PredictorModel } from '../predictor/types.ts';
 import type { Game } from '../domain/types.ts';
+import { readTabScoped, writeTabScoped } from '../storage/tabScoped.ts';
 
 /** A pasted list of matches, with a cursor for stepping through it. */
 export interface MatchQueue {
@@ -99,6 +100,13 @@ export interface PredictorContextValue {
   /** Whether to cut history at the current match's kickoff. */
   asOfEnabled: boolean;
   setAsOfEnabled: (enabled: boolean) => void;
+  /**
+   * Who fills the composer: the person (`manual`, typing or pasting) or the
+   * LoL Esports feed (`live`). Live predicts a game being played now, so it
+   * always reads every loaded game — a pasted backtest queue doesn't cut it.
+   */
+  inputMode: InputMode;
+  setInputMode: (mode: InputMode) => void;
   /** Games the scoped model was built from, against the total loaded. */
   scopedGameCount: number;
   /** Parse pasted text and fill the composer with its first match. */
@@ -118,6 +126,15 @@ export interface PredictorContextValue {
   ratingsStatus: 'loading' | 'ready';
   importRatings: (file: File) => Promise<RatingsImportReport>;
   clearRatings: () => Promise<void>;
+}
+
+export type InputMode = 'manual' | 'live';
+
+/** Per tab, like the draft: one tab can follow a live match while another backtests. */
+const INPUT_MODE_KEY = 'draftcall.predictor.input-mode.v1';
+
+function loadInputMode(): InputMode {
+  return readTabScoped(INPUT_MODE_KEY) === 'live' ? 'live' : 'manual';
 }
 
 const PredictorContext = createContext<PredictorContextValue | null>(null);
@@ -204,9 +221,14 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [asOfEnabled, setAsOfEnabled] = useState(true);
+  const [inputMode, setInputModeState] = useState<InputMode>(loadInputMode);
+  const setInputMode = useCallback((mode: InputMode) => {
+    setInputModeState(mode);
+    writeTabScoped(INPUT_MODE_KEY, mode);
+  }, []);
 
   const currentMatch = queue ? (queue.matches[queue.index] ?? null) : null;
-  const asOf = asOfEnabled && currentMatch ? asOfInstant(currentMatch) : null;
+  const asOf = inputMode === 'manual' && asOfEnabled && currentMatch ? asOfInstant(currentMatch) : null;
 
   const scopedGames = useMemo<readonly Game[]>(() => {
     if (!games) return [];
@@ -390,6 +412,8 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
       asOf,
       asOfEnabled,
       setAsOfEnabled,
+      inputMode,
+      setInputMode,
       scopedGameCount: scopedGames.length,
       loadMatches,
       goToMatch,
@@ -412,6 +436,8 @@ export function PredictorProvider({ children }: { children: ReactNode }) {
       queue,
       asOf,
       asOfEnabled,
+      inputMode,
+      setInputMode,
       scopedGames.length,
       loadMatches,
       goToMatch,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDataset } from '../state/DatasetContext.tsx';
 import { usePredictor } from '../state/PredictorContext.tsx';
@@ -24,7 +24,11 @@ const SERIES_LENGTHS: SeriesLength[] = ['BO1', 'BO3', 'BO5'];
 
 export function PredictorPage() {
   const { dataset, isDemo } = useDataset();
-  const { model, ratings, draft, setDraft, resetDraft, asOf } = usePredictor();
+  const { model, ratings, draft, setDraft, resetDraft, asOf, inputMode, setInputMode } = usePredictor();
+  // In Live mode the feed owns the composer while it follows a match; hand
+  // edits would only be overwritten by the next read, so they're locked out.
+  const [following, setFollowing] = useState(false);
+  const locked = inputMode === 'live' && following;
   const { blue, red, stage, seriesLength, seriesTouched, scoreBlue, scoreRed, winRequirement } =
     draft;
 
@@ -167,14 +171,35 @@ export function PredictorPage() {
           </p>
         </div>
         <div className="page-head-actions">
+          <div className="input-mode" role="group" aria-label="Draft input">
+            <span className="input-mode-label">Draft input</span>
+            {(['manual', 'live'] as const).map((mode) => (
+              <button
+                key={mode}
+                id={`input-mode-${mode}`}
+                type="button"
+                className="chip chip-sm"
+                aria-pressed={inputMode === mode}
+                title={
+                  mode === 'manual'
+                    ? 'Type the draft, or paste matches to backtest'
+                    : 'Follow a match on LoL Esports and fill the draft from it'
+                }
+                onClick={() => setInputMode(mode)}
+              >
+                {mode === 'manual' ? 'Manual' : 'Live API'}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             className="btn btn-sm"
+            disabled={locked}
             onClick={() => setDraft(swapDraftSides)}
           >
             Swap sides
           </button>
-          <button type="button" className="btn btn-sm" onClick={resetDraft}>
+          <button type="button" className="btn btn-sm" disabled={locked} onClick={resetDraft}>
             Reset
           </button>
         </div>
@@ -187,9 +212,15 @@ export function PredictorPage() {
         </p>
       )}
 
-      <LiveDraftPanel />
-      <MatchPaste />
+      {inputMode === 'live' ? <LiveDraftPanel onFollowingChange={setFollowing} /> : <MatchPaste />}
 
+      {/* A disabled fieldset disables every control inside it at once. */}
+      <fieldset className="draft-fieldset" disabled={locked}>
+        {locked && (
+          <p className="draft-locked-note">
+            Filled from LoL Esports while following a match. Switch to <strong>Manual</strong> to edit the draft.
+          </p>
+        )}
       <section className="context-bar" aria-label="Series context">
         <label className="field">
           <span className="field-label">Blue competition</span>
@@ -358,6 +389,7 @@ export function PredictorPage() {
           onMotivationChange={(motivation) => updateSide('red', (side) => ({ ...side, motivation }))}
         />
       </div>
+      </fieldset>
 
       {prediction ? (
         <>

@@ -1021,8 +1021,22 @@ the panel as a fast read, not a fill price.
 
 ### Following a live match in the Predictor
 
-The **Live draft** panel at the top of the Predictor follows a match on LoL
-Esports and keeps the composer filled from it:
+A **Draft input** switch at the top of the Predictor decides who fills the
+composer:
+
+- **Manual:** you type the draft, or paste matches to backtest (the **Load
+  matches** box). A pasted queue cuts history at each match's kickoff, as
+  before.
+- **Live API:** the **Live draft** panel follows a match on LoL Esports and
+  fills the composer from it. Live always predicts from every loaded game, so
+  a queue pasted earlier doesn't cut its history.
+
+The switch is remembered per tab, so one tab can follow a live match while
+another backtests. Switching to Manual stops the feed requests but keeps the
+followed match. Switching back to Live picks it up again and refills the
+composer straight away.
+
+In Live API mode:
 
 1. **Find live matches** lists what is live now: league, teams, series score,
    best-of and stage. Matches between teams in your data come first, and any
@@ -1035,11 +1049,12 @@ Esports and keeps the composer filled from it:
      window), with a line of in-game gold, kills and towers.
    - **Between games:** it says which game is next; when the series is over,
      it stops.
-3. **Fill the composer automatically** (on by default) fills it whenever the
-   feed changes: a new game, or the champions arriving. A change you make by
-   hand stands until the feed changes again. **Fill now** re-applies the feed
-   at any time. Following survives a page reload in the same tab, and **Stop
-   following** hands the composer back.
+3. **While following, the feed owns the composer.** It fills the composer
+   whenever the feed changes (a new game, or the champions arriving). The
+   draft controls, Swap sides and Reset are locked, so a hand edit can't be
+   silently overwritten by the next read. To change something, switch to
+   **Manual**. Following survives a page reload in the same tab, and **Stop
+   following** unlocks the composer.
 
 **Champion select isn't covered.** LoL Esports' feeds don't publish it pick
 by pick, so the champions appear when the game loads, not while they are
