@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lamplit — study together, in silence</title>
+  <meta name="description" content="A quiet online reading room that never closes. Pick a desk, turn on your lamp and focus alongside everyone else. No chat, no sign-up.">
+  <meta name="theme-color" content="#0b1020">
+  <meta property="og:title" content="Lamplit — study together, in silence">
+  <meta property="og:description" content="A quiet online reading room that never closes. No chat, no sign-up.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <main id="app">
+    <canvas id="scene" aria-label="The reading room"></canvas>
+    <div id="labels" aria-hidden="true"></div>
+
+    <header id="hud" hidden>
+      <div class="hud-left">
+        <button class="room-btn" data-action="halls">
+          <span class="brand-mark" data-icon="lamp"></span>
+          <span class="brand-name" data-i18n="brand">Lamplit</span>
+          <span class="room-pill" id="room-pill"></span>
+        </button>
+      </div>
+      <div class="hud-right">
+        <span class="live" id="live"><i class="dot" aria-hidden="true"></i><span id="live-text"></span></span>
+        <button class="icon-btn" data-action="stats" data-icon="chart" data-i18n-label="stats"></button>
+        <button class="icon-btn" data-action="settings" data-icon="sliders" data-i18n-label="settings"></button>
+        <button class="icon-btn" id="sound-btn" data-action="sound"></button>
+      </div>
+    </header>
+
+    <div id="focusbar" hidden>
+      <span class="focus-dot" aria-hidden="true"></span>
+      <span id="focus-time">--:--</span>
+      <button class="btn ghost small" data-action="focusView" data-v="0" data-i18n="showControls">Show controls</button>
+    </div>
+
+    <div id="emotes" class="emotes" hidden></div>
+    <section id="dock" hidden></section>
+    <div id="toasts" aria-live="polite"></div>
+    <div id="tooltip" hidden></div>
+    <div id="backdrop" hidden></div>
+    <section id="sheet" role="dialog" aria-modal="true" hidden></section>
+    <div id="overlay" hidden></div>
+
+    <section id="splash">
+      <div class="splash-card">
+        <div class="splash-lamp" aria-hidden="true">
+          <svg viewBox="0 0 120 120" width="112" height="112">
+            <defs>
+              <radialGradient id="g" cx="50%" cy="58%" r="50%">
+                <stop offset="0" stop-color="#ffd38a" stop-opacity=".95"/>
+                <stop offset=".55" stop-color="#ffb35c" stop-opacity=".25"/>
+                <stop offset="1" stop-color="#ffb35c" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle cx="60" cy="70" r="56" fill="url(#g)"/>
+            <path d="M30 56h60L80 36H40z" fill="#1f6b4f"/>
+            <rect x="34" y="56" width="52" height="5" rx="2.5" fill="#fff2cf"/>
+            <rect x="58" y="61" width="4" height="30" fill="#b08d57"/>
+            <rect x="42" y="90" width="36" height="6" rx="3" fill="#b08d57"/>
+          </svg>
+        </div>
+        <h1 class="splash-title" data-i18n="brand">Lamplit</h1>
+        <p class="splash-tagline" data-i18n="tagline">Study together, in silence.</p>
+        <p class="splash-intro" data-i18n="intro"></p>
+        <p class="splash-live" id="splash-live" hidden></p>
+        <button class="btn primary big" data-action="enter" data-i18n="enter">Enter the reading room</button>
+        <p class="splash-promise" data-i18n="promise"></p>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button data-action="setLang" data-v="en">English</button>
+          <button data-action="setLang" data-v="ko">한국어</button>
+        </div>
+      </div>
+    </section>
+    <noscript><p class="noscript">Lamplit needs JavaScript and WebGL.</p></noscript>
+  </main>
+</body>
+</html>
