@@ -385,10 +385,10 @@ export class World {
     this.shadeMesh.instanceColor.needsUpdate = true;
   }
 
-  /** Someone sits at desk i: show their notebook and lamp style. */
-  setOccupied(i, lampStyle) {
+  /** Someone sits at desk i: show their lamp style, and their notebook unless they brought work. */
+  setOccupied(i, lampStyle, notebook = true) {
     this.occupied[i] = 1;
-    this.notebooks.setMatrixAt(i, this.tmpMatrix.makeTranslation(DESKS[i].x - 0.06, DESK_TOP, DESKS[i].z + 0.07));
+    this.notebooks.setMatrixAt(i, notebook ? this.tmpMatrix.makeTranslation(DESKS[i].x - 0.06, DESK_TOP, DESKS[i].z + 0.07) : HIDDEN);
     this.notebooks.instanceMatrix.needsUpdate = true;
     this.setShade(i, lampStyle);
   }

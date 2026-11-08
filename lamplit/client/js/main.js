@@ -1,23 +1,30 @@
-// Lamplit client: wires the 3D room, avatars, network, sound and UI together.
+// Lamplit client: wires sign-in, the 3D room, avatars, network, sound, shop, profile,
+// friends, the tour and the UI together.
 
 import * as THREE from '../vendor/three.module.min.js';
 import { DESKS, DESK_COUNT, round2 } from '../shared/layout.js';
-import { PROTOCOL, STATE, OPEN_FOCUS_CAP, COOLDOWN } from '../shared/protocol.js';
+import { PROTOCOL, STATE, COOLDOWN } from '../shared/protocol.js';
 import { displayName, subjectName, randomName, SWEATERS } from '../shared/words.js';
+import { ITEMS, ITEM, itemName, sanitizeLook } from '../shared/catalog.js';
 import { World } from './world.js';
 import { Avatars } from './avatars.js';
 import { Labels } from './labels.js';
 import { Net } from './net.js';
-import { Store } from './store.js';
+import { Settings } from './store.js';
 import { Sound } from './audio.js';
 import { UI } from './ui.js';
 import { ICONS, EMOTE_ICONS } from './icons.js';
+import { Preview } from './preview.js';
+import { Tutorial } from './tutorial.js';
+import { DESK_WORK_ITEMS } from './look.js';
+import { shopModelLook } from './views.js';
+import { getToken, setToken, timeZone, continueAsGuest, signUp, logIn, logOut, whoAmI } from './api.js';
 import { t, setLang, getLang, formatMinutes } from './i18n.js';
 
 const MIN = 60_000;
-const store = new Store();
-setLang(store.profile.lang);
-const sound = new Sound(store.profile);
+const settings = new Settings();
+setLang(settings.lang);
+const sound = new Sound(settings);
 
 // ------------------------------------------------------------------ rendering
 
@@ -32,7 +39,6 @@ const labels = new Labels(document.getElementById('labels'));
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 
-// A little ring where you tap the floor.
 const tapRing = new THREE.Mesh(
   new THREE.RingGeometry(0.16, 0.24, 32).rotateX(-Math.PI / 2),
   new THREE.MeshBasicMaterial({ color: 0xffe1a8, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }),
@@ -41,7 +47,8 @@ tapRing.position.y = 0.02;
 world.scene.add(tapRing);
 let tapRingAge = 1;
 
-let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+const maxRatio = () => (settings.quality === 'low' ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+let pixelRatio = maxRatio();
 function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -49,11 +56,11 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  preview?.resize();
 }
 window.addEventListener('resize', resize);
-resize();
 
-// ------------------------------------------------------------------ room state (mirror of the server)
+// ------------------------------------------------------------------ state
 
 const room = {
   selfId: 0,
@@ -67,11 +74,19 @@ const room = {
   g: null,
 };
 const self = () => room.members.get(room.selfId);
+/** Your profile as the server last described it (lumens, wardrobe, stats, account). */
+let me = null;
+let friends = null;
 let joined = false;
 let doneSent = false;
 let lastGift = -Infinity;
 let deskCard = -1;
-let welcomedOnce = false;
+let lastEarn = null;
+let tour = null;
+let toured = false;
+let copiedUntil = 0;
+const shop = { cat: 'clothes', selected: null };
+let preview = null;
 
 // ------------------------------------------------------------------ network
 
@@ -80,12 +95,9 @@ const params = new URLSearchParams(location.search);
 const urlRoom = Number.parseInt(params.get('room') || '', 10);
 
 function hello() {
-  const p = store.profile;
-  const msg = { t: 'hello', v: PROTOCOL, name: p.name, color: p.color, lamp: p.lamp };
-  const hall = Number.isInteger(urlRoom) && urlRoom > 0 ? urlRoom : p.hall;
+  const msg = { t: 'hello', v: PROTOCOL, auth: getToken(), tz: timeZone() };
+  const hall = Number.isInteger(urlRoom) && urlRoom > 0 ? urlRoom : settings.hall;
   if (hall) msg.hall = hall;
-  const resume = store.resumeToken;
-  if (resume) msg.resume = resume;
   return msg;
 }
 
@@ -102,6 +114,18 @@ net.on('message', (msg) => {
       return onBatch(msg.ev);
     case 'g':
       return onGlobal(msg);
+    case 'me':
+      return setMe(msg.p);
+    case 'earn':
+      return onEarn(msg);
+    case 'bought':
+      sound.chime();
+      return ui.toast(t('bought', { item: itemName(msg.item, getLang()) }), 'bag');
+    case 'friends':
+      friends = msg;
+      return refreshProfile();
+    case 'notice':
+      return onNotice(msg);
     case 'queue':
       return ui.overlay('queue', { n: msg.pos });
     case 'err':
@@ -115,8 +139,7 @@ net.on('message', (msg) => {
 function onWelcome(msg) {
   joined = true;
   net.setServerTime(msg.now);
-  store.resumeToken = msg.resume;
-  store.update({ hall: msg.hall });
+  settings.update({ hall: msg.hall });
   if (params.get('room') !== String(msg.hall)) {
     params.set('room', String(msg.hall));
     history.replaceState(null, '', `${location.pathname}?${params}`);
@@ -138,39 +161,35 @@ function onWelcome(msg) {
     world.setTea(desk, true);
   }
   setRoomStats(msg.hs);
+  setMe(msg.me);
   onGlobal(msg.g);
-  reconcileSession();
-  labels.setSelf(displayName(store.profile.name, getLang()));
   ui.overlay(null);
   ui.showHud(true);
-  if (!welcomedOnce) {
-    welcomedOnce = true;
-    const streak = store.streak();
-    if (streak >= 2) ui.toast(t('welcomeBack', { n: streak }), 'lamp');
-  }
   refresh();
-}
-
-function toMember(v) {
-  return { id: v.id, nm: v.nm, col: v.col, lp: v.lp, desk: v.desk, st: v.st, since: v.since, mins: v.mins, tag: v.tag, pos: v.pos, path: v.path ?? null, t0: v.t0 ?? 0 };
+  maybeStartTour();
 }
 
 function addMember(v, instant) {
   let m = room.members.get(v.id);
-  if (m) {
-    Object.assign(m, toMember(v));
-  } else {
-    m = toMember(v);
+  const fields = { id: v.id, nm: v.nm, lk: v.lk, desk: v.desk, st: v.st, since: v.since, mins: v.mins, tag: v.tag, pos: v.pos, path: v.path ?? null, t0: v.t0 ?? 0 };
+  if (m) Object.assign(m, fields);
+  else {
+    m = fields;
     room.members.set(m.id, m);
   }
   avatars.add(m);
   avatars.repaint(m);
   if (m.desk >= 0) {
     room.desks[m.desk] = m.id;
-    world.setOccupied(m.desk, m.lp);
+    occupyDesk(m);
     world.setLamp(m.desk, m.st === STATE.FOCUS, { instant });
     if (m.id === room.selfId) world.setOwnDesk(m.desk);
   }
+}
+
+/** Shows someone's things on their desk: lamp shade, and the notebook unless they brought work. */
+function occupyDesk(m) {
+  world.setOccupied(m.desk, m.look.l, !DESK_WORK_ITEMS.has(m.look.held));
 }
 
 function removeMember(id) {
@@ -229,10 +248,10 @@ function onBatch(events) {
         const m = room.members.get(ev[1]);
         if (!m) break;
         m.nm = ev[2];
-        m.col = ev[3];
-        m.lp = ev[4];
+        m.lk = ev[3];
         avatars.repaint(m);
-        if (m.desk >= 0) world.setShade(m.desk, m.lp);
+        if (m.desk >= 0) occupyDesk(m);
+        if (m.id === room.selfId) labels.setSelf(displayName(m.nm, getLang()));
         break;
       }
       case 'hs':
@@ -241,7 +260,7 @@ function onBatch(events) {
       default:
     }
   }
-  if (ended) finishLocalSession(ended, finished);
+  if (ended) sessionEnded(ended, finished);
   if (deskCard >= 0) refreshDeskCard();
   refresh();
 }
@@ -257,7 +276,7 @@ function onSeat(id, desk, pos) {
     m.desk = desk;
     m.sitT = 0;
     room.desks[desk] = id;
-    world.setOccupied(desk, m.lp);
+    occupyDesk(m);
     if (id === room.selfId) world.setOwnDesk(desk);
     return;
   }
@@ -268,7 +287,6 @@ function onSeat(id, desk, pos) {
       world.setFree(old);
     }
     if (!m.path) {
-      // They were sitting: animate getting up from the chair.
       m.standFrom = { x: DESKS[old].seat.x, z: DESKS[old].seat.z };
       m.standT = net.now();
     }
@@ -282,19 +300,16 @@ function onSeat(id, desk, pos) {
   }
 }
 
-/** Applies a state change. For your own avatar, returns the previous session if one ended. */
+/** Applies a state change. For you, returns the previous state if a focus session ended. */
 function onState([, id, st, since, mins, tag]) {
   const m = room.members.get(id);
   if (!m) return null;
   const prev = { st: m.st, since: m.since, mins: m.mins, tag: m.tag };
-  m.st = st;
-  m.since = since;
-  m.mins = mins;
-  m.tag = tag;
+  Object.assign(m, { st, since, mins, tag });
   if (m.desk >= 0) world.setLamp(m.desk, st === STATE.FOCUS);
   if (id !== room.selfId) return null;
   if (st === STATE.FOCUS && !(prev.st === STATE.FOCUS && prev.since === since)) {
-    startLocalSession(m);
+    doneSent = false;
     sound.lamp(true);
   }
   if (prev.st === STATE.BREAK && st === STATE.SEATED) {
@@ -305,6 +320,25 @@ function onState([, id, st, since, mins, tag]) {
   return null;
 }
 
+/** One of your sessions ended: finished (the server says how many minutes) or stopped. */
+function sessionEnded(prev, finished) {
+  doneSent = false;
+  setFocusView(false);
+  if (!finished) {
+    sound.lamp(false);
+    return;
+  }
+  sound.bell();
+  const earned = lastEarn && Date.now() - lastEarn.at < 10_000 ? lastEarn.n : 0;
+  ui.openSheet('complete', { minutes: finished, lumens: earned, today: me?.today ?? 0, streak: me?.streak ?? 0, goal: me?.goal ?? 120 });
+}
+
+function onEarn(msg) {
+  lastEarn = { n: msg.n, at: Date.now() };
+  ui.bumpLumens(msg.n);
+  if (!msg.done) ui.toast(t('earnedToast', { n: msg.n, m: msg.mins }), 'spark');
+}
+
 function onTea(from, desk, until) {
   if (until <= 0) {
     room.tea.delete(desk);
@@ -313,9 +347,9 @@ function onTea(from, desk, until) {
   }
   room.tea.set(desk, until);
   world.setTea(desk, true);
-  const me = self();
+  const mine = self();
   const lang = getLang();
-  if (me && me.desk === desk && from !== room.selfId) {
+  if (mine && mine.desk === desk && from !== room.selfId) {
     const f = room.members.get(from);
     ui.toast(t('teaReceived', { name: f ? displayName(f.nm, lang) : '…' }), 'tea');
     labels.bubble(room.selfId, ICONS.tea, 2400, 'tea');
@@ -327,34 +361,41 @@ function onTea(from, desk, until) {
 }
 
 function onGlobal(g) {
+  if (!g) return;
   room.g = g;
-  ui.setLive(g);
   const mine = g.h.find(([id]) => id === room.hall);
-  if (room.hall) ui.setRoom(room.hall, mine ? mine[1] : room.members.size, room.cap);
+  if (room.hall) ui.setRoom(room.hall, mine ? mine[1] : room.members.size, room.cap, g.fo);
   ui.refreshSheet('halls', hallsModel());
 }
 
+function onNotice(msg) {
+  const name = msg.name ? displayName(msg.name, getLang()) : '';
+  const key = { friendRequest: 'noticeFriendRequest', friendAccepted: 'noticeFriendAccepted', friendSent: 'noticeFriendSent' }[msg.kind];
+  if (key) ui.toast(t(key, { name }), 'friend');
+  if (msg.kind === 'friendRequest' || msg.kind === 'friendAccepted') sound.chime();
+}
+
+const ERROR_TEXT = {
+  taken: 'taken',
+  nopath: 'noPath',
+  full: 'roomFull',
+  funds: 'errFunds',
+  locked: 'errLocked',
+  guest: 'errGuest',
+  nocode: 'errNocode',
+  self: 'errSelf',
+  already: 'errAlready',
+  pending: 'errPending',
+  limit: 'errLimit',
+};
+
 function onError(msg) {
-  switch (msg.code) {
-    case 'taken':
-      ui.toast(t('taken'));
-      break;
-    case 'nopath':
-      ui.toast(t('noPath'));
-      break;
-    case 'full':
-      ui.toast(t('roomFull'));
-      break;
-    case 'cooldown':
-      ui.toast(t('teaWait', { n: Math.ceil((msg.left || 0) / 1000) }), 'tea');
-      break;
-    case 'early':
-      setTimeout(() => {
-        doneSent = false;
-      }, 2000);
-      break;
-    default:
-  }
+  if (msg.code === 'cooldown') ui.toast(t('teaWait', { n: Math.ceil((msg.left || 0) / 1000) }), 'tea');
+  else if (msg.code === 'early') {
+    setTimeout(() => {
+      doneSent = false;
+    }, 2000);
+  } else if (ERROR_TEXT[msg.code]) ui.toast(t(ERROR_TEXT[msg.code]));
 }
 
 function onBye(reason) {
@@ -365,6 +406,11 @@ function onBye(reason) {
   } else if (reason === 'version') {
     net.disconnect();
     ui.overlay('version');
+  } else if (reason === 'auth') {
+    // The login stopped working (logged out elsewhere, or expired): back to sign-in.
+    setToken(null);
+    leaveRoom();
+    showSignIn({ state: 'new', mode: 'login', error: null, note: t('signedOut') });
   }
   // Anything else ('restart', 'rate', 'full'): the socket closes and we reconnect.
 }
@@ -387,98 +433,195 @@ function drawBoard() {
   });
 }
 
-// ------------------------------------------------------------------ your focus sessions
-
-function startLocalSession(m) {
-  store.activeSession = { since: m.since, mins: m.mins, tag: m.tag };
-  doneSent = false;
-}
-
-/** A session of yours ended. `finished` is the minutes credited by the server, or null if stopped early. */
-function finishLocalSession(prev, finished) {
-  store.activeSession = null;
-  doneSent = false;
-  const now = net.now();
-  if (finished) {
-    const minutes = prev.mins > 0 ? prev.mins : Math.min(OPEN_FOCUS_CAP, Math.floor((now - prev.since) / MIN));
-    store.addFocus(minutes, true);
-    sound.bell();
-    setFocusView(false);
-    ui.openSheet('complete', { minutes, today: store.today(), streak: store.streak(), goal: store.profile.goal });
-    return;
-  }
-  const minutes = Math.floor(Math.min(now - prev.since, (prev.mins || OPEN_FOCUS_CAP) * MIN) / MIN);
-  store.addFocus(minutes, false);
-  sound.lamp(false);
-  setFocusView(false);
-  if (minutes > 0) ui.toast(`${t('sessionEnded')} · ${t('plusMin', { n: minutes })}`, 'lamp');
-}
-
-/** After (re)joining, settle any session that ended while we were away. */
-function reconcileSession() {
-  const active = store.activeSession;
-  const me = self();
-  if (me && me.st === STATE.FOCUS && active && active.since === me.since) return;
-  if (active) {
-    store.activeSession = null;
-    const now = net.now();
-    const capMs = (active.mins || OPEN_FOCUS_CAP) * MIN;
-    const minutes = Math.floor(Math.min(Math.max(0, now - active.since), capMs) / MIN);
-    const completed = active.mins > 0 && now - active.since >= active.mins * MIN;
-    if (minutes > 0) {
-      store.addFocus(minutes, completed);
-      ui.toast(t('awayEnded', { n: minutes }), 'lamp');
-    }
-  }
-  if (me && me.st === STATE.FOCUS) startLocalSession(me);
+/** A fresh profile from the server: balance, wardrobe, stats. */
+function setMe(p) {
+  if (!p) return;
+  me = { ...p, look: sanitizeLook(p.look) };
+  ui.setLumens(me.lumens);
+  preview?.setLook(shop.selected && ui.sheetKind === 'shop' ? shopModelLook(me, shop.selected) : me.look);
+  refreshShop();
+  refreshProfile();
+  ui.refreshSheet('settings', settingsModel());
 }
 
 function tickSession() {
-  const me = self();
-  if (!me || me.st !== STATE.FOCUS || me.mins === 0 || doneSent) return;
-  if (net.now() >= me.since + me.mins * MIN) {
+  const mine = self();
+  if (!mine || mine.st !== STATE.FOCUS || mine.mins === 0 || doneSent) return;
+  if (net.now() >= mine.since + mine.mins * MIN) {
     doneSent = true;
     net.send({ t: 'done' });
   }
 }
 
+// ------------------------------------------------------------------ signing in
+
+let authState = { state: 'checking' };
+/** The profile behind a remembered login, so a returning guest who signs up keeps everything. */
+let knownProfile = null;
+
+function showSignIn(state) {
+  authState = state;
+  ui.showSplash();
+  ui.renderAuth(state);
+  if (state.note) ui.toast(state.note);
+}
+
+async function checkToken() {
+  const token = getToken();
+  if (!token) {
+    showSignIn({ state: 'new', mode: 'login', error: null });
+    return;
+  }
+  showSignIn({ state: 'checking' });
+  const r = await whoAmI(token);
+  knownProfile = r.ok ? r.data.profile : null;
+  if (r.ok) showSignIn({ state: 'known', me: r.data.profile });
+  else if (r.status === 401) {
+    setToken(null);
+    showSignIn({ state: 'new', mode: 'login', error: null });
+  } else showSignIn({ state: 'new', mode: 'login', error: 'network' });
+}
+
+/** Handles a result from /api/guest, /api/signup or /api/login. */
+function signedIn(r, { inGame = false, mode = 'login' } = {}) {
+  if (!r.ok) {
+    const error = r.status === 429 ? 'slow' : r.data?.error || 'network';
+    if (inGame) ui.refreshSheet('account', { mode, error, busy: false });
+    else showSignIn({ ...authState, busy: false, error });
+    return;
+  }
+  const previousId = me?.id;
+  setToken(r.data.token);
+  if (inGame && r.data.profile.id === previousId) {
+    // A guest became an account: same profile, same seat.
+    ui.closeSheet();
+    setMe(r.data.profile);
+    ui.toast(t('signupDone', { u: r.data.profile.username }), 'user');
+    net.send({ t: 'me' });
+    return;
+  }
+  ui.closeSheet();
+  if (inGame) leaveRoom();
+  me = r.data.profile;
+  enter();
+}
+
+function enter() {
+  sound.unlock();
+  ui.hideSplash();
+  ui.overlay('connecting');
+  net.connect(hello);
+}
+
+/** Disconnects and clears the room (logging out, switching account). */
+function leaveRoom() {
+  net.disconnect();
+  joined = false;
+  room.selfId = 0;
+  room.members.clear();
+  avatars.clear();
+  labels.clear();
+  for (let i = 0; i < DESK_COUNT; i++) world.setFree(i);
+  ui.closeSheet();
+  ui.dock(null);
+  ui.showHud(false);
+  ui.overlay(null);
+  setFocusView(false);
+  tour?.end(false);
+}
+
+// ------------------------------------------------------------------ the tour
+
+function freeDeskRect() {
+  let best = null;
+  const v = new THREE.Vector3();
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  for (const d of DESKS) {
+    if (room.desks[d.i]) continue;
+    v.set(d.x, 0.7, d.z + 0.3).project(camera);
+    if (v.z > 1) continue;
+    const x = ((v.x + 1) / 2) * w;
+    const y = ((1 - v.y) / 2) * h;
+    if (x < 70 || x > w - 70 || y < 110 || y > h - 200) continue;
+    const score = Math.abs(x - w / 2) + Math.abs(y - h * 0.55);
+    if (!best || score < best.score) best = { x, y, score };
+  }
+  return best ? new DOMRect(best.x - 60, best.y - 50, 120, 100) : null;
+}
+
+const rectOf = (sel) => () => {
+  const el = document.querySelector(sel);
+  // offsetParent is null for position:fixed elements, so check for boxes instead.
+  if (!el || el.hidden || el.getClientRects().length === 0) return null;
+  return el.getBoundingClientRect();
+};
+
+function startTour() {
+  tour?.end(false);
+  const steps = [
+    { title: t('tour1Title'), body: t('tour1Body') },
+    { title: t('tour2Title'), body: t('tour2Body'), target: freeDeskRect, waitFor: 'sat' },
+    { title: t('tour3Title'), body: t('tour3Body'), target: rectOf('#dock') },
+    { title: t('tour4Title'), body: t('tour4Body'), target: rectOf('#lumens-btn') },
+    { title: t('tour5Title'), body: t('tour5Body'), target: rectOf('#shop-btn') },
+    { title: t('tour6Title'), body: t('tour6Body'), target: rectOf('#profile-btn') },
+    { title: t('tour7Title'), body: t('tour7Body'), target: rectOf('#emotes') },
+    { title: t('tour8Title'), body: t('tour8Body') },
+  ];
+  tour = new Tutorial(steps, () => {
+    tour = null;
+    toured = true;
+    settings.update({ toured: true });
+    net.send({ t: 'tutorial' });
+  });
+  tour.start();
+}
+
+function maybeStartTour() {
+  if (toured || tour || !me || me.tutorial || settings.toured) return;
+  toured = true;
+  setTimeout(startTour, 700);
+}
+
 // ------------------------------------------------------------------ dock & sheets
 
 function dockModel() {
-  const me = self();
-  if (!joined || !me) return null;
-  const p = store.profile;
-  const base = { desk: me.desk, mins: p.mins, tag: p.tag, since: me.since, planned: me.mins, subject: subjectName(me.tag, getLang()), now: net.now() };
-  if (me.desk < 0) return { ...base, mode: 'standing' };
-  if (me.path || (me.sitT && net.now() - me.sitT < 500)) return { ...base, mode: 'walking' };
-  if (me.st === STATE.FOCUS) return { ...base, mode: 'focus' };
-  if (me.st === STATE.BREAK) return { ...base, mode: 'break' };
+  const mine = self();
+  if (!joined || !mine) return null;
+  const base = { desk: mine.desk, mins: settings.mins, tag: settings.tag, since: mine.since, planned: mine.mins, subject: subjectName(mine.tag, getLang()), now: net.now() };
+  if (mine.desk < 0) return { ...base, mode: 'standing' };
+  if (mine.path || (mine.sitT && net.now() - mine.sitT < 500)) return { ...base, mode: 'walking' };
+  if (mine.st === STATE.FOCUS) return { ...base, mode: 'focus' };
+  if (mine.st === STATE.BREAK) return { ...base, mode: 'break' };
   return { ...base, mode: 'seated' };
 }
 
+let lastMode = '';
 function refresh() {
-  ui.dock(dockModel());
-  const me = self();
-  world.setMarkers(Boolean(joined && me && me.desk < 0));
+  const model = dockModel();
+  ui.dock(model);
+  const mine = self();
+  world.setMarkers(Boolean(joined && mine && mine.desk < 0));
+  if (model?.mode === 'seated' && lastMode !== 'seated') tour?.notify('sat');
+  lastMode = model?.mode ?? '';
 }
 
 function hallsModel() {
-  const me = self();
-  return { g: room.g ?? { h: [], cap: room.cap }, current: room.hall, inFocus: me?.st === STATE.FOCUS };
+  return { g: room.g ?? { h: [], cap: room.cap }, current: room.hall, inFocus: self()?.st === STATE.FOCUS };
 }
 
 function deskModel(desk) {
   const m = room.members.get(room.desks[desk]);
   if (!m) return null;
   const lang = getLang();
-  const now = net.now();
   let status = t('settlingIn');
-  if (m.st === STATE.FOCUS) status = t('focusingFor', { t: formatMinutes((now - m.since) / MIN) });
+  if (m.st === STATE.FOCUS) status = t('focusingFor', { t: formatMinutes((net.now() - m.since) / MIN) });
   else if (m.st === STATE.BREAK) status = t('takingBreak');
   return {
     desk,
     name: displayName(m.nm, lang),
-    sweater: SWEATERS[m.col] ?? SWEATERS[0],
+    sweater: SWEATERS[m.look?.c] ?? SWEATERS[0],
     status,
     subject: m.st === STATE.FOCUS ? subjectName(m.tag, lang) : '',
     teaWait: Math.max(0, COOLDOWN.gift - (Date.now() - lastGift)),
@@ -491,27 +634,31 @@ function refreshDeskCard() {
   else ui.closeSheet();
 }
 
-let styleTimer = 0;
-let lastStyle = -Infinity;
-/** Sends name/colour/lamp changes, at most once per server cooldown. */
-function queueStyle() {
-  clearTimeout(styleTimer);
-  const send = () => {
-    lastStyle = Date.now();
-    const p = store.profile;
-    net.send({ t: 'style', name: p.name, color: p.color, lamp: p.lamp });
-  };
-  const wait = COOLDOWN.style + 100 - (Date.now() - lastStyle);
-  if (wait <= 0) send();
-  else styleTimer = setTimeout(send, wait);
+function shopModel() {
+  return { me, cat: shop.cat, selected: shop.selected, thumbs: shopThumbs() };
+}
+
+function shopThumbs() {
+  const ids = ITEMS.filter((it) => it.cat === shop.cat).map((it) => it.id);
+  const p = getPreview();
+  const urls = p ? p.thumbnails(ids, me?.look.c ?? 0) : ids.map(() => '');
+  return Object.fromEntries(ids.map((id, i) => [id, urls[i]]));
+}
+
+function refreshShop() {
+  if (ui.sheetKind === 'shop' && me) ui.refreshSheet('shop', shopModel());
+}
+
+function profileModel() {
+  return { me, friends, hall: room.hall, now: net.now(), inFocus: self()?.st === STATE.FOCUS, copied: Date.now() < copiedUntil };
+}
+
+function refreshProfile() {
+  if (ui.sheetKind === 'profile' && me) ui.refreshSheet('profile', profileModel());
 }
 
 function settingsModel() {
-  return { profile: store.profile, name: displayName(store.profile.name, getLang()), locked: (i) => store.lampLocked(i) };
-}
-
-function statsModel() {
-  return { today: store.today(), streak: store.streak(), total: store.stats.total, sessions: store.stats.sessions, last7: store.last7(), goal: store.profile.goal };
+  return { settings, me };
 }
 
 function setFocusView(on) {
@@ -519,42 +666,89 @@ function setFocusView(on) {
   ui.setFocusView(cam.focusView);
 }
 
+function sendStyle(changes) {
+  net.send({ t: 'style', ...changes });
+}
+
+function getPreview() {
+  if (!preview) {
+    try {
+      preview = new Preview();
+    } catch {
+      preview = null;
+    }
+  }
+  return preview;
+}
+
 // ------------------------------------------------------------------ UI actions
 
 const ui = new UI({
+  // Signing in
   enter() {
-    sound.unlock();
-    ui.hideSplash();
-    ui.overlay('connecting');
-    net.connect(hello);
+    enter();
   },
-  setLang(l) {
-    store.update({ lang: l });
-    setLang(l);
-    ui.renderStatic();
-    if (room.g) ui.setLive(room.g);
-    if (room.hall) onGlobal(room.g ?? { h: [], on: 0, fo: 0 });
-    ui.setSound(store.profile.muted);
-    labels.setSelf(displayName(store.profile.name, l));
-    drawBoard();
-    refresh();
-    ui.refreshSheet('settings', settingsModel());
+  authTab(mode) {
+    showSignIn({ state: 'new', mode, error: null });
   },
+  switchAccount() {
+    showSignIn({ state: 'new', mode: 'login', error: null });
+  },
+  async guest() {
+    showSignIn({ ...authState, busy: true, error: null });
+    signedIn(await continueAsGuest());
+  },
+  async formSubmit(kind, data, form) {
+    const inGame = Boolean(form.closest('#sheet'));
+    if (kind === 'friend') {
+      const code = String(data.code || '')
+        .toUpperCase()
+        .replace(/[^0-9A-Z]/g, '');
+      if (!/^[2-9A-HJ-NP-Z]{8}$/.test(code)) {
+        ui.toast(t('errNocode'));
+        return;
+      }
+      net.send({ t: 'friendAdd', code });
+      form.reset();
+      return;
+    }
+    const username = String(data.username || '').trim();
+    const password = String(data.password || '');
+    if (inGame) ui.refreshSheet('account', { mode: kind, error: null, busy: true });
+    else showSignIn({ ...authState, busy: true, error: null });
+    const guestToken = me?.guest || knownProfile?.guest ? getToken() : null;
+    const r = kind === 'signup' ? await signUp(username, password, guestToken) : await logIn(username, password);
+    signedIn(r, { inGame, mode: kind });
+  },
+  account(mode) {
+    ui.openSheet('account', { mode, error: null, busy: false });
+  },
+  accountTab(mode) {
+    ui.refreshSheet('account', { mode, error: null, busy: false });
+  },
+  async logout() {
+    const token = getToken();
+    setToken(null);
+    leaveRoom();
+    await logOut(token);
+    me = null;
+    showSignIn({ state: 'new', mode: 'login', error: null });
+  },
+
+  // Studying
   mins(v) {
-    store.update({ mins: v });
+    settings.update({ mins: v });
     refresh();
   },
   tag(v) {
-    store.update({ tag: v });
+    settings.update({ tag: v });
     refresh();
   },
   focus() {
-    const p = store.profile;
-    net.send({ t: 'focus', mins: p.mins, tag: p.tag });
+    net.send({ t: 'focus', mins: settings.mins, tag: settings.tag });
   },
   back() {
-    const p = store.profile;
-    net.send({ t: 'focus', mins: p.mins, tag: p.tag });
+    net.send({ t: 'focus', mins: settings.mins, tag: settings.tag });
   },
   stand() {
     net.send({ t: 'stand' });
@@ -574,8 +768,7 @@ const ui = new UI({
     ui.closeSheet();
   },
   another() {
-    const p = store.profile;
-    net.send({ t: 'focus', mins: p.mins, tag: p.tag });
+    net.send({ t: 'focus', mins: settings.mins, tag: settings.tag });
     ui.closeSheet();
   },
   focusView(on) {
@@ -597,74 +790,137 @@ const ui = new UI({
     net.send({ t: 'switch', hall: id });
     ui.closeSheet();
   },
-  stats() {
-    ui.openSheet('stats', statsModel());
+
+  // Shop
+  shop() {
+    if (!me) return;
+    shop.selected = null;
+    ui.openSheet('shop', shopModel());
+  },
+  shopCat(cat) {
+    shop.cat = cat;
+    shop.selected = null;
+    preview?.setLook(me.look);
+    ui.refreshSheet('shop', shopModel());
+  },
+  shopPick(id) {
+    shop.selected = shop.selected === id ? null : id;
+    preview?.setLook(shop.selected ? shopModelLook(me, shop.selected) : me.look);
+    ui.refreshSheet('shop', shopModel());
+  },
+  buy(id) {
+    net.send({ t: 'buy', item: id });
+    setTimeout(() => net.send({ t: 'equip', item: id }), 300);
+  },
+  wear(id) {
+    net.send({ t: 'equip', item: id });
+  },
+  takeOff(slot) {
+    net.send({ t: 'unequip', slot });
+  },
+  color(i) {
+    sendStyle({ color: i });
+  },
+
+  // Profile
+  profile() {
+    if (!me) return;
+    friends = null;
+    ui.openSheet('profile', profileModel());
+    if (!me.guest) net.send({ t: 'friends' });
+  },
+  newName() {
+    sendStyle({ name: randomName() });
+  },
+  lamp(i) {
+    sendStyle({ lamp: i });
   },
   goal(v) {
-    store.update({ goal: v });
-    ui.refreshSheet('stats', statsModel());
+    net.send({ t: 'goal', mins: v });
   },
+  async copyCode() {
+    try {
+      await navigator.clipboard.writeText(me.code);
+    } catch {
+      // clipboard blocked: the code is on screen to copy by hand
+    }
+    copiedUntil = Date.now() + 2000;
+    refreshProfile();
+    setTimeout(refreshProfile, 2100);
+  },
+  friendAccept(id) {
+    net.send({ t: 'friendAccept', id });
+  },
+  friendRemove(id) {
+    net.send({ t: 'friendRemove', id });
+  },
+
+  // Settings
   settings() {
     ui.openSheet('settings', settingsModel());
   },
+  setLang(l) {
+    settings.update({ lang: l });
+    setLang(l);
+    ui.renderStatic();
+    if (room.g) onGlobal(room.g);
+    if (me) ui.setLumens(me.lumens);
+    ui.setSound(settings.muted);
+    const mine = self();
+    if (mine) labels.setSelf(displayName(mine.nm, l));
+    drawBoard();
+    refresh();
+  },
   sound() {
     sound.unlock();
-    store.update({ muted: !store.profile.muted });
-    sound.setMuted(store.profile.muted);
-    ui.setSound(store.profile.muted);
+    settings.update({ muted: !settings.muted });
+    sound.setMuted(settings.muted);
+    ui.setSound(settings.muted);
   },
   volume(v) {
     const vol = Number(v) / 100;
-    store.update({ volume: vol, muted: vol === 0 ? store.profile.muted : false });
+    settings.update({ volume: vol, muted: vol === 0 ? settings.muted : false });
     sound.setVolume(vol);
-    sound.setMuted(store.profile.muted);
-    ui.setSound(store.profile.muted);
+    sound.setMuted(settings.muted);
+    ui.setSound(settings.muted);
   },
   rain(on) {
-    store.update({ rain: on });
+    settings.update({ rain: on });
     sound.setRain(on);
   },
   roomSounds(on) {
-    store.update({ roomSounds: on });
+    settings.update({ roomSounds: on });
     sound.setRoomSounds(on);
   },
-  color(i) {
-    store.update({ color: i });
-    const me = self();
-    if (me) {
-      me.col = i;
-      avatars.repaint(me);
-    }
-    queueStyle();
+  quality(q) {
+    settings.update({ quality: q });
+    pixelRatio = maxRatio();
+    world.dust.visible = q !== 'low';
+    resize();
     ui.refreshSheet('settings', settingsModel());
   },
-  lamp(i) {
-    if (store.lampLocked(i)) return;
-    store.update({ lamp: i });
-    const me = self();
-    if (me) {
-      me.lp = i;
-      if (me.desk >= 0) world.setShade(me.desk, i);
-    }
-    queueStyle();
-    ui.refreshSheet('settings', settingsModel());
+  tour() {
+    ui.closeSheet();
+    setTimeout(startTour, 300);
   },
-  newName() {
-    store.update({ name: randomName() });
-    const me = self();
-    if (me) me.nm = store.profile.name;
-    labels.setSelf(displayName(store.profile.name, getLang()));
-    queueStyle();
-    ui.refreshSheet('settings', settingsModel());
-  },
+
+  // Sheets
   closeSheet() {
     ui.closeSheet();
   },
   sheetClosed(kind) {
     if (kind === 'desk') deskCard = -1;
+    if (kind === 'shop' || kind === 'profile') preview?.unmount();
+  },
+  sheetRendered(kind, sheet) {
+    const slot = sheet.querySelector('[data-preview]');
+    if (!slot) return;
+    const p = getPreview();
+    if (!p) return;
+    p.setLook(kind === 'shop' && shop.selected ? shopModelLook(me, shop.selected) : me.look);
+    p.mount(slot);
   },
   useHere() {
-    store.resumeToken = null;
     ui.overlay('connecting');
     net.connect(hello);
   },
@@ -672,7 +928,9 @@ const ui = new UI({
     location.reload();
   },
 });
-ui.setSound(store.profile.muted);
+ui.setSound(settings.muted);
+world.dust.visible = settings.quality !== 'low';
+resize();
 
 // ------------------------------------------------------------------ camera
 
@@ -690,15 +948,14 @@ function updateCamera(dt, time) {
   let yaw = cam.yaw;
   let pitch = cam.pitch;
   let dist = cam.dist;
-  const me = self();
-  if (!joined || !me) {
-    // Slow drift over the room behind the splash screen.
+  const mine = self();
+  if (!joined || !mine) {
     camTarget.set(Math.sin(time * 0.05) * 2.5, 0.8, 1.5);
     yaw = Math.sin(time * 0.07) * 0.35;
     pitch = 0.48;
     dist = 21;
-  } else if (cam.focusView && me.desk >= 0) {
-    const d = DESKS[me.desk];
+  } else if (cam.focusView && mine.desk >= 0) {
+    const d = DESKS[mine.desk];
     camTarget.set(d.x + 0.05, 0.95, d.z + 0.15);
     yaw = cam.yaw * 0.4;
     pitch = 0.62;
@@ -706,7 +963,7 @@ function updateCamera(dt, time) {
   } else {
     // Look a little ahead of you (toward the windows) so you see the room, not the floor.
     const w = avatars.where(room.selfId);
-    const ahead = me.desk >= 0 && !me.path ? 1.5 : 3.5;
+    const ahead = mine.desk >= 0 && !mine.path ? 1.5 : 3.5;
     if (w) camTarget.set(w.x - Math.sin(cam.cur.yaw) * ahead, 0.9, w.z - Math.cos(cam.cur.yaw) * ahead);
   }
   const k = 1 - Math.exp(-dt * 4.5);
@@ -790,9 +1047,9 @@ canvas.addEventListener(
 );
 
 function selfPosition() {
-  const me = self();
-  if (me && me.desk >= 0 && !me.path) {
-    const a = DESKS[me.desk].approach;
+  const mine = self();
+  if (mine && mine.desk >= 0 && !mine.path) {
+    const a = DESKS[mine.desk].approach;
     return [a.x, a.z];
   }
   const w = avatars.where(room.selfId);
@@ -800,29 +1057,29 @@ function selfPosition() {
 }
 
 function onTap(x, y) {
-  const me = self();
-  if (!joined || !me) return;
+  const mine = self();
+  if (!joined || !mine) return;
   if (cam.focusView) {
     setFocusView(false);
     return;
   }
   setRay(x, y);
   const desk = world.pickDesk(raycaster, camera, ndc);
-  if (desk >= 0) return onDeskTap(desk, me);
+  if (desk >= 0) return onDeskTap(desk, mine);
   const p = world.pickFloor(raycaster);
   if (!p) return;
-  if (me.st === STATE.FOCUS) {
+  if (mine.st === STATE.FOCUS) {
     ui.toast(t('inFocus'));
     return;
   }
   const from = selfPosition();
-  if (me.desk >= 0) net.send({ t: 'stand' });
+  if (mine.desk >= 0) net.send({ t: 'stand' });
   net.send({ t: 'go', from, to: [round2(p.x), round2(p.z)] });
   tapRing.position.set(p.x, 0.02, p.z);
   tapRingAge = 0;
 }
 
-function onDeskTap(desk, me) {
+function onDeskTap(desk, mine) {
   const owner = room.desks[desk];
   if (owner === room.selfId) return;
   if (owner) {
@@ -830,7 +1087,7 @@ function onDeskTap(desk, me) {
     ui.openSheet('desk', deskModel(desk));
     return;
   }
-  if (me.st === STATE.FOCUS) {
+  if (mine.st === STATE.FOCUS) {
     ui.toast(t('inFocus'));
     return;
   }
@@ -869,20 +1126,23 @@ window.addEventListener('pageshow', (e) => {
   if (e.persisted) net.reconnectNow();
 });
 
+let friendsPoll = 0;
 setInterval(() => {
   if (!joined) return;
   tickSession();
   ui.tick(net.now());
   refresh();
   if (deskCard >= 0) refreshDeskCard();
+  // Keep friends' whereabouts fresh while the profile is open.
+  if (ui.sheetKind === 'profile' && me && !me.guest && ++friendsPoll % 40 === 0) net.send({ t: 'friends' });
 }, 250);
 
 fetch('/api/status')
   .then((r) => (r.ok ? r.json() : null))
   .then((s) => s && ui.setSplashLive({ fo: s.focusing, on: s.online }))
   .catch(() => {});
+checkToken();
 
-// Lower the resolution on devices that struggle.
 let slowFrames = 0;
 let last = performance.now();
 function frame(nowMs) {
@@ -904,12 +1164,15 @@ function frame(nowMs) {
   labels.update(camera, avatars, room.selfId, window.innerWidth, window.innerHeight, joined && !cam.focusView);
   renderer.render(world.scene, camera);
 
-  if (dt > 0.034) slowFrames++;
-  else slowFrames = Math.max(0, slowFrames - 1);
-  if (slowFrames > 90 && pixelRatio > 1) {
-    pixelRatio = Math.max(1, pixelRatio - 0.25);
-    slowFrames = 0;
-    resize();
+  // Lower the resolution on devices that struggle (Auto quality only).
+  if (settings.quality === 'auto') {
+    if (dt > 0.034) slowFrames++;
+    else slowFrames = Math.max(0, slowFrames - 1);
+    if (slowFrames > 90 && pixelRatio > 1) {
+      pixelRatio = Math.max(1, pixelRatio - 0.25);
+      slowFrames = 0;
+      resize();
+    }
   }
   requestAnimationFrame(frame);
 }
@@ -919,18 +1182,19 @@ requestAnimationFrame(frame);
 window.lamplit = {
   room,
   net,
-  store,
   world,
   avatars,
   cam,
   ui,
-  /** World position of the middle of a desk and its chair. */
+  get me() {
+    return me;
+  },
   deskPos(i) {
     return [DESKS[i].x, 0.6, DESKS[i].z + 0.3];
   },
-  /** Screen position (CSS pixels) of a world point. */
   screenOf(x, y, z) {
     const v = new THREE.Vector3(x, y, z).project(camera);
     return { x: ((v.x + 1) / 2) * window.innerWidth, y: ((1 - v.y) / 2) * window.innerHeight, visible: v.z < 1 };
   },
+  startTour,
 };

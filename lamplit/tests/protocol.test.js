@@ -3,11 +3,17 @@ import assert from 'node:assert/strict';
 import { sanitizeClientMessage as clean, PROTOCOL } from '../shared/protocol.js';
 import { displayName, subjectName } from '../shared/words.js';
 
-const hello = { t: 'hello', v: PROTOCOL, name: [0, 0, 7], color: 2, lamp: 0 };
+const TOKEN = 'abcdefghijklmnopqrstuvwxyz012345678901_-ABC';
+const hello = { t: 'hello', v: PROTOCOL, auth: TOKEN };
 
 test('valid messages pass and are copied', () => {
   assert.deepEqual(clean(hello), hello);
-  assert.deepEqual(clean({ ...hello, hall: 3, resume: 'abcDEF123_-xyz' }), { ...hello, hall: 3, resume: 'abcDEF123_-xyz' });
+  assert.deepEqual(clean({ ...hello, hall: 3, tz: 'Asia/Seoul', name: 'ignored' }), { ...hello, hall: 3, tz: 'Asia/Seoul' });
+  assert.deepEqual(clean({ t: 'buy', item: 'cat' }), { t: 'buy', item: 'cat' });
+  assert.deepEqual(clean({ t: 'unequip', slot: 'hat' }), { t: 'unequip', slot: 'hat' });
+  assert.deepEqual(clean({ t: 'style', color: 3 }), { t: 'style', color: 3 });
+  assert.deepEqual(clean({ t: 'friendAdd', code: 'K7Q2MXRB' }), { t: 'friendAdd', code: 'K7Q2MXRB' });
+  assert.deepEqual(clean({ t: 'goal', mins: 120 }), { t: 'goal', mins: 120 });
   assert.deepEqual(clean({ t: 'go', from: [1.234, -2.345], to: [0, 0] }), { t: 'go', from: [1.23, -2.35], to: [0, 0] });
   assert.deepEqual(clean({ t: 'focus', mins: 25, tag: 3 }), { t: 'focus', mins: 25, tag: 3 });
   assert.deepEqual(clean({ t: 'focus', mins: 0, tag: 0 }), { t: 'focus', mins: 0, tag: 0 });
@@ -22,12 +28,21 @@ test('malformed or hostile messages are rejected', () => {
     [],
     {},
     { t: 'nope' },
-    { ...hello, name: [999, 0, 1] },
-    { ...hello, name: [0, 0, 0] },
-    { ...hello, name: ['<b>', 0, 1] },
-    { ...hello, color: 99 },
-    { ...hello, resume: 'short' },
-    { ...hello, resume: 'has spaces in it!!' },
+    { t: 'hello', v: PROTOCOL },
+    { ...hello, auth: 'short' },
+    { ...hello, auth: 'has spaces in it but is quite long!!' },
+    { ...hello, tz: '<script>' },
+    { t: 'buy', item: 'rocket' },
+    { t: 'buy', item: '__proto__' },
+    { t: 'equip', item: 42 },
+    { t: 'unequip', slot: 'tail' },
+    { t: 'style' },
+    { t: 'style', name: [999, 0, 1] },
+    { t: 'style', color: 99 },
+    { t: 'friendAdd', code: 'k7q2mxrb' },
+    { t: 'friendAdd', code: 'O0I1O0I1' },
+    { t: 'friendAccept', id: -1 },
+    { t: 'goal', mins: 5 },
     { t: 'go', from: [0, 0], to: [500, 0] },
     { t: 'go', from: [0, 0], to: [NaN, 0] },
     { t: 'go', from: [0, 0] },

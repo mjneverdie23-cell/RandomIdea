@@ -2,12 +2,16 @@
 // entry point (index.js) and the integration tests.
 
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { HallManager } from './halls.js';
 import { createStaticHandler } from './static.js';
 import { TokenBucket } from './rate-limit.js';
+import { openDb } from './db.js';
+import { ProfileService } from './profiles.js';
+import { createApi } from './api.js';
 import { sanitizeClientMessage, PROTOCOL, MAX_MESSAGE_BYTES } from '../shared/protocol.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,12 +31,19 @@ const SECURITY_HEADERS = {
 };
 
 export function startServer(cfg, { log = console.log, now } = {}) {
+  if (cfg.dbPath !== ':memory:') fs.mkdirSync(path.dirname(cfg.dbPath), { recursive: true });
+  const db = openDb(cfg.dbPath);
+  const profiles = new ProfileService(db, { startLumens: cfg.startLumens });
   const manager = new HallManager({
+    profiles,
     capacity: cfg.hallCapacity,
     maxHalls: cfg.maxHalls,
     maxQueue: cfg.maxQueue,
     ...(now ? { now } : {}),
   });
+  const api = createApi(profiles, cfg, now);
+  const purge = setInterval(() => db.purgeTokens(Date.now()), 6 * 3600_000);
+  purge.unref();
 
   const serveStatic = createStaticHandler(
     [
@@ -55,10 +66,16 @@ export function startServer(cfg, { log = console.log, now } = {}) {
       res.end('ok');
       return;
     }
-    serveStatic(req, res).catch(() => {
+    const fail = () => {
       if (!res.headersSent) res.writeHead(500);
       res.end();
-    });
+    };
+    api(req, res, clientIp(req))
+      .then((handled) => {
+        if (!handled) return serveStatic(req, res);
+        return undefined;
+      })
+      .catch(fail);
   });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES, perMessageDeflate: false });
@@ -137,18 +154,23 @@ export function startServer(cfg, { log = console.log, now } = {}) {
         client.send({ t: 'pong', c: clean.c, s: Date.now() });
         return;
       }
-      if (!joined) {
-        if (clean.t !== 'hello') return;
-        if (clean.v !== PROTOCOL) {
-          client.close('version');
+      // One bad message must never take the whole server down.
+      try {
+        if (!joined) {
+          if (clean.t !== 'hello') return;
+          if (clean.v !== PROTOCOL) {
+            client.close('version');
+            return;
+          }
+          joined = true;
+          clearTimeout(helloTimer);
+          manager.join(client, clean);
           return;
         }
-        joined = true;
-        clearTimeout(helloTimer);
-        manager.join(client, clean);
-        return;
+        if (clean.t !== 'hello') manager.handle(client, clean);
+      } catch (err) {
+        log(`error handling "${clean.t}": ${err?.stack || err}`);
       }
-      if (clean.t !== 'hello') manager.handle(client, clean);
     });
 
     ws.on('close', () => {
@@ -197,7 +219,9 @@ export function startServer(cfg, { log = console.log, now } = {}) {
     }
     await new Promise((resolve) => wss.close(() => resolve()));
     await new Promise((resolve) => server.close(() => resolve()));
+    clearInterval(purge);
+    db.close();
   }
 
-  return { server, manager, ready, close };
+  return { server, manager, profiles, db, ready, close };
 }

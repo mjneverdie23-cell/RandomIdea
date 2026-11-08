@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HallManager, Hall } from '../server/halls.js';
+import { openDb } from '../server/db.js';
+import { ProfileService } from '../server/profiles.js';
 import { DESKS } from '../shared/layout.js';
 import { STATE, PROTOCOL, RESUME_GRACE_MS, OPEN_FOCUS_CAP, TEA_MS } from '../shared/protocol.js';
 
@@ -34,18 +36,22 @@ function setup(opts = {}) {
   const clock = { t: 1_700_000_000_000 };
   let seed = 7;
   const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const mgr = new HallManager({ now: () => clock.t, random, ...opts });
+  const db = openDb(':memory:');
+  const profiles = new ProfileService(db, { startLumens: 1000, random });
+  const mgr = new HallManager({ profiles, now: () => clock.t, random, ...opts });
   const advance = (ms) => {
     clock.t += ms;
     mgr.tick();
   };
-  const join = (extra = {}) => {
+  /** Joins with a fresh guest profile, or with `token` to come back as someone. */
+  const join = ({ token, ...extra } = {}) => {
     const c = new FakeClient();
-    const result = mgr.join(c, { t: 'hello', v: PROTOCOL, name: [1, 2, 3], color: 0, lamp: 0, ...extra });
-    return { c, result, id: c.last('welcome')?.id };
+    const auth = token ?? profiles.createGuest(clock.t, 'UTC').token;
+    const result = mgr.join(c, { t: 'hello', v: PROTOCOL, auth, tz: 'UTC', ...extra });
+    return { c, result, id: c.last('welcome')?.id, token: auth };
   };
   const me = (c) => mgr.byClient.get(c.id);
-  return { mgr, clock, advance, join, me };
+  return { mgr, clock, advance, join, me, profiles, db };
 }
 
 test('joining sends a welcome and tells the room', () => {
@@ -55,7 +61,7 @@ test('joining sends a welcome and tells the room', () => {
   const w = a.c.last('welcome');
   assert.equal(w.hall, 1);
   assert.equal(w.members.length, 1);
-  assert.ok(w.resume.length >= 8);
+  assert.equal(w.me.lumens, 1000, 'your profile arrives with the welcome');
   const b = join();
   advance(250);
   assert.ok(a.c.events('j').some((e) => e[1].id === b.id), 'first visitor sees the second arrive');
@@ -207,36 +213,32 @@ test('a dropped visitor keeps their desk and session, and can resume', () => {
   mgr.handle(a.c, { t: 'sit', desk: 44, from: me(a.c).pos });
   advance(10_000);
   mgr.handle(a.c, { t: 'focus', mins: 50, tag: 2 });
-  const token = a.c.last('welcome').resume;
   mgr.leave(a.c); // connection dropped
   advance(30_000);
   assert.equal(mgr.halls.get(1).desks[44], a.id, 'desk held during the grace period');
-  const again = join({ resume: token });
+  const again = join({ token: a.token });
   assert.equal(again.result, 'resumed');
   const w = again.c.last('welcome');
   assert.equal(w.id, a.id);
   const self = w.members.find((m) => m.id === a.id);
   assert.equal(self.desk, 44);
   assert.equal(self.st, STATE.FOCUS);
-  assert.notEqual(w.resume, token, 'token rotates');
 });
 
 test('the seat is freed once the grace period passes', () => {
   const { mgr, join, me, advance } = setup();
   const a = join();
   mgr.handle(a.c, { t: 'sit', desk: 44, from: me(a.c).pos });
-  const token = a.c.last('welcome').resume;
   mgr.leave(a.c);
   advance(RESUME_GRACE_MS + 2000);
   assert.equal(mgr.halls.get(1).desks[44], 0);
-  assert.equal(join({ resume: token }).result, 'joined', 'stale token starts fresh');
+  assert.equal(join({ token: a.token }).result, 'joined', 'comes back as a new arrival');
 });
 
-test('resuming while the old socket is still open replaces it', () => {
+test('the same account in a second tab takes over the seat', () => {
   const { mgr, join } = setup();
   const a = join();
-  const token = a.c.last('welcome').resume;
-  const b = join({ resume: token });
+  const b = join({ token: a.token });
   assert.equal(b.result, 'resumed');
   assert.equal(a.c.closed, 'replaced');
   assert.equal(mgr.status().online, 1);
@@ -293,4 +295,122 @@ test('room stats include sessions still running', () => {
   const [lit, mins] = mgr.stats(mgr.halls.get(1), clock.t);
   assert.equal(lit, 1);
   assert.equal(mins, 20);
+});
+
+// ---------------------------------------------------------------- accounts, lumens, shop, friends
+
+test('an unknown token is turned away', () => {
+  const { mgr } = setup();
+  const c = new FakeClient();
+  assert.equal(mgr.join(c, { t: 'hello', v: PROTOCOL, auth: 'x'.repeat(43) }), 'rejected');
+  assert.equal(c.last('bye').reason, 'auth');
+});
+
+test('finishing a session earns lumens: one per minute plus a bonus', () => {
+  const { mgr, join, me, advance } = setup();
+  const a = join();
+  mgr.handle(a.c, { t: 'sit', desk: 3, from: me(a.c).pos });
+  advance(10_000);
+  mgr.handle(a.c, { t: 'focus', mins: 25, tag: 0 });
+  advance(25 * MIN - 2000); // `done` may arrive a moment early (clock skew)
+  mgr.handle(a.c, { t: 'done' });
+  const earn = a.c.last('earn');
+  assert.deepEqual([earn.n, earn.mins, earn.done], [35, 25, true]);
+  const p = a.c.last('me').p;
+  assert.equal(p.lumens, 1035);
+  assert.equal(p.today, 25);
+  assert.equal(p.sessions, 1);
+  assert.equal(p.streak, 1);
+});
+
+test('stopping early earns the minutes but no bonus', () => {
+  const { mgr, join, me, advance } = setup();
+  const a = join();
+  mgr.handle(a.c, { t: 'sit', desk: 3, from: me(a.c).pos });
+  advance(10_000);
+  mgr.handle(a.c, { t: 'focus', mins: 50, tag: 0 });
+  advance(12 * MIN + 20_000);
+  mgr.handle(a.c, { t: 'stop' });
+  assert.equal(a.c.last('earn').n, 12);
+  assert.equal(a.c.last('me').p.sessions, 0);
+});
+
+test('the shop: buying needs enough lumens and only happens once', () => {
+  const { mgr, join, advance } = setup({});
+  const a = join();
+  mgr.handle(a.c, { t: 'buy', item: 'crown' }); // 900 of 1000
+  assert.equal(a.c.last('bought').item, 'crown');
+  assert.equal(a.c.last('me').p.lumens, 100);
+  advance(300);
+  mgr.handle(a.c, { t: 'buy', item: 'crown' });
+  assert.equal(a.c.last('err').code, 'owned');
+  advance(300);
+  mgr.handle(a.c, { t: 'buy', item: 'laptop' });
+  assert.equal(a.c.last('err').code, 'funds');
+  assert.equal(a.c.last('me').p.lumens, 100, 'nothing spent on a failed purchase');
+  assert.deepEqual(a.c.last('me').p.owned, ['crown']);
+});
+
+test('wearing: only what you own, and the room sees the change', () => {
+  const { mgr, join, advance } = setup();
+  const a = join();
+  const b = join();
+  mgr.handle(a.c, { t: 'equip', item: 'beanie' });
+  assert.equal(a.c.last('err').code, 'notowned');
+  advance(300);
+  mgr.handle(a.c, { t: 'buy', item: 'beanie' });
+  advance(300);
+  mgr.handle(a.c, { t: 'equip', item: 'beanie' });
+  advance(300);
+  mgr.handle(a.c, { t: 'buy', item: 'cat' });
+  advance(300);
+  mgr.handle(a.c, { t: 'equip', item: 'cat' });
+  advance(300);
+  const look = b.c.events('look').filter((e) => e[1] === a.id).at(-1)[3];
+  assert.equal(look.hat, 'beanie');
+  assert.equal(look.pet, 'cat');
+  mgr.handle(a.c, { t: 'unequip', slot: 'hat' });
+  advance(300);
+  assert.equal(a.c.last('me').p.look.hat, null);
+  const c = join();
+  assert.equal(c.c.last('welcome').members.find((m) => m.id === a.id).lk.pet, 'cat', 'newcomers see your pet too');
+});
+
+test('lamp shades unlock with focus hours; colour and name can change', () => {
+  const { mgr, join, advance } = setup();
+  const a = join();
+  mgr.handle(a.c, { t: 'style', lamp: 1 });
+  assert.equal(a.c.last('err').code, 'locked');
+  advance(2000);
+  mgr.handle(a.c, { t: 'style', color: 5, name: [2, 3, 44] });
+  const p = a.c.last('me').p;
+  assert.equal(p.look.c, 5);
+  assert.deepEqual(p.name, [2, 3, 44]);
+});
+
+test('friends: accounts add each other by code and see where the other is', async () => {
+  const { mgr, join, advance, profiles, clock } = setup();
+  const ra = await profiles.signup({ username: 'ada', password: 'correct horse' }, clock.t);
+  const rb = await profiles.signup({ username: 'bob', password: 'battery staple' }, clock.t);
+  const guest = join();
+  const a = join({ token: ra.token });
+  const b = join({ token: rb.token });
+  const codeB = b.c.last('welcome').me.code;
+  assert.match(codeB, /^[2-9A-HJ-NP-Z]{8}$/);
+  assert.equal(guest.c.last('welcome').me.code, null, 'guests have no friend code');
+  mgr.handle(guest.c, { t: 'friendAdd', code: codeB });
+  assert.equal(guest.c.last('err').code, 'guest');
+  mgr.handle(a.c, { t: 'friendAdd', code: codeB });
+  assert.equal(b.c.last('notice').kind, 'friendRequest');
+  assert.equal(b.c.last('friends').incoming[0].id, ra.id);
+  advance(2000);
+  mgr.handle(b.c, { t: 'friendAccept', id: ra.id });
+  assert.equal(a.c.last('notice').kind, 'friendAccepted');
+  advance(2000);
+  mgr.handle(a.c, { t: 'friends' });
+  const f = a.c.last('friends').friends[0];
+  assert.deepEqual([f.id, f.online, f.hall], [rb.id, true, 1]);
+  advance(2000);
+  mgr.handle(b.c, { t: 'friendRemove', id: ra.id });
+  assert.equal(a.c.last('friends').friends.length, 0);
 });

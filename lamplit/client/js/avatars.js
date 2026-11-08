@@ -1,17 +1,23 @@
-// Visitors as little chibi students, drawn with four instanced meshes for the whole room.
-// Every avatar replays the walk the server sent, then sits, reads, stretches or waves.
+// Visitors as little chibi students, drawn with instanced meshes for the whole room:
+// one draw call per body part and per kind of item, however many people wear it.
+// Every frame, each avatar's parts are packed into those meshes again, which keeps
+// changes of outfit, pets and held items trivial.
 
 import * as THREE from '../vendor/three.module.min.js';
 import { DESKS, WALK_SPEED } from '../shared/layout.js';
 import { samplePath } from '../shared/path.js';
 import { STATE } from '../shared/protocol.js';
 import { SWEATERS } from '../shared/words.js';
+import { sanitizeLook } from '../shared/catalog.js';
+import { itemGeometry, outfitBase, accessoryAnchor, SMALL_PETS } from './look.js';
 
 const SKIN = [0xf3d3b8, 0xe3b590, 0xc99069, 0x9f6b4b, 0x7a4e35, 0xf7dfcc];
 const HAIR = [0x2b211c, 0x4a3324, 0x18181e, 0x7a5232, 0xb98a55, 0x5a2a2a, 0x3a3a48];
+const DESK_TOP = 0.76;
 const SIT_MS = 480;
 const SEAT_LIFT = 0.42;
 const EMOTE_MS = [1400, 1700, 1300];
+const HAND_ANCHOR = new THREE.Vector3(0, 0.34, 0.25);
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const ease = (k) => k * k * (3 - 2 * k);
@@ -28,20 +34,20 @@ function lerpAngle(a, b, t) {
 
 export class Avatars {
   constructor(scene, max = 110) {
+    this.scene = scene;
     this.max = max;
-    const std = (o) => new THREE.MeshStandardMaterial({ roughness: 0.8, ...o });
-    this.body = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.2, 0.26, 4, 12), std({}), max);
-    this.head = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 20, 16), std({ roughness: 0.6 }), max);
-    this.hair = new THREE.InstancedMesh(new THREE.SphereGeometry(0.213, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), std({ roughness: 0.9 }), max);
-    this.eyes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.024, 8, 6), new THREE.MeshBasicMaterial({ color: 0x1b1716 }), max * 2);
-    const white = new THREE.Color(1, 1, 1);
-    for (const mesh of [this.body, this.head, this.hair, this.eyes]) {
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.frustumCulled = false;
-      mesh.count = 0;
-      if (mesh !== this.eyes) for (let i = 0; i < max; i++) mesh.setColorAt(i, white);
-      scene.add(mesh);
-    }
+    this.matSkin = new THREE.MeshStandardMaterial({ roughness: 0.6 });
+    this.matCloth = new THREE.MeshStandardMaterial({ roughness: 0.82 });
+    this.matVertex = new THREE.MeshStandardMaterial({ roughness: 0.7, vertexColors: true });
+    this.body = this.mesh(new THREE.CapsuleGeometry(0.2, 0.26, 4, 12), this.matCloth, max, true);
+    this.head = this.mesh(new THREE.SphereGeometry(0.2, 20, 16), this.matSkin, max, true);
+    this.hair = this.mesh(new THREE.SphereGeometry(0.213, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), new THREE.MeshStandardMaterial({ roughness: 0.9 }), max, true);
+    this.eyes = this.mesh(new THREE.SphereGeometry(0.024, 8, 6), new THREE.MeshBasicMaterial({ color: 0x1b1716 }), max * 2, false);
+    this.hands = this.mesh(new THREE.SphereGeometry(0.055, 10, 8), this.matSkin, max * 2, true);
+    this.base = [this.body, this.head, this.hair, this.eyes, this.hands];
+    /** `${item}:${variant}` -> [[group, InstancedMesh], ...] */
+    this.parts = new Map();
+
     this.ring = new THREE.Mesh(
       new THREE.RingGeometry(0.3, 0.38, 40).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.8, toneMapped: false, depthWrite: false }),
@@ -53,36 +59,62 @@ export class Avatars {
     this.slots = new Map();
     this.selfId = 0;
     this._root = new THREE.Matrix4();
-    this._local = new THREE.Matrix4();
+    this._body = new THREE.Matrix4();
     this._head = new THREE.Matrix4();
+    this._local = new THREE.Matrix4();
     this._out = new THREE.Matrix4();
     this._p = new THREE.Vector3();
     this._q = new THREE.Quaternion();
     this._e = new THREE.Euler(0, 0, 0, 'YXZ');
     this._s = new THREE.Vector3(1, 1, 1);
+    this._colors = { tint: new THREE.Color(), hair: new THREE.Color(), skin: new THREE.Color() };
     this._c = new THREE.Color();
+  }
+
+  mesh(geometry, material, count, colored) {
+    const mesh = new THREE.InstancedMesh(geometry, material, count);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.userData.n = 0;
+    if (colored) {
+      const white = new THREE.Color(1, 1, 1);
+      for (let i = 0; i < count; i++) mesh.setColorAt(i, white);
+    }
+    this.scene.add(mesh);
+    return mesh;
+  }
+
+  /** The instanced meshes for an item variant, created the first time someone needs them. */
+  partSet(id, variant) {
+    const key = `${id}:${variant}`;
+    let set = this.parts.get(key);
+    if (set) return set;
+    const geo = itemGeometry(id, variant);
+    set = [];
+    if (geo) {
+      for (const [group, g] of Object.entries(geo)) {
+        set.push([group, this.mesh(g, group === 'fixed' ? this.matVertex : this.matCloth, this.max, group !== 'fixed')]);
+      }
+    }
+    this.parts.set(key, set);
+    return set;
   }
 
   clear() {
     this.list = [];
     this.slots.clear();
-    this.setCounts();
   }
 
   add(m) {
-    if (this.slots.has(m.id)) {
-      this.paint(this.slots.get(m.id), m);
-      return;
-    }
+    m.look = sanitizeLook(m.lk ?? m.look);
+    if (this.slots.has(m.id)) return;
     if (this.list.length >= this.max) return;
     m.yaw ??= Math.PI;
     m.rx ??= m.pos[0];
     m.rz ??= m.pos[1];
-    const i = this.list.length;
+    this.slots.set(m.id, this.list.length);
     this.list.push(m);
-    this.slots.set(m.id, i);
-    this.paint(i, m);
-    this.setCounts();
   }
 
   remove(id) {
@@ -93,33 +125,14 @@ export class Avatars {
       const moved = this.list[last];
       this.list[i] = moved;
       this.slots.set(moved.id, i);
-      this.paint(i, moved);
     }
     this.list.pop();
     this.slots.delete(id);
-    this.setCounts();
   }
 
+  /** Colours and items are read every frame, so a changed look only needs sanitising. */
   repaint(m) {
-    const i = this.slots.get(m.id);
-    if (i !== undefined) this.paint(i, m);
-  }
-
-  paint(i, m) {
-    this.body.setColorAt(i, this._c.setHex(SWEATERS[m.col] ?? SWEATERS[0]));
-    this.head.setColorAt(i, this._c.setHex(SKIN[hash(m.id) % SKIN.length]));
-    this.hair.setColorAt(i, this._c.setHex(HAIR[hash(m.id * 7 + 3) % HAIR.length]));
-    this.body.instanceColor.needsUpdate = true;
-    this.head.instanceColor.needsUpdate = true;
-    this.hair.instanceColor.needsUpdate = true;
-  }
-
-  setCounts() {
-    const n = this.list.length;
-    this.body.count = n;
-    this.head.count = n;
-    this.hair.count = n;
-    this.eyes.count = n * 2;
+    m.look = sanitizeLook(m.lk ?? m.look);
   }
 
   emote(id, e, now) {
@@ -152,8 +165,10 @@ export class Avatars {
   update(now, time, dt) {
     const arrived = [];
     const turn = 1 - Math.exp(-dt * 12);
-    for (let i = 0; i < this.list.length; i++) {
-      const m = this.list[i];
+    for (const mesh of this.base) mesh.userData.n = 0;
+    for (const set of this.parts.values()) for (const [, mesh] of set) mesh.userData.n = 0;
+
+    for (const m of this.list) {
       let x;
       let z;
       let y = 0;
@@ -161,8 +176,15 @@ export class Avatars {
       let headRoll = 0;
       let lean = 0;
       let scaleY = 1;
+      let seated = false;
+      let walking = false;
+      let stride = 0;
 
-      if (m.path) {
+      if (m.preview) {
+        x = m.pos[0];
+        z = m.pos[1];
+        scaleY = 1 + Math.sin(time * 2) * 0.012;
+      } else if (m.path) {
         const dist = Math.max(0, ((now - m.t0) / 1000) * WALK_SPEED);
         const p = samplePath(m.path, dist);
         x = p.x;
@@ -174,8 +196,10 @@ export class Avatars {
           if (m.desk >= 0) m.sitT = now;
           arrived.push(m.id);
         } else if (dist > 0) {
-          y = Math.abs(Math.sin(dist * 5.6)) * 0.05;
-          headRoll = Math.sin(dist * 5.6) * 0.05;
+          walking = true;
+          stride = dist * 5.6;
+          y = Math.abs(Math.sin(stride)) * 0.05;
+          headRoll = Math.sin(stride) * 0.05;
         }
       } else if (m.desk >= 0) {
         const d = DESKS[m.desk];
@@ -184,7 +208,8 @@ export class Avatars {
         z = d.approach.z + (d.seat.z - d.approach.z) * k;
         y = SEAT_LIFT * k;
         m.yaw = lerpAngle(m.yaw, Math.PI, Math.max(turn, k));
-        if (k >= 1) {
+        seated = k >= 1;
+        if (seated) {
           if (m.st === STATE.FOCUS) {
             headPitch = 0.42 + Math.sin(time * 0.8 + m.id) * 0.035;
             headRoll = Math.sin(time * 0.45 + m.id * 3) * 0.04;
@@ -208,48 +233,193 @@ export class Avatars {
         scaleY = 1 + Math.sin(time * 2 + m.id) * 0.012;
       }
 
+      let emote = -1;
+      let ek = 0;
       if (m.emoteT) {
-        const e = m.emote;
-        const k = (now - m.emoteT) / EMOTE_MS[e];
-        if (k >= 1 || k < 0) {
+        ek = (now - m.emoteT) / EMOTE_MS[m.emote];
+        if (ek >= 1 || ek < 0) {
           m.emoteT = 0;
-        } else if (e === 0) {
-          headRoll += Math.sin(k * Math.PI * 6) * 0.3 * (1 - k);
-        } else if (e === 1) {
-          const s = Math.sin(k * Math.PI);
-          scaleY *= 1 + 0.16 * s;
-          headPitch -= 0.55 * s;
         } else {
-          y += Math.abs(Math.sin(k * Math.PI * 3)) * 0.2 * (1 - k * 0.5);
+          emote = m.emote;
+          if (emote === 0) headRoll += Math.sin(ek * Math.PI * 6) * 0.3 * (1 - ek);
+          else if (emote === 1) {
+            const s = Math.sin(ek * Math.PI);
+            scaleY *= 1 + 0.16 * s;
+            headPitch -= 0.55 * s;
+          } else y += Math.abs(Math.sin(ek * Math.PI * 3)) * 0.2 * (1 - ek * 0.5);
         }
       }
 
       m.rx = x;
       m.rz = z;
       m.ry = y;
-      this.write(i, x, y, z, m.yaw, lean, headPitch, headRoll, scaleY);
+      this.drawAvatar(m, x, y, z, { lean, headPitch, headRoll, scaleY, seated, walking, stride, emote, ek, time, dt, now });
       if (m.id === this.selfId) {
         this.ring.visible = true;
         this.ring.position.set(x, 0.015, z);
       }
     }
-    for (const mesh of [this.body, this.head, this.hair, this.eyes]) mesh.instanceMatrix.needsUpdate = true;
+
+    for (const mesh of this.base) this.flush(mesh);
+    for (const set of this.parts.values()) for (const [, mesh] of set) this.flush(mesh);
     if (!this.slots.has(this.selfId)) this.ring.visible = false;
     return arrived;
   }
 
-  write(i, x, y, z, yaw, lean, headPitch, headRoll, scaleY) {
-    const root = this._root.compose(this._p.set(x, y, z), this._q.setFromEuler(this._e.set(lean, yaw, 0)), this._s.set(1, 1, 1));
-    this._local.makeScale(1, scaleY, 1).setPosition(0, 0.33 * scaleY, 0);
-    this.body.setMatrixAt(i, this._out.multiplyMatrices(root, this._local));
-    this._local.compose(this._p.set(0, 0.66 * scaleY + 0.17, 0), this._q.setFromEuler(this._e.set(headPitch, 0, headRoll)), this._s.set(1, 1, 1));
+  flush(mesh) {
+    mesh.count = mesh.userData.n;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
+
+  push(mesh, matrix, color) {
+    const n = mesh.userData.n;
+    if (n >= mesh.instanceMatrix.count) return;
+    mesh.setMatrixAt(n, matrix);
+    if (color && mesh.instanceColor) mesh.setColorAt(n, color);
+    mesh.userData.n = n + 1;
+  }
+
+  emit(id, variant, matrix) {
+    for (const [group, mesh] of this.partSet(id, variant)) this.push(mesh, matrix, group === 'fixed' ? null : this._colors[group]);
+  }
+
+  drawAvatar(m, x, y, z, o) {
+    const look = m.look;
+    const colors = this._colors;
+    colors.skin.setHex(SKIN[hash(m.id) % SKIN.length]);
+    colors.hair.setHex(HAIR[hash(m.id * 7 + 3) % HAIR.length]);
+    colors.tint.setHex(SWEATERS[look.c] ?? SWEATERS[0]);
+    const bodyColor = this._c.setHex(outfitBase(look.o) ?? SWEATERS[look.c] ?? SWEATERS[0]);
+
+    const root = this._root.compose(this._p.set(x, y, z), this._q.setFromEuler(this._e.set(o.lean, m.yaw, 0)), this._s.set(1, 1, 1));
+    this._local.makeScale(1, o.scaleY, 1).setPosition(0, 0.33 * o.scaleY, 0);
+    const body = this._body.multiplyMatrices(root, this._local);
+    this.push(this.body, body, bodyColor);
+    this._local.compose(this._p.set(0, 0.66 * o.scaleY + 0.17, 0), this._q.setFromEuler(this._e.set(o.headPitch, 0, o.headRoll)), this._s.set(1, 1, 1));
     const head = this._head.multiplyMatrices(root, this._local);
-    this.head.setMatrixAt(i, head);
+    this.push(this.head, head, colors.skin);
     this._local.makeTranslation(0, 0.022, -0.012);
-    this.hair.setMatrixAt(i, this._out.multiplyMatrices(head, this._local));
-    this._local.makeTranslation(-0.072, -0.018, 0.183);
-    this.eyes.setMatrixAt(i * 2, this._out.multiplyMatrices(head, this._local));
-    this._local.makeTranslation(0.072, -0.018, 0.183);
-    this.eyes.setMatrixAt(i * 2 + 1, this._out.multiplyMatrices(head, this._local));
+    this.push(this.hair, this._out.multiplyMatrices(head, this._local), colors.hair);
+    for (const s of [-1, 1]) {
+      this._local.makeTranslation(s * 0.072, -0.018, 0.183);
+      this.push(this.eyes, this._out.multiplyMatrices(head, this._local));
+    }
+
+    // Hands: by your sides, swinging, holding something, on the desk, or in the air.
+    const holding = look.held && !o.seated;
+    for (const s of [-1, 1]) {
+      let hx = s * 0.215;
+      let hy = 0.23;
+      let hz = 0.02;
+      if (o.walking && !holding) hz = Math.sin(o.stride) * 0.07 * s;
+      if (holding) {
+        hx = s * 0.1;
+        hy = 0.33;
+        hz = 0.22;
+      }
+      if (o.seated) {
+        hx = s * 0.17;
+        hy = 0.37;
+        hz = 0.4;
+        if (m.st === STATE.FOCUS && s > 0) hx += Math.sin(o.time * 5 + m.id) * 0.015;
+      }
+      if (o.emote === 0 && s > 0) {
+        hx = 0.25;
+        hy = 0.62 + Math.sin(o.ek * Math.PI * 8) * 0.03;
+        hz = 0.06;
+      } else if (o.emote === 1) {
+        hx = s * 0.12;
+        hy = 0.9;
+        hz = 0;
+      } else if (o.emote === 2) {
+        hx = s * 0.17;
+        hy = 0.74;
+        hz = 0.08;
+      }
+      this._local.makeTranslation(hx, hy * o.scaleY, hz);
+      this.push(this.hands, this._out.multiplyMatrices(root, this._local), colors.skin);
+    }
+
+    this.emit(look.o, 'body', body);
+    for (const slot of ['hat', 'face', 'ears', 'neck']) {
+      if (look[slot]) this.emit(look[slot], 'acc', accessoryAnchor(look[slot]) === 'body' ? body : head);
+    }
+    if (look.held) {
+      if (o.seated) {
+        const d = DESKS[m.desk];
+        this.emit(look.held, 'desk', this._out.makeTranslation(d.x, DESK_TOP, d.z));
+      } else {
+        this._local.makeTranslation(HAND_ANCHOR.x, HAND_ANCHOR.y * o.scaleY, HAND_ANCHOR.z);
+        this.emit(look.held, 'hand', this._out.multiplyMatrices(root, this._local));
+      }
+    }
+    if (look.pet) this.drawPet(m, look.pet, x, z, root, body, head, o);
+  }
+
+  drawPet(m, pet, x, z, root, body, head, o) {
+    const out = this._out;
+    if (SMALL_PETS.has(pet)) {
+      if (o.seated) {
+        const d = DESKS[m.desk];
+        // On top of the stack of books at the back of the desk.
+        out.compose(this._p.set(d.x - 0.38, DESK_TOP + 0.145, d.z - 0.13), this._q.setFromEuler(this._e.set(0, 0.2, 0)), this._s.set(1, 1, 1));
+      } else if (pet === 'hamster') {
+        this._local.makeTranslation(0, 0.215, -0.01);
+        out.multiplyMatrices(head, this._local);
+      } else {
+        this._local.makeTranslation(0.16, 0.29, -0.02);
+        out.multiplyMatrices(body, this._local);
+      }
+      this.emit(pet, 'pet', out);
+      return;
+    }
+    let px;
+    let pz;
+    let pyaw;
+    let hop = 0;
+    if (m.preview) {
+      px = x + 0.5;
+      pz = z + 0.1;
+      pyaw = -0.35;
+    } else if (o.seated) {
+      const d = DESKS[m.desk];
+      px = d.x + 0.52;
+      pz = d.seat.z + 0.05;
+      pyaw = 0.35;
+    } else {
+      // Follow a little behind and to the right.
+      const fx = Math.sin(m.yaw);
+      const fz = Math.cos(m.yaw);
+      const tx = x - fx * 0.6 + fz * 0.32;
+      const tz = z - fz * 0.6 - fx * 0.32;
+      if (m.petX === undefined) {
+        m.petX = tx;
+        m.petZ = tz;
+        m.petYaw = m.yaw;
+      }
+      const dx = tx - m.petX;
+      const dz = tz - m.petZ;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.03) {
+        const step = Math.min(dist, o.dt * (dist > 1.2 ? 4 : 2.2));
+        m.petX += (dx / dist) * step;
+        m.petZ += (dz / dist) * step;
+        m.petYaw = lerpAngle(m.petYaw, Math.atan2(dx, dz), 1 - Math.exp(-o.dt * 10));
+        hop = Math.abs(Math.sin(o.time * 14)) * 0.035;
+      } else {
+        m.petYaw = lerpAngle(m.petYaw, m.yaw, 1 - Math.exp(-o.dt * 2));
+      }
+      px = m.petX;
+      pz = m.petZ;
+      pyaw = m.petYaw;
+    }
+    if (o.seated || m.preview) {
+      m.petX = px;
+      m.petZ = pz;
+      m.petYaw = pyaw;
+    }
+    out.compose(this._p.set(px, hop, pz), this._q.setFromEuler(this._e.set(0, pyaw, 0)), this._s.set(1, 1 + Math.sin(o.time * 3 + m.id) * 0.02, 1));
+    this.emit(pet, 'pet', out);
   }
 }

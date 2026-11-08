@@ -1,5 +1,10 @@
 // Runtime settings, all overridable with environment variables.
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
 const int = (name, fallback, min, max) => {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -11,6 +16,10 @@ const int = (name, fallback, min, max) => {
 export const config = Object.freeze({
   port: int('PORT', 8080, 1, 65535),
   host: process.env.HOST || '0.0.0.0',
+  /** SQLite file for accounts, wardrobes and stats (":memory:" keeps nothing). */
+  dbPath: process.env.DB_PATH || path.join(ROOT, 'data', 'lamplit.db'),
+  /** Lumens a new profile starts with. */
+  startLumens: int('START_LUMENS', 100, 0, 1_000_000),
   /** Visitors per reading room (at most 100, the number of desks). */
   hallCapacity: int('HALL_CAPACITY', 100, 1, 100),
   /** Rooms one server process will open before new visitors queue. */
@@ -20,6 +29,9 @@ export const config = Object.freeze({
   tickMs: int('TICK_MS', 200, 50, 2000),
   /** Open sockets allowed per IP address (schools and offices share addresses). */
   maxConnectionsPerIp: int('MAX_CONN_PER_IP', 40, 1, 100000),
+  /** Guest/sign-up/log-in requests per IP: sustained rate per minute, and burst size. */
+  authPerMinute: int('AUTH_PER_MIN', 10, 1, 1_000_000),
+  authBurst: int('AUTH_BURST', 20, 1, 1_000_000),
   /** Set to 1 behind a reverse proxy so X-Forwarded-For is used for the client address. */
   trustProxy: process.env.TRUST_PROXY === '1',
   /** Comma-separated list of allowed Origin values for the WebSocket; empty allows any. */

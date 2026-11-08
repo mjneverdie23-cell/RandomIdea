@@ -1,12 +1,14 @@
 // All reading-room logic, independent of sockets so it can be tested directly.
 //
 // A "client" is anything with `id`, `send(obj)`, `sendRaw(string)` and optionally
-// `close(reason)`. The manager owns every hall; the server just feeds it messages.
+// `close(reason)`. Every member belongs to a profile (a guest or an account); a profile can
+// only be in the rooms once, so reconnecting or opening a second tab takes over your seat.
 
-import { randomBytes } from 'node:crypto';
 import { DESKS, DESK_COUNT, WALK_SPEED, buildWalkGrid, spawnPoint, round2 } from '../shared/layout.js';
 import { findPath, pathLength, samplePath } from '../shared/path.js';
 import { STATE, COOLDOWN, OPEN_FOCUS_CAP, TEA_MS, RESUME_GRACE_MS, STANDING_GRACE_MS } from '../shared/protocol.js';
+import { sanitizeLook } from '../shared/catalog.js';
+import { validTimeZone } from './accounts.js';
 
 const GRID = buildWalkGrid();
 const MIN = 60_000;
@@ -17,8 +19,6 @@ const POS_TOLERANCE = 1.5;
 const DONE_GRACE_MS = 2 * MIN;
 /** A `done` report may arrive this early (clock skew) and still count. */
 const DONE_EARLY_MS = 5000;
-
-const newToken = () => randomBytes(12).toString('base64url');
 
 export class Hall {
   constructor(id, capacity) {
@@ -70,7 +70,9 @@ export class Hall {
 }
 
 export class HallManager {
-  constructor({ capacity = 100, maxHalls = 100, maxQueue = 5000, now = () => Date.now(), random = Math.random } = {}) {
+  constructor({ profiles, capacity = 100, maxHalls = 100, maxQueue = 5000, now = () => Date.now(), random = Math.random } = {}) {
+    if (!profiles) throw new Error('HallManager needs a ProfileService');
+    this.profiles = profiles;
     this.capacity = Math.max(1, Math.min(DESK_COUNT, capacity));
     this.maxHalls = Math.max(1, maxHalls);
     this.maxQueue = maxQueue;
@@ -80,8 +82,8 @@ export class HallManager {
     this.halls = new Map();
     /** client id -> member, for connected members */
     this.byClient = new Map();
-    /** resume token -> member, for connected and recently dropped members */
-    this.tokens = new Map();
+    /** profile id -> member, for every member (connected or briefly dropped) */
+    this.byProfile = new Map();
     /** visitors waiting for a seat when every hall is full */
     this.queue = [];
     this.nextMemberId = 1;
@@ -97,19 +99,26 @@ export class HallManager {
   /** Returns 'joined', 'resumed', 'queued' or 'rejected'. */
   join(client, hello) {
     const now = this.now();
-    if (hello.resume) {
-      const m = this.tokens.get(hello.resume);
-      if (m) {
-        if (m.client) {
-          // The same visitor reconnected before the old socket noticed it was dead.
-          const old = m.client;
-          this.byClient.delete(old.id);
-          m.client = null;
-          old.close?.('replaced');
-        }
-        this.reattach(m, client, now);
-        return 'resumed';
+    const profile = this.profiles.byToken(hello.auth, now);
+    if (!profile) {
+      client.send({ t: 'bye', reason: 'auth' });
+      client.close?.('auth');
+      return 'rejected';
+    }
+    const tz = validTimeZone(hello.tz) ? hello.tz : profile.tz || 'UTC';
+    if (tz !== profile.tz) this.profiles.setTimeZone(profile.id, tz, now);
+    const existing = this.byProfile.get(profile.id);
+    if (existing) {
+      // The same person reconnected, or opened another tab or device: take over the seat.
+      if (existing.client) {
+        const old = existing.client;
+        this.byClient.delete(old.id);
+        existing.client = null;
+        old.close?.('replaced');
       }
+      existing.tz = tz;
+      this.reattach(existing, client, now);
+      return 'resumed';
     }
     const hall = this.pickHall(hello.hall);
     if (!hall) {
@@ -118,11 +127,11 @@ export class HallManager {
         client.close?.('full');
         return 'rejected';
       }
-      this.queue.push({ client, hello });
+      this.queue.push({ client, hello, profile, tz });
       client.send({ t: 'queue', pos: this.queue.length, total: this.queue.length });
       return 'queued';
     }
-    this.admit(client, hello, hall, now);
+    this.admit(client, hello, hall, now, profile, tz);
     return 'joined';
   }
 
@@ -177,14 +186,14 @@ export class HallManager {
     return id;
   }
 
-  admit(client, hello, hall, now) {
+  admit(client, hello, hall, now, profile, tz) {
     const m = {
       id: this.nextMemberId++,
       client,
-      token: newToken(),
-      name: hello.name,
-      color: hello.color,
-      lamp: hello.lamp,
+      profileId: profile.id,
+      tz,
+      name: profile.name,
+      look: sanitizeLook(profile.look),
       hallId: hall.id,
       desk: -1,
       state: STATE.STAND,
@@ -200,15 +209,12 @@ export class HallManager {
     };
     hall.members.set(m.id, m);
     this.byClient.set(client.id, m);
-    this.tokens.set(m.token, m);
+    this.byProfile.set(m.profileId, m);
     this.welcome(hall, m, now);
     hall.push(['j', this.view(m, now)]);
   }
 
   reattach(m, client, now) {
-    this.tokens.delete(m.token);
-    m.token = newToken();
-    this.tokens.set(m.token, m);
     m.client = client;
     m.ghostUntil = 0;
     this.byClient.set(client.id, m);
@@ -220,8 +226,9 @@ export class HallManager {
     const hall = this.halls.get(m.hallId);
     if (!hall || !hall.members.has(m.id)) return;
     if (m.desk >= 0) this.freeDesk(hall, m, now);
+    else this.endSession(hall, m, now);
     hall.members.delete(m.id);
-    this.tokens.delete(m.token);
+    if (this.byProfile.get(m.profileId) === m) this.byProfile.delete(m.profileId);
     hall.push(['l', m.id]);
     this.retireIfEmpty(hall);
     this.admitQueue(now);
@@ -233,10 +240,16 @@ export class HallManager {
 
   admitQueue(now) {
     while (this.queue.length > 0) {
-      const hall = this.pickHall(this.queue[0].hello.hall);
+      const next = this.queue[0];
+      if (this.byProfile.has(next.profile.id)) {
+        this.queue.shift();
+        this.join(next.client, next.hello);
+        continue;
+      }
+      const hall = this.pickHall(next.hello.hall);
       if (!hall) return;
-      const { client, hello } = this.queue.shift();
-      this.admit(client, hello, hall, now);
+      this.queue.shift();
+      this.admit(next.client, next.hello, hall, now, next.profile, next.tz);
     }
   }
 
@@ -244,7 +257,6 @@ export class HallManager {
     m.client.send({
       t: 'welcome',
       id: m.id,
-      resume: m.token,
       hall: hall.id,
       cap: hall.capacity,
       now,
@@ -252,7 +264,12 @@ export class HallManager {
       tea: [...hall.tea],
       hs: this.stats(hall, now),
       g: this.globalSummary(),
+      me: this.profiles.me(m.profileId, m.tz, now),
     });
+  }
+
+  sendMe(m, now) {
+    m.client?.send({ t: 'me', p: this.profiles.me(m.profileId, m.tz, now) });
   }
 
   // ---------------------------------------------------------------- messages
@@ -294,13 +311,32 @@ export class HallManager {
       case 'switch':
         return this.onSwitch(hall, m, msg, now);
       case 'style':
+        return this.onStyle(hall, m, msg, now);
+      case 'buy':
+        return this.onBuy(m, msg, now);
+      case 'equip':
+      case 'unequip':
+        return this.onWear(hall, m, msg, now);
+      case 'goal':
         if (this.cool(m, 'style', now)) {
-          m.name = msg.name;
-          m.color = msg.color;
-          m.lamp = msg.lamp;
-          hall.push(['look', m.id, m.name, m.color, m.lamp]);
+          this.profiles.setGoal(m.profileId, msg.mins);
+          this.sendMe(m, now);
         }
         return;
+      case 'tutorial':
+        this.profiles.finishTutorial(m.profileId);
+        return;
+      case 'me':
+        if (this.cool(m, 'me', now)) this.sendMe(m, now);
+        return;
+      case 'friends':
+        if (this.cool(m, 'me', now)) this.sendFriends(m);
+        return;
+      case 'friendAdd':
+      case 'friendAccept':
+      case 'friendDecline':
+      case 'friendRemove':
+        return this.onFriend(m, msg, now);
       default:
     }
   }
@@ -399,6 +435,77 @@ export class HallManager {
     this.admitQueue(now);
   }
 
+  onStyle(hall, m, msg, now) {
+    if (!this.cool(m, 'style', now)) return;
+    const r = this.profiles.style(m.profileId, msg);
+    if (!r.ok) return this.error(m, r.error);
+    m.look = r.look;
+    m.name = r.name;
+    hall.push(['look', m.id, m.name, m.look]);
+    this.sendMe(m, now);
+  }
+
+  onBuy(m, msg, now) {
+    if (!this.cool(m, 'shop', now)) return;
+    const r = this.profiles.buy(m.profileId, msg.item, now);
+    if (!r.ok) return this.error(m, r.error, { item: msg.item });
+    m.client?.send({ t: 'bought', item: msg.item });
+    this.sendMe(m, now);
+  }
+
+  onWear(hall, m, msg, now) {
+    if (!this.cool(m, 'shop', now)) return;
+    const look = msg.t === 'equip' ? this.profiles.equip(m.profileId, msg.item) : this.profiles.unequip(m.profileId, msg.slot);
+    if (!look) return this.error(m, 'notowned', { item: msg.item });
+    m.look = look;
+    hall.push(['look', m.id, m.name, m.look]);
+    this.sendMe(m, now);
+  }
+
+  // ---------------------------------------------------------------- friends
+
+  /** What a friend is doing right now, if they're in a room. */
+  presence(profileId) {
+    const f = this.byProfile.get(profileId);
+    if (!f) return { online: false };
+    return { online: true, hall: f.hallId, st: f.state, since: f.since, mins: f.mins };
+  }
+
+  sendFriends(m) {
+    if (!m.client) return;
+    const lists = this.profiles.friendLists(m.profileId);
+    const brief = (p) => ({ id: p.id, name: p.name, c: sanitizeLook(p.look).c });
+    m.client.send({
+      t: 'friends',
+      friends: lists.friends.map((p) => ({ ...brief(p), ...this.presence(p.id) })),
+      incoming: lists.incoming.map(brief),
+      outgoing: lists.outgoing.map(brief),
+    });
+  }
+
+  notify(profileId, notice) {
+    const target = this.byProfile.get(profileId);
+    if (!target?.client) return;
+    target.client.send({ t: 'notice', ...notice });
+    this.sendFriends(target);
+  }
+
+  onFriend(m, msg, now) {
+    if (!this.cool(m, 'friend', now)) return;
+    if (msg.t === 'friendAdd') {
+      const r = this.profiles.addFriend(m.profileId, msg.code, now);
+      if (!r.ok) return this.error(m, r.error);
+      this.notify(r.other.id, { kind: r.accepted ? 'friendAccepted' : 'friendRequest', name: m.name });
+      if (r.accepted) m.client?.send({ t: 'notice', kind: 'friendAccepted', name: r.other.name });
+      else m.client?.send({ t: 'notice', kind: 'friendSent', name: r.other.name });
+    } else if (msg.t === 'friendAccept') {
+      if (this.profiles.acceptFriend(m.profileId, msg.id, now)) this.notify(msg.id, { kind: 'friendAccepted', name: m.name });
+    } else {
+      if (this.profiles.removeFriend(m.profileId, msg.id)) this.notify(msg.id, { kind: 'friendsChanged' });
+    }
+    this.sendFriends(m);
+  }
+
   // ---------------------------------------------------------------- helpers
 
   cool(m, kind, now) {
@@ -455,14 +562,23 @@ export class HallManager {
     this.pushState(hall, m);
   }
 
-  /** Ends a focus session or break. Focus time is credited to the room. Returns minutes credited. */
-  endSession(hall, m, now) {
+  /**
+   * Ends a focus session or break. Focus time is credited to the room and to the member's
+   * profile as lumens. A completed timed session earns its full length plus a bonus.
+   * Returns the minutes credited.
+   */
+  endSession(hall, m, now, completed = false) {
     let credited = 0;
     if (m.state === STATE.FOCUS) {
       const capMin = m.mins > 0 ? m.mins : OPEN_FOCUS_CAP;
-      credited = Math.floor(Math.min(now - m.since, capMin * MIN) / MIN);
+      credited = completed && m.mins > 0 ? m.mins : Math.floor(Math.min(now - m.since, capMin * MIN) / MIN);
       if (credited > 0) hall.addMinutes(credited, now);
       hall.statsDirty = true;
+      const gained = this.profiles.credit(m.profileId, credited, completed && m.mins > 0, m.tz, now);
+      if (m.client && gained > 0) {
+        m.client.send({ t: 'earn', n: gained, mins: credited, done: completed });
+        this.sendMe(m, now);
+      }
     }
     if (m.state === STATE.FOCUS || m.state === STATE.BREAK) {
       m.state = STATE.SEATED;
@@ -474,7 +590,7 @@ export class HallManager {
 
   complete(hall, m, now) {
     const planned = m.mins > 0 ? m.mins : OPEN_FOCUS_CAP;
-    this.endSession(hall, m, now);
+    this.endSession(hall, m, now, true);
     this.pushState(hall, m);
     hall.push(['fin', m.id, planned]);
   }
@@ -485,7 +601,7 @@ export class HallManager {
 
   view(m, now) {
     const pos = this.position(m, now);
-    const v = { id: m.id, nm: m.name, col: m.color, lp: m.lamp, desk: m.desk, st: m.state, since: m.since, mins: m.mins, tag: m.tag, pos };
+    const v = { id: m.id, nm: m.name, lk: m.look, desk: m.desk, st: m.state, since: m.since, mins: m.mins, tag: m.tag, pos };
     if (m.path) {
       v.path = m.path;
       v.t0 = m.t0;

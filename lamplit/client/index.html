@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Lamplit — study together, in silence</title>
-  <meta name="description" content="A quiet online reading room that never closes. Pick a desk, turn on your lamp and focus alongside everyone else. No chat, no sign-up.">
+  <meta name="description" content="A quiet online reading room that never closes. Pick a desk, turn on your lamp and focus alongside everyone else. No chat.">
   <meta name="theme-color" content="#0b1020">
   <meta property="og:title" content="Lamplit — study together, in silence">
-  <meta property="og:description" content="A quiet online reading room that never closes. No chat, no sign-up.">
+  <meta property="og:description" content="A quiet online reading room that never closes. No chat, sign-up optional.">
   <meta property="og:type" content="website">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
@@ -27,9 +27,10 @@
         </button>
       </div>
       <div class="hud-right">
-        <span class="live" id="live"><i class="dot" aria-hidden="true"></i><span id="live-text"></span></span>
-        <button class="icon-btn" data-action="stats" data-icon="chart" data-i18n-label="stats"></button>
-        <button class="icon-btn" data-action="settings" data-icon="sliders" data-i18n-label="settings"></button>
+        <button class="lumens" id="lumens-btn" data-action="shop"></button>
+        <button class="icon-btn" id="shop-btn" data-action="shop" data-icon="bag" data-i18n-label="shop"></button>
+        <button class="icon-btn" id="profile-btn" data-action="profile" data-icon="user" data-i18n-label="profile"></button>
+        <button class="icon-btn" id="settings-btn" data-action="settings" data-icon="sliders" data-i18n-label="settings"></button>
         <button class="icon-btn" id="sound-btn" data-action="sound"></button>
       </div>
     </header>
@@ -51,7 +52,7 @@
     <section id="splash">
       <div class="splash-card">
         <div class="splash-lamp" aria-hidden="true">
-          <svg viewBox="0 0 120 120" width="112" height="112">
+          <svg viewBox="0 0 120 120" width="96" height="96">
             <defs>
               <radialGradient id="g" cx="50%" cy="58%" r="50%">
                 <stop offset="0" stop-color="#ffd38a" stop-opacity=".95"/>
@@ -70,7 +71,7 @@
         <p class="splash-tagline" data-i18n="tagline">Study together, in silence.</p>
         <p class="splash-intro" data-i18n="intro"></p>
         <p class="splash-live" id="splash-live" hidden></p>
-        <button class="btn primary big" data-action="enter" data-i18n="enter">Enter the reading room</button>
+        <div id="auth" class="auth"></div>
         <p class="splash-promise" data-i18n="promise"></p>
         <div class="lang-switch" role="group" aria-label="Language">
           <button data-action="setLang" data-v="en">English</button>

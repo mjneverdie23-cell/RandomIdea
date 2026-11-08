@@ -1,19 +1,19 @@
 // The HTML layer over the 3D room: header, the dock at the bottom (which changes with
-// what you are doing), sheets (rooms, stats, settings, a finished session, someone's
-// desk), toasts and the connection overlay. Buttons carry data-action attributes that
-// map onto the `actions` object passed in by main.js.
+// what you are doing), sheets (shop, profile, settings, rooms, account, a finished
+// session, someone's desk), toasts, the connection overlay and the sign-in panel.
+// Buttons carry data-action attributes that map onto the `actions` object from main.js.
 
-import { t, getLang, formatMinutes, formatClock, LANGS } from './i18n.js';
+import { t, getLang, formatMinutes, formatClock } from './i18n.js';
 import { ICONS, EMOTE_ICONS } from './icons.js';
-import { SUBJECTS, SWEATERS, LAMPS, subjectName } from '../shared/words.js';
+import { SUBJECTS, subjectName } from '../shared/words.js';
 import { FOCUS_PRESETS } from '../shared/protocol.js';
+import { authHTML, accountHTML, shopHTML, profileHTML, settingsHTML, esc } from './views.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const EMOTE_KEYS = ['wave', 'stretch', 'cheer'];
-const GOALS = [30, 60, 120, 180, 240, 360];
+const VIEWS = { shop: shopHTML, profile: profileHTML, settings: settingsHTML, account: accountHTML };
 
 export class UI {
   constructor(actions) {
@@ -21,8 +21,7 @@ export class UI {
     this.el = {
       hud: $('#hud'),
       roomPill: $('#room-pill'),
-      live: $('#live-text'),
-      liveWrap: $('#live'),
+      lumens: $('#lumens-btn'),
       soundBtn: $('#sound-btn'),
       dock: $('#dock'),
       emotes: $('#emotes'),
@@ -33,6 +32,7 @@ export class UI {
       overlay: $('#overlay'),
       splash: $('#splash'),
       splashLive: $('#splash-live'),
+      auth: $('#auth'),
       focusbar: $('#focusbar'),
       focusTime: $('#focus-time'),
     };
@@ -43,6 +43,12 @@ export class UI {
     this.confirming = false;
 
     document.addEventListener('click', (e) => this.onClick(e));
+    document.addEventListener('submit', (e) => {
+      const form = e.target.closest('[data-form]');
+      if (!form) return;
+      e.preventDefault();
+      this.actions.formSubmit?.(form.dataset.form, Object.fromEntries(new FormData(form)), form);
+    });
     document.addEventListener('input', (e) => {
       const name = e.target?.dataset?.input;
       if (name) this.actions[name]?.(e.target.type === 'checkbox' ? e.target.checked : e.target.value);
@@ -80,14 +86,28 @@ export class UI {
     for (const b of document.querySelectorAll('.lang-switch button')) b.setAttribute('aria-pressed', String(b.dataset.v === getLang()));
     this.dockKey = '';
     if (this.model) this.dock(this.model);
-    if (this.sheetKind) this.renderSheet();
+    if (this.sheetKind) this.renderSheet(true);
+    if (this.authState) this.renderAuth(this.authState);
   }
 
-  // ---------------------------------------------------------------- splash & header
+  // ---------------------------------------------------------------- splash, sign-in & header
 
   setSplashLive(g) {
     this.el.splashLive.textContent = g ? t('liveSplash', { fo: g.fo.toLocaleString(), on: g.on.toLocaleString() }) : '';
     this.el.splashLive.hidden = !g;
+  }
+
+  /** state: { state: 'checking' | 'known' | 'new', me?, mode, error, busy } */
+  renderAuth(state) {
+    this.authState = state;
+    const prev = this.el.auth.querySelector('form');
+    const keep = prev && state.state === 'new' && prev.dataset.form === state.mode ? Object.fromEntries(new FormData(prev)) : null;
+    this.el.auth.innerHTML = authHTML(state);
+    if (keep) {
+      const form = this.el.auth.querySelector('form');
+      if (form.username) form.username.value = keep.username ?? '';
+      if (form.password) form.password.value = keep.password ?? '';
+    }
   }
 
   hideSplash() {
@@ -98,18 +118,34 @@ export class UI {
     }, 450);
   }
 
+  showSplash() {
+    const s = this.el.splash;
+    s.hidden = false;
+    s.classList.remove('leaving');
+  }
+
   showHud(on) {
     this.el.hud.hidden = !on;
   }
 
-  setRoom(hall, count, cap) {
-    this.el.roomPill.innerHTML = `<span>${esc(t('room', { n: hall }))}</span><span class="room-count"> · ${esc(t('roomCount', { n: count, cap }))}</span>`;
+  setRoom(hall, count, cap, fo) {
+    this.el.roomPill.innerHTML = `<span>${esc(t('room', { n: hall }))}</span><span class="room-count"> · ${esc(t('liveHud', { fo: (fo ?? 0).toLocaleString() }))}</span>`;
+    this.el.roomPill.parentElement.title = `${t('room', { n: hall })} · ${t('roomCount', { n: count, cap })}`;
   }
 
-  setLive(g) {
-    const fo = g.fo.toLocaleString();
-    this.el.live.innerHTML = `<span class="live-long">${esc(t('liveHud', { fo }))}</span><span class="live-short">${esc(fo)}</span>`;
-    this.el.liveWrap.title = t('liveHudTitle', { fo, on: g.on.toLocaleString(), rooms: g.h.length });
+  setLumens(n) {
+    this.el.lumens.innerHTML = `<span class="spark" aria-hidden="true">✦</span><span>${n.toLocaleString()}</span>`;
+    this.el.lumens.title = t('lumensTitle', { n });
+    this.el.lumens.setAttribute('aria-label', t('lumensTitle', { n }));
+  }
+
+  /** A little "+✦25" that floats up from the balance. */
+  bumpLumens(n) {
+    const el = document.createElement('span');
+    el.className = 'lumen-pop';
+    el.textContent = t('earned', { n });
+    this.el.lumens.append(el);
+    setTimeout(() => el.remove(), 1600);
   }
 
   setSound(muted) {
@@ -143,7 +179,7 @@ export class UI {
   toast(text, icon) {
     const el = document.createElement('div');
     el.className = 'toast';
-    el.innerHTML = `${icon ? ICONS[icon] : ''}<span>${esc(text)}</span>`;
+    el.innerHTML = `${icon ? ICONS[icon] ?? '' : ''}<span>${esc(text)}</span>`;
     this.el.toasts.append(el);
     requestAnimationFrame(() => el.classList.add('in'));
     setTimeout(() => {
@@ -189,6 +225,7 @@ export class UI {
     this.timerEl = $('#timer', d);
     this.timerLabel = $('#timer-label', d);
     this.progressEl = $('#progress', d);
+    this.earnEl = $('#earning', d);
     this.tick(model.now ?? Date.now());
   }
 
@@ -223,7 +260,7 @@ export class UI {
         return `<div class="card focus">
           <div class="timer-row"><div class="timer"><span class="time" id="timer">--:--</span><span class="timer-label" id="timer-label"></span></div><span class="tag">${esc(m.subject)}</span></div>
           <div class="progress${m.planned ? '' : ' open'}"><i id="progress"></i></div>
-          <div class="row"><button class="btn ghost" data-action="focusView" data-v="1">${ICONS.focus}<span>${esc(t('focusView'))}</span></button><span class="spacer"></span><button class="btn ghost" data-action="end">${esc(t('endSession'))}</button></div>
+          <div class="row"><span class="earning" id="earning"></span><span class="spacer"></span><button class="btn ghost" data-action="focusView" data-v="1">${ICONS.focus}<span>${esc(t('focusView'))}</span></button><button class="btn ghost" data-action="end">${esc(t('endSession'))}</button></div>
         </div>`;
       case 'break':
         return `<div class="card">
@@ -260,6 +297,10 @@ export class UI {
       this.timerLabel.textContent = t('left');
       this.progressEl.style.transform = `scaleX(${clamp01(1 - elapsed / (m.planned * 60_000)).toFixed(4)})`;
     }
+    if (m.mode === 'focus' && this.earnEl) {
+      const cap = (m.planned || 240) * 60_000;
+      this.earnEl.textContent = `✦ ${Math.floor(Math.min(elapsed, cap) / 60_000)}`;
+    }
     if (text !== undefined) {
       this.timerEl.textContent = text;
       this.el.focusTime.textContent = text;
@@ -284,9 +325,10 @@ export class UI {
   openSheet(kind, data) {
     this.sheetKind = kind;
     this.sheetData = data;
-    this.renderSheet();
+    this.renderSheet(true);
     this.el.sheet.hidden = false;
     this.el.backdrop.hidden = false;
+    this.el.sheet.scrollTop = 0;
     requestAnimationFrame(() => document.body.classList.add('sheet-open'));
   }
 
@@ -311,36 +353,43 @@ export class UI {
     this.actions.sheetClosed?.(kind);
   }
 
-  renderSheet() {
-    const body = this[`${this.sheetKind}HTML`](this.sheetData);
+  renderSheet(force = false) {
+    const kind = this.sheetKind;
+    const body = VIEWS[kind] ? VIEWS[kind](this.sheetData) : this[`${kind}HTML`](this.sheetData);
     const html = `<button class="icon-btn sheet-close" data-action="closeSheet" aria-label="${esc(t('close'))}">${ICONS.close}</button>${body}`;
     // Only touch the DOM when something changed, so a tap is never lost to a re-render.
-    if (html === this.sheetHTML && this.el.sheet.dataset.kind === this.sheetKind) return;
+    if (!force && html === this.sheetHTML && this.el.sheet.dataset.kind === kind) return;
+    const sheet = this.el.sheet;
+    // Keep what someone is typing, and where they've scrolled to.
+    const typed = [...sheet.querySelectorAll('input[name]')].map((i) => [i.closest('form')?.dataset.form, i.name, i.value]);
+    const focused = document.activeElement?.name;
+    const scroll = sheet.scrollTop;
+    const grid = sheet.querySelector('.item-grid')?.scrollTop ?? 0;
     this.sheetHTML = html;
-    this.el.sheet.dataset.kind = this.sheetKind;
-    this.el.sheet.innerHTML = html;
+    sheet.dataset.kind = kind;
+    sheet.innerHTML = html;
+    for (const [form, name, value] of typed) {
+      const input = sheet.querySelector(`[data-form="${form}"] input[name="${name}"]`);
+      if (input) input.value = value;
+    }
+    if (focused) sheet.querySelector(`input[name="${focused}"]`)?.focus({ preventScroll: true });
+    sheet.scrollTop = scroll;
+    const g = sheet.querySelector('.item-grid');
+    if (g) g.scrollTop = grid;
+    this.actions.sheetRendered?.(kind, sheet);
   }
 
-  streakText(n) {
-    return n === 1 ? t('day1') : t('days', { n });
-  }
-
-  goalHTML(today, goal) {
-    const done = today >= goal;
-    return `<div class="goal"><div class="progress goal-bar"><i style="transform:scaleX(${clamp01(today / goal).toFixed(3)})"></i></div>
-      <span class="muted small">${esc(done ? t('goalDone') : t('goalLeft', { t: formatMinutes(goal - today) }))}</span></div>`;
-  }
-
-  completeHTML({ minutes, today, streak, goal }) {
+  completeHTML({ minutes, lumens, today, streak, goal }) {
     return `<div class="sheet-body center">
       <div class="seal">${ICONS.check}</div>
       <h2>${esc(t('sessionComplete'))}</h2>
-      <p class="gain">${esc(t('plusMin', { n: minutes }))}</p>
+      <p class="gain">${esc(t('plusMin', { n: minutes }))}${lumens ? ` <span class="spark-gain">${esc(t('earned', { n: lumens }))}</span>` : ''}</p>
       <div class="tiles two">
         <div class="tile"><b>${esc(formatMinutes(today))}</b><span>${esc(t('today'))}</span></div>
-        <div class="tile"><b>${esc(this.streakText(streak))}</b><span>${esc(t('streak'))}</span></div>
+        <div class="tile"><b>${esc(streak === 1 ? t('day1') : t('days', { n: streak }))}</b><span>${esc(t('streak'))}</span></div>
       </div>
-      ${this.goalHTML(today, goal)}
+      <div class="goal"><div class="progress goal-bar"><i style="transform:scaleX(${clamp01(today / goal).toFixed(3)})"></i></div>
+      <span class="muted small">${esc(today >= goal ? t('goalDone') : t('goalLeft', { t: formatMinutes(goal - today) }))}</span></div>
       <div class="stack">
         <button class="btn primary wide" data-action="break5">${esc(t('takeBreak', { n: 5 }))}</button>
         <button class="btn wide" data-action="another">${ICONS.lamp}<span>${esc(t('another'))}</span></button>
@@ -371,60 +420,6 @@ export class UI {
       <p class="muted">${esc(t('roomsHint'))}</p>
       <ul class="room-list">${rows}</ul>
       ${inFocus ? `<p class="muted small">${esc(t('switchInFocus'))}</p>` : ''}
-    </div>`;
-  }
-
-  statsHTML({ today, streak, total, sessions, last7, goal }) {
-    const lang = getLang();
-    const fmt = new Intl.DateTimeFormat(lang === 'ko' ? 'ko-KR' : 'en-US', { weekday: 'short' });
-    const max = Math.max(60, ...last7.map((d) => d.minutes));
-    const bars = last7
-      .map(
-        (d, i) => `<div class="bar${i === 6 ? ' today' : ''}" title="${esc(formatMinutes(d.minutes))}">
-          <em>${d.minutes ? esc(formatMinutes(d.minutes)) : ''}</em><i style="transform:scaleY(${(d.minutes / max).toFixed(3)})"></i><span>${esc(fmt.format(d.date))}</span></div>`,
-      )
-      .join('');
-    const goals = GOALS.map((v) => `<button class="chip${v === goal ? ' on' : ''}" data-action="goal" data-v="${v}" aria-pressed="${v === goal}">${esc(formatMinutes(v))}</button>`).join('');
-    return `<div class="sheet-body">
-      <h2>${esc(t('stats'))}</h2>
-      <div class="tiles">
-        <div class="tile"><b>${esc(formatMinutes(today))}</b><span>${esc(t('today'))}</span></div>
-        <div class="tile"><b>${esc(this.streakText(streak))}</b><span>${esc(t('streak'))}</span></div>
-        <div class="tile"><b>${esc(formatMinutes(total))}</b><span>${esc(t('total'))}</span></div>
-        <div class="tile"><b>${sessions}</b><span>${esc(t('sessions'))}</span></div>
-      </div>
-      <h3>${esc(t('last7'))}</h3>
-      <div class="bars">${bars}</div>
-      <h3>${esc(t('dailyGoal'))}</h3>
-      <div class="chips wrap">${goals}</div>
-      ${this.goalHTML(today, goal)}
-    </div>`;
-  }
-
-  settingsHTML({ profile, name, locked }) {
-    const lang = getLang();
-    const swatches = SWEATERS.map(
-      (c, i) => `<button class="swatch${i === profile.color ? ' on' : ''}" style="--c:${hex(c)}" data-action="color" data-v="${i}" aria-label="${esc(t('sweater'))} ${i + 1}" aria-pressed="${i === profile.color}"></button>`,
-    ).join('');
-    const lamps = LAMPS.map((l, i) => {
-      const isLocked = locked(i);
-      return `<button class="lamp-opt${i === profile.lamp ? ' on' : ''}" style="--c:${hex(l.shade)}" data-action="lamp" data-v="${i}" ${isLocked ? 'disabled' : ''} aria-pressed="${i === profile.lamp}">
-        <i aria-hidden="true"></i><span>${esc(l[lang] ?? l.en)}</span>${isLocked ? `<small>${ICONS.lock}${esc(t('unlockAt', { n: l.hours }))}</small>` : ''}</button>`;
-    }).join('');
-    const langs = LANGS.map((l) => `<button class="${l === lang ? 'on' : ''}" data-action="setLang" data-v="${l}" aria-pressed="${l === lang}">${l === 'en' ? 'English' : '한국어'}</button>`).join('');
-    return `<div class="sheet-body">
-      <h2>${esc(t('settings'))}</h2>
-      <section class="set"><h3>${esc(t('yourName'))}</h3>
-        <div class="row"><span class="name-tag">${esc(name)}</span><span class="spacer"></span><button class="btn small" data-action="newName">${ICONS.reroll}<span>${esc(t('newName'))}</span></button></div>
-      </section>
-      <section class="set"><h3>${esc(t('language'))}</h3><div class="seg">${langs}</div></section>
-      <section class="set"><h3>${esc(t('sound'))}</h3>
-        <label class="slider"><span>${esc(t('volume'))}</span><input type="range" min="0" max="100" value="${Math.round(profile.volume * 100)}" data-input="volume"></label>
-        <label class="toggle"><input type="checkbox" ${profile.rain ? 'checked' : ''} data-input="rain"><span>${esc(t('rain'))}</span></label>
-        <label class="toggle"><input type="checkbox" ${profile.roomSounds ? 'checked' : ''} data-input="roomSounds"><span>${esc(t('roomSounds'))}</span></label>
-      </section>
-      <section class="set"><h3>${esc(t('sweater'))}</h3><div class="swatches">${swatches}</div></section>
-      <section class="set"><h3>${esc(t('lamp'))}</h3><div class="lamps">${lamps}</div></section>
     </div>`;
   }
 

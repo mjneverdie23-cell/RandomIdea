@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Simulated visitors, for demos and load tests. They speak the real protocol: walk in,
-// take a free desk, light the lamp, finish sessions, take breaks, wave, send tea and
-// sometimes leave.
+// Simulated visitors, for demos and load tests. They speak the real protocol: each one
+// continues as a guest, spends its lumens in the shop, walks in, takes a free desk,
+// lights the lamp, finishes sessions, takes breaks, waves, sends tea and sometimes leaves.
 //
 //   node tools/bots.js --count 60 --room 1            # liven up room 1
 //   node tools/bots.js --count 5000 --ramp 200 --quiet # load test (see README)
+//
+// Every bot creates a guest profile, so start the server with a higher sign-in rate
+// limit, e.g. AUTH_PER_MIN=100000 AUTH_BURST=100000 MAX_CONN_PER_IP=100000 npm start
 //
 // Options: --url ws://localhost:8080/ws  --count N  --room N  --ramp N per second
 //          --duration seconds (0 = forever)  --short (5-minute sessions)  --quiet
@@ -12,7 +15,8 @@
 import WebSocket from 'ws';
 import { PROTOCOL, STATE, FOCUS_PRESETS } from '../shared/protocol.js';
 import { DESKS, DESK_COUNT, WALK_SPEED } from '../shared/layout.js';
-import { randomName, SWEATERS, SUBJECTS } from '../shared/words.js';
+import { SWEATERS, SUBJECTS } from '../shared/words.js';
+import { ITEMS } from '../shared/catalog.js';
 
 function parseArgs(argv) {
   const out = { url: 'ws://localhost:8080/ws', count: 40, room: 0, ramp: 10, duration: 0, short: false, quiet: false };
@@ -28,7 +32,9 @@ const opts = parseArgs(process.argv);
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const rand = (a, b) => a + Math.random() * (b - a);
 
-const stats = { open: 0, joined: 0, welcomeMs: [], msgs: 0, bytes: 0, errors: 0, closed: 0 };
+const stats = { open: 0, joined: 0, welcomeMs: [], msgs: 0, bytes: 0, errors: 0, closed: 0, bought: 0 };
+const httpBase = opts.url.replace(/^ws/, 'http').replace(/\/ws$/, '');
+const ZONES = ['Asia/Seoul', 'Asia/Tokyo', 'Asia/Taipei', 'Asia/Ho_Chi_Minh', 'Europe/London', 'America/New_York'];
 
 class Bot {
   constructor(n) {
@@ -40,8 +46,8 @@ class Bot {
     this.desk = -1;
     this.state = STATE.STAND;
     this.pos = [0, 15];
-    this.name = randomName();
-    this.color = Math.floor(Math.random() * SWEATERS.length);
+    this.token = null;
+    this.tz = pick(ZONES);
     this.stopped = false;
   }
 
@@ -57,13 +63,29 @@ class Bot {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
   }
 
-  connect() {
+  /** Continues as a guest the first time; reconnects reuse the same profile. */
+  async signIn() {
+    while (!this.token && !this.stopped) {
+      try {
+        const res = await fetch(`${httpBase}/api/guest`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tz: this.tz }) });
+        if (res.ok) this.token = (await res.json()).token;
+        else await new Promise((r) => setTimeout(r, 2000));
+      } catch {
+        stats.errors++;
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  async connect() {
     this.startedAt = Date.now();
+    await this.signIn();
+    if (this.stopped) return;
     const ws = new WebSocket(opts.url);
     this.ws = ws;
     ws.on('open', () => {
       stats.open++;
-      const hello = { t: 'hello', v: PROTOCOL, name: this.name, color: this.color, lamp: Math.random() < 0.8 ? 0 : 1 + Math.floor(Math.random() * 3) };
+      const hello = { t: 'hello', v: PROTOCOL, auth: this.token, tz: this.tz };
       if (opts.room) hello.hall = opts.room;
       this.send(hello);
     });
@@ -113,6 +135,7 @@ class Bot {
       }
       this.desk = -1;
       this.state = STATE.STAND;
+      this.goShopping(msg.me);
       this.later(rand(500, 4000), () => this.findDesk());
     } else if (msg.t === 'b') {
       for (const ev of msg.ev) this.onEvent(ev);
@@ -147,6 +170,27 @@ class Bot {
     } else if (kind === 'fin' && id === this.self) {
       this.afterSession();
     }
+  }
+
+  /** Buys and wears a few random things it can afford, one per kind of slot. */
+  goShopping(me) {
+    if (!me || me.owned.length > 0) return;
+    let budget = me.lumens;
+    const slots = new Set();
+    const wishlist = ITEMS.filter((it) => it.price > 0).sort(() => Math.random() - 0.5);
+    let delay = 300;
+    for (const it of wishlist) {
+      if (it.price > budget || slots.has(it.slot) || Math.random() < 0.35) continue;
+      budget -= it.price;
+      slots.add(it.slot);
+      this.later(delay, () => {
+        this.send({ t: 'buy', item: it.id });
+        stats.bought++;
+      });
+      this.later(delay + 350, () => this.send({ t: 'equip', item: it.id }));
+      delay += 800;
+    }
+    if (Math.random() < 0.5) this.later(delay, () => this.send({ t: 'style', color: Math.floor(Math.random() * SWEATERS.length) }));
   }
 
   findDesk() {
@@ -224,7 +268,7 @@ let lastBytes = 0;
 const report = setInterval(() => {
   const w = [...stats.welcomeMs].sort((a, b) => a - b);
   const p = (q) => (w.length ? w[Math.min(w.length - 1, Math.floor(q * w.length))] : 0);
-  const line = `bots ${started}/${opts.count} open ${stats.open} joined ${stats.joined} | welcome p50 ${p(0.5)}ms p95 ${p(0.95)}ms | ${((stats.msgs - lastMsgs) / 5).toFixed(0)} msg/s ${((stats.bytes - lastBytes) / 5 / 1024).toFixed(1)} KiB/s in | errors ${stats.errors} closed ${stats.closed}`;
+  const line = `bots ${started}/${opts.count} open ${stats.open} joined ${stats.joined} | welcome p50 ${p(0.5)}ms p95 ${p(0.95)}ms | ${((stats.msgs - lastMsgs) / 5).toFixed(0)} msg/s ${((stats.bytes - lastBytes) / 5 / 1024).toFixed(1)} KiB/s in | bought ${stats.bought} | errors ${stats.errors} closed ${stats.closed}`;
   lastMsgs = stats.msgs;
   lastBytes = stats.bytes;
   if (!opts.quiet || started >= opts.count) console.log(line);

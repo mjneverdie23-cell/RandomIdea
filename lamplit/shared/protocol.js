@@ -4,8 +4,9 @@
 
 import { HALL, DESK_COUNT } from './layout.js';
 import { ADJECTIVES, ANIMALS, SUBJECTS, SWEATERS, LAMPS, EMOTES } from './words.js';
+import { isItem, SLOTS } from './catalog.js';
 
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 export const MAX_MESSAGE_BYTES = 512;
 
 /** What a visitor is doing. Walking is tracked separately (a member with a path). */
@@ -24,6 +25,8 @@ export const TEA_MS = 5 * 60 * 1000;
 export const RESUME_GRACE_MS = 2 * 60 * 1000;
 /** A dropped visitor who had not sat down is removed much sooner. */
 export const STANDING_GRACE_MS = 15 * 1000;
+export const GOAL_MIN = 15;
+export const GOAL_MAX = 720;
 
 /** Minimum milliseconds between two actions of the same kind, per visitor. */
 export const COOLDOWN = Object.freeze({
@@ -35,6 +38,9 @@ export const COOLDOWN = Object.freeze({
   gift: 20000,
   switch: 3000,
   style: 1500,
+  shop: 250,
+  friend: 1500,
+  me: 1000,
 });
 
 const isInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
@@ -46,9 +52,11 @@ const isPoint = (p) =>
   Math.abs(p[0]) <= HALL.width / 2 &&
   Math.abs(p[1]) <= HALL.depth / 2;
 const pt = (p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100];
-const isName = (n) =>
+export const isName = (n) =>
   Array.isArray(n) && n.length === 3 && isInt(n[0], 0, ADJECTIVES.length - 1) && isInt(n[1], 0, ANIMALS.length - 1) && isInt(n[2], 1, 99);
-const isToken = (s) => typeof s === 'string' && s.length >= 8 && s.length <= 40 && /^[A-Za-z0-9_-]+$/.test(s);
+export const isToken = (s) => typeof s === 'string' && s.length >= 20 && s.length <= 64 && /^[A-Za-z0-9_-]+$/.test(s);
+export const isFriendCode = (s) => typeof s === 'string' && /^[2-9A-HJ-NP-Z]{8}$/.test(s);
+const isTimeZone = (s) => typeof s === 'string' && s.length <= 64 && /^[A-Za-z0-9_+\-/]+$/.test(s);
 
 export const isValidFocusMinutes = (m) => m === 0 || isInt(m, FOCUS_MIN, FOCUS_MAX);
 
@@ -57,16 +65,15 @@ export function sanitizeClientMessage(msg) {
   if (!msg || typeof msg !== 'object' || Array.isArray(msg) || typeof msg.t !== 'string') return null;
   switch (msg.t) {
     case 'hello': {
-      if (!isInt(msg.v, 0, 1000) || !isName(msg.name)) return null;
-      if (!isInt(msg.color, 0, SWEATERS.length - 1) || !isInt(msg.lamp, 0, LAMPS.length - 1)) return null;
-      const out = { t: 'hello', v: msg.v, name: [...msg.name], color: msg.color, lamp: msg.lamp };
+      if (!isInt(msg.v, 0, 1000) || !isToken(msg.auth)) return null;
+      const out = { t: 'hello', v: msg.v, auth: msg.auth };
       if (msg.hall !== undefined && msg.hall !== null) {
         if (!isInt(msg.hall, 1, 100000)) return null;
         out.hall = msg.hall;
       }
-      if (msg.resume !== undefined && msg.resume !== null) {
-        if (!isToken(msg.resume)) return null;
-        out.resume = msg.resume;
+      if (msg.tz !== undefined && msg.tz !== null) {
+        if (!isTimeZone(msg.tz)) return null;
+        out.tz = msg.tz;
       }
       return out;
     }
@@ -78,6 +85,9 @@ export function sanitizeClientMessage(msg) {
     case 'stop':
     case 'done':
     case 'leave':
+    case 'me':
+    case 'tutorial':
+    case 'friends':
       return { t: msg.t };
     case 'focus':
       return isValidFocusMinutes(msg.mins) && isInt(msg.tag, 0, SUBJECTS.length - 1) ? { t: 'focus', mins: msg.mins, tag: msg.tag } : null;
@@ -89,10 +99,35 @@ export function sanitizeClientMessage(msg) {
       return isInt(msg.desk, 0, DESK_COUNT - 1) ? { t: 'gift', desk: msg.desk } : null;
     case 'switch':
       return isInt(msg.hall, 1, 100000) ? { t: 'switch', hall: msg.hall } : null;
-    case 'style':
-      return isName(msg.name) && isInt(msg.color, 0, SWEATERS.length - 1) && isInt(msg.lamp, 0, LAMPS.length - 1)
-        ? { t: 'style', name: [...msg.name], color: msg.color, lamp: msg.lamp }
-        : null;
+    case 'style': {
+      const out = { t: 'style' };
+      if (msg.name !== undefined) {
+        if (!isName(msg.name)) return null;
+        out.name = [...msg.name];
+      }
+      if (msg.color !== undefined) {
+        if (!isInt(msg.color, 0, SWEATERS.length - 1)) return null;
+        out.color = msg.color;
+      }
+      if (msg.lamp !== undefined) {
+        if (!isInt(msg.lamp, 0, LAMPS.length - 1)) return null;
+        out.lamp = msg.lamp;
+      }
+      return Object.keys(out).length > 1 ? out : null;
+    }
+    case 'buy':
+    case 'equip':
+      return isItem(msg.item) ? { t: msg.t, item: msg.item } : null;
+    case 'unequip':
+      return SLOTS.includes(msg.slot) ? { t: 'unequip', slot: msg.slot } : null;
+    case 'goal':
+      return isInt(msg.mins, GOAL_MIN, GOAL_MAX) ? { t: 'goal', mins: msg.mins } : null;
+    case 'friendAdd':
+      return isFriendCode(msg.code) ? { t: 'friendAdd', code: msg.code } : null;
+    case 'friendAccept':
+    case 'friendDecline':
+    case 'friendRemove':
+      return isInt(msg.id, 1, Number.MAX_SAFE_INTEGER) ? { t: msg.t, id: msg.id } : null;
     case 'ping':
       return Number.isFinite(msg.c) ? { t: 'ping', c: msg.c } : null;
     default:
