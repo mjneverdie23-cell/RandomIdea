@@ -2,11 +2,16 @@
 // friends, the tour and the UI together.
 
 import * as THREE from '../vendor/three.module.min.js';
-import { DESKS, DESK_COUNT, round2 } from '../shared/layout.js';
+import { round2 } from '../shared/layout.js';
+import { PLACES, PLACE_KINDS, DEFAULT_PLACE, OUTSIDE, isPlace } from '../shared/places.js';
 import { PROTOCOL, STATE, COOLDOWN } from '../shared/protocol.js';
 import { displayName, subjectName, randomName, SWEATERS } from '../shared/words.js';
 import { ITEMS, ITEM, itemName, sanitizeLook } from '../shared/catalog.js';
-import { World } from './world.js';
+import { PlaceView } from './place.js';
+import { library } from './scenes/library.js';
+import { cafe } from './scenes/cafe.js';
+import { netcafe } from './scenes/netcafe.js';
+import { square } from './scenes/square.js';
 import { Avatars } from './avatars.js';
 import { Labels } from './labels.js';
 import { Net } from './net.js';
@@ -17,9 +22,9 @@ import { ICONS, EMOTE_ICONS } from './icons.js';
 import { Preview } from './preview.js';
 import { Tutorial } from './tutorial.js';
 import { DESK_WORK_ITEMS } from './look.js';
-import { shopModelLook } from './views.js';
+import { shopModelLook, esc } from './views.js';
 import { getToken, setToken, timeZone, continueAsGuest, signUp, logIn, logOut, whoAmI } from './api.js';
-import { t, setLang, getLang, formatMinutes } from './i18n.js';
+import { t, setLang, getLang, formatMinutes, placeName, placeLabel, placeIn } from './i18n.js';
 
 const MIN = 60_000;
 const settings = new Settings();
@@ -32,9 +37,41 @@ const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
-const world = new World(renderer);
-const avatars = new Avatars(world.scene);
+const scene = new THREE.Scene();
+const avatars = new Avatars(scene);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 140);
+
+// Each place is built the first time you go there, then kept for coming back.
+const RECIPES = { library, cafe, netcafe, square };
+const views = new Map();
+function viewFor(kind) {
+  if (!views.has(kind)) {
+    const v = new PlaceView(renderer, PLACES[kind], RECIPES[kind]);
+    v.setQuality(settings.quality);
+    views.set(kind, v);
+  }
+  return views.get(kind);
+}
+/** The place on screen. */
+let world = null;
+let place = null;
+
+function usePlace(kind) {
+  const next = viewFor(kind);
+  if (world === next) return;
+  world?.setHover(-1);
+  world?.hide(scene);
+  world = next;
+  place = PLACES[kind];
+  world.show(scene, renderer);
+  avatars.setDesks(place.desks);
+  camera.far = world.cam.far;
+  camera.updateProjectionMatrix();
+  cam.pitch = world.cam.pitch;
+  cam.dist = world.cam.dist;
+  cam.yaw = 0;
+  sound.setPlace?.(kind);
+}
 const labels = new Labels(document.getElementById('labels'));
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
@@ -44,7 +81,7 @@ const tapRing = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xffe1a8, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }),
 );
 tapRing.position.y = 0.02;
-world.scene.add(tapRing);
+scene.add(tapRing);
 let tapRingAge = 1;
 
 const maxRatio = () => (settings.quality === 'low' ? 1 : Math.min(window.devicePixelRatio || 1, 2));
@@ -65,9 +102,11 @@ window.addEventListener('resize', resize);
 const room = {
   selfId: 0,
   hall: 0,
+  kind: null,
+  n: 1,
   cap: 100,
   members: new Map(),
-  desks: new Int32Array(DESK_COUNT),
+  desks: new Int32Array(0),
   tea: new Map(),
   lit: 0,
   mins24: 0,
@@ -84,6 +123,10 @@ let deskCard = -1;
 let lastEarn = null;
 let tour = null;
 let toured = false;
+/** A door you're walking to: { to, x, z }. */
+let pendingDoor = null;
+/** Going through a door: { to, at } until the new place's welcome arrives. */
+let transition = null;
 let copiedUntil = 0;
 const shop = { cat: 'clothes', selected: null };
 let preview = null;
@@ -95,8 +138,8 @@ const params = new URLSearchParams(location.search);
 const urlRoom = Number.parseInt(params.get('room') || '', 10);
 
 function hello() {
-  const msg = { t: 'hello', v: PROTOCOL, auth: getToken(), tz: timeZone() };
-  const hall = Number.isInteger(urlRoom) && urlRoom > 0 ? urlRoom : settings.hall;
+  const msg = { t: 'hello', v: PROTOCOL, auth: getToken(), tz: timeZone(), place: room.kind ?? settings.place ?? DEFAULT_PLACE };
+  const hall = Number.isInteger(urlRoom) && urlRoom > 0 ? urlRoom : room.hall || settings.hall;
   if (hall) msg.hall = hall;
   return msg;
 }
@@ -137,24 +180,40 @@ net.on('message', (msg) => {
 });
 
 function onWelcome(msg) {
+  const cameFrom = joined && room.kind !== msg.place ? room.kind : null;
   joined = true;
   net.setServerTime(msg.now);
-  settings.update({ hall: msg.hall });
+  settings.update({ hall: msg.hall, place: msg.place });
   if (params.get('room') !== String(msg.hall)) {
     params.set('room', String(msg.hall));
     history.replaceState(null, '', `${location.pathname}?${params}`);
   }
+  const moved = room.hall !== msg.hall;
+  usePlace(msg.place);
   room.selfId = msg.id;
   room.hall = msg.hall;
+  room.kind = msg.place;
+  room.n = msg.n;
   room.cap = msg.cap;
   room.members.clear();
-  room.desks.fill(0);
+  room.desks = new Int32Array(place.desks.length);
   room.tea.clear();
   avatars.clear();
   avatars.selfId = msg.id;
   labels.clear();
-  for (let i = 0; i < DESK_COUNT; i++) world.setFree(i);
+  for (let i = 0; i < world.N; i++) world.setFree(i);
   world.setOwnDesk(-1);
+  pendingDoor = null;
+  if (moved || cameFrom) {
+    // A new place: face the door you came through, and cut the camera straight there.
+    cam.yaw = world.cam.arrive[cameFrom] ?? world.cam.spawnYaw ?? 0;
+    cam.snap = true;
+    setFocusView(false);
+  }
+  if (transition) {
+    transition = null;
+    requestAnimationFrame(() => requestAnimationFrame(() => ui.fade(false)));
+  }
   for (const v of msg.members) addMember(v, true);
   for (const [desk, until] of msg.tea) {
     room.tea.set(desk, until);
@@ -287,7 +346,7 @@ function onSeat(id, desk, pos) {
       world.setFree(old);
     }
     if (!m.path) {
-      m.standFrom = { x: DESKS[old].seat.x, z: DESKS[old].seat.z };
+      m.standFrom = { x: place.desks[old].seat.x, z: place.desks[old].seat.z };
       m.standT = net.now();
     }
   }
@@ -364,8 +423,9 @@ function onGlobal(g) {
   if (!g) return;
   room.g = g;
   const mine = g.h.find(([id]) => id === room.hall);
-  if (room.hall) ui.setRoom(room.hall, mine ? mine[1] : room.members.size, room.cap, g.fo);
+  if (room.hall) ui.setRoom(placeLabel(room.kind, room.n), mine ? mine[1] : room.members.size, room.cap, g.fo);
   ui.refreshSheet('halls', hallsModel());
+  refreshTags();
 }
 
 function onNotice(msg) {
@@ -379,6 +439,7 @@ const ERROR_TEXT = {
   taken: 'taken',
   nopath: 'noPath',
   full: 'roomFull',
+  bench: 'errBench',
   funds: 'errFunds',
   locked: 'errLocked',
   guest: 'errGuest',
@@ -390,6 +451,19 @@ const ERROR_TEXT = {
 };
 
 function onError(msg) {
+  if (transition && (msg.code === 'wait' || msg.code === 'full' || msg.code === 'here')) {
+    // Going through a door: wait for the cooldown and try again, or give up.
+    const to = transition.to;
+    if (msg.code === 'wait') {
+      setTimeout(() => transition?.to === to && net.send({ t: 'enter', place: to }), Math.max(50, msg.left || 0) + 60);
+      return;
+    }
+    transition = null;
+    ui.fade(false);
+    if (msg.code === 'full') ui.toast(to ? t('placeFull', { place: placeIn(to) }) : t('roomFull'));
+    return;
+  }
+  if (msg.code === 'wait') return;
   if (msg.code === 'cooldown') ui.toast(t('teaWait', { n: Math.ceil((msg.left || 0) / 1000) }), 'tea');
   else if (msg.code === 'early') {
     setTimeout(() => {
@@ -423,9 +497,10 @@ function setRoomStats([lit, mins]) {
 }
 
 function drawBoard() {
+  if (!world) return;
   const h = room.mins24 / 60;
   world.drawBoard({
-    title: `${t('brand')} · ${t('room', { n: room.hall || 1 })}`,
+    title: `${t('brand')} · ${placeLabel(room.kind ?? world.kind, room.n || 1)}`,
     items: [
       { value: `${room.lit}`, label: t('lampsLit') },
       { value: h < 10 ? h.toFixed(1) : Math.round(h).toLocaleString(), label: t('focusHours') },
@@ -518,10 +593,15 @@ function leaveRoom() {
   net.disconnect();
   joined = false;
   room.selfId = 0;
+  room.hall = 0;
+  room.kind = null;
   room.members.clear();
   avatars.clear();
   labels.clear();
-  for (let i = 0; i < DESK_COUNT; i++) world.setFree(i);
+  pendingDoor = null;
+  transition = null;
+  ui.fade(false);
+  for (let i = 0; i < world.N; i++) world.setFree(i);
   ui.closeSheet();
   ui.dock(null);
   ui.showHud(false);
@@ -537,9 +617,9 @@ function freeDeskRect() {
   const v = new THREE.Vector3();
   const w = window.innerWidth;
   const h = window.innerHeight;
-  for (const d of DESKS) {
-    if (room.desks[d.i]) continue;
-    v.set(d.x, 0.7, d.z + 0.3).project(camera);
+  for (const d of place.desks) {
+    if (room.desks[d.i] || d.rest) continue;
+    v.set((d.x + d.seat.x) / 2, 0.7, (d.z + d.seat.z) / 2).project(camera);
     if (v.z > 1) continue;
     const x = ((v.x + 1) / 2) * w;
     const y = ((1 - v.y) / 2) * h;
@@ -559,13 +639,18 @@ const rectOf = (sel) => () => {
 
 function startTour() {
   tour?.end(false);
+  // Outside there are no desks: the second step points you to the buildings instead.
+  const findDesk = place.indoor
+    ? { title: t('tour2Title'), body: t('tour2Body'), target: freeDeskRect, waitFor: 'sat' }
+    : { title: t('tour2OutTitle'), body: t('tour2OutBody'), target: rectOf('#dock') };
   const steps = [
     { title: t('tour1Title'), body: t('tour1Body') },
-    { title: t('tour2Title'), body: t('tour2Body'), target: freeDeskRect, waitFor: 'sat' },
-    { title: t('tour3Title'), body: t('tour3Body'), target: rectOf('#dock') },
+    findDesk,
+    ...(place.indoor ? [{ title: t('tour3Title'), body: t('tour3Body'), target: rectOf('#dock') }] : []),
     { title: t('tour4Title'), body: t('tour4Body'), target: rectOf('#lumens-btn') },
     { title: t('tour5Title'), body: t('tour5Body'), target: rectOf('#shop-btn') },
     { title: t('tour6Title'), body: t('tour6Body'), target: rectOf('#profile-btn') },
+    { title: t('tour9Title'), body: t('tour9Body'), target: rectOf('#hud .room-btn') },
     { title: t('tour7Title'), body: t('tour7Body'), target: rectOf('#emotes') },
     { title: t('tour8Title'), body: t('tour8Body') },
   ];
@@ -589,9 +674,23 @@ function maybeStartTour() {
 function dockModel() {
   const mine = self();
   if (!joined || !mine) return null;
-  const base = { desk: mine.desk, mins: settings.mins, tag: settings.tag, since: mine.since, planned: mine.mins, subject: subjectName(mine.tag, getLang()), now: net.now() };
-  if (mine.desk < 0) return { ...base, mode: 'standing' };
-  if (mine.path || (mine.sitT && net.now() - mine.sitT < 500)) return { ...base, mode: 'walking' };
+  const base = {
+    desk: mine.desk,
+    mins: settings.mins,
+    tag: settings.tag,
+    since: mine.since,
+    planned: mine.mins,
+    subject: subjectName(mine.tag, getLang()),
+    now: net.now(),
+    kind: place.kind,
+    indoor: place.indoor,
+    doors: place.doors.map((d) => d.to),
+    heading: pendingDoor?.to ?? null,
+  };
+  if (mine.desk < 0) return { ...base, mode: mine.path && pendingDoor ? 'walking' : 'standing' };
+  const bench = place.desks[mine.desk]?.rest;
+  if (mine.path || (mine.sitT && net.now() - mine.sitT < 500)) return { ...base, bench, mode: 'walking' };
+  if (bench) return { ...base, mode: 'bench' };
   if (mine.st === STATE.FOCUS) return { ...base, mode: 'focus' };
   if (mine.st === STATE.BREAK) return { ...base, mode: 'break' };
   return { ...base, mode: 'seated' };
@@ -608,7 +707,7 @@ function refresh() {
 }
 
 function hallsModel() {
-  return { g: room.g ?? { h: [], cap: room.cap }, current: room.hall, inFocus: self()?.st === STATE.FOCUS };
+  return { g: room.g ?? { h: [], cap: room.cap }, current: room.hall, kind: room.kind, inFocus: self()?.st === STATE.FOCUS };
 }
 
 function deskModel(desk) {
@@ -620,6 +719,7 @@ function deskModel(desk) {
   else if (m.st === STATE.BREAK) status = t('takingBreak');
   return {
     desk,
+    bench: place.desks[desk]?.rest ?? false,
     name: displayName(m.nm, lang),
     sweater: SWEATERS[m.look?.c] ?? SWEATERS[0],
     status,
@@ -787,8 +887,19 @@ const ui = new UI({
     ui.openSheet('halls', hallsModel());
   },
   switchRoom(id) {
-    net.send({ t: 'switch', hall: id });
+    if (id === room.hall) return;
     ui.closeSheet();
+    travel({ t: 'switch', hall: id }, null);
+  },
+  /** From the places sheet: straight to the busiest room of a place. */
+  goPlace(kind) {
+    ui.closeSheet();
+    if (kind === room.kind) return;
+    travel({ t: 'enter', place: kind }, kind);
+  },
+  /** From the dock: walk to the door that leads to a place. */
+  door(kind) {
+    goToDoor(kind);
   },
 
   // Shop
@@ -869,6 +980,7 @@ const ui = new UI({
     const mine = self();
     if (mine) labels.setSelf(displayName(mine.nm, l));
     drawBoard();
+    refreshTags();
     refresh();
   },
   sound() {
@@ -895,7 +1007,7 @@ const ui = new UI({
   quality(q) {
     settings.update({ quality: q });
     pixelRatio = maxRatio();
-    world.dust.visible = q !== 'low';
+    for (const v of views.values()) v.setQuality(q);
     resize();
     ui.refreshSheet('settings', settingsModel());
   },
@@ -929,7 +1041,6 @@ const ui = new UI({
   },
 });
 ui.setSound(settings.muted);
-world.dust.visible = settings.quality !== 'low';
 resize();
 
 // ------------------------------------------------------------------ camera
@@ -939,10 +1050,12 @@ const cam = {
   pitch: 0.56,
   dist: 13,
   focusView: false,
+  snap: false,
   target: new THREE.Vector3(0, 0.9, 8),
   cur: { yaw: 0, pitch: 0.5, dist: 20 },
 };
 const camTarget = new THREE.Vector3();
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 function updateCamera(dt, time) {
   let yaw = cam.yaw;
@@ -950,25 +1063,35 @@ function updateCamera(dt, time) {
   let dist = cam.dist;
   const mine = self();
   if (!joined || !mine) {
-    camTarget.set(Math.sin(time * 0.05) * 2.5, 0.8, 1.5);
-    yaw = Math.sin(time * 0.07) * 0.35;
-    pitch = 0.48;
-    dist = 21;
+    const sp = world.cam.splash;
+    camTarget.set(sp.x + Math.sin(time * 0.05) * 2.5, 0.8, sp.z);
+    yaw = (sp.yaw ?? 0) + Math.sin(time * 0.07) * sp.swing;
+    pitch = sp.pitch;
+    dist = sp.dist;
   } else if (cam.focusView && mine.desk >= 0) {
-    const d = DESKS[mine.desk];
-    camTarget.set(d.x + 0.05, 0.95, d.z + 0.15);
-    yaw = cam.yaw * 0.4;
+    const d = place.desks[mine.desk];
+    const c = Math.cos(d.rot);
+    const sn = Math.sin(d.rot);
+    camTarget.set(d.x + 0.05 * c + 0.15 * sn, 0.95, d.z - 0.05 * sn + 0.15 * c);
+    yaw = d.rot + cam.yaw * 0.4;
     pitch = 0.62;
     dist = 2.6;
   } else {
-    // Look a little ahead of you (toward the windows) so you see the room, not the floor.
+    // Look a little ahead of you so you see the room, not the floor.
     const w = avatars.where(room.selfId);
-    const ahead = mine.desk >= 0 && !mine.path ? 1.5 : 3.5;
+    const ahead = mine.desk >= 0 && !mine.path ? 1.5 : world.cam.ahead ?? 3.5;
     if (w) camTarget.set(w.x - Math.sin(cam.cur.yaw) * ahead, 0.9, w.z - Math.cos(cam.cur.yaw) * ahead);
   }
-  const k = 1 - Math.exp(-dt * 4.5);
+  // Portrait phones see a narrow slice of the world: stand the camera back a little.
+  if (!cam.focusView) dist *= camera.aspect < 0.8 ? 1.22 : 1;
+  const k = cam.snap ? 1 : 1 - Math.exp(-dt * 4.5);
+  if (cam.snap && joined && mine) {
+    const w = avatars.where(room.selfId);
+    if (w) camTarget.set(w.x - Math.sin(yaw) * 3.5, 0.9, w.z - Math.cos(yaw) * 3.5);
+  }
+  cam.snap = false;
   cam.target.lerp(camTarget, k);
-  cam.cur.yaw += (yaw - cam.cur.yaw) * k;
+  cam.cur.yaw += wrapAngle(yaw - cam.cur.yaw) * k;
   cam.cur.pitch += (pitch - cam.cur.pitch) * k;
   cam.cur.dist += (dist - cam.cur.dist) * k;
   const cp = Math.cos(cam.cur.pitch);
@@ -1014,12 +1137,13 @@ canvas.addEventListener('pointermove', (e) => {
   p.y = e.clientY;
   if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 8) dragged = true;
   if (pointers.size === 1 && dragged) {
-    cam.yaw = Math.max(-1.1, Math.min(1.1, cam.yaw - dx * 0.005));
+    const limit = world.cam.yawLimit;
+    cam.yaw = limit ? Math.max(-limit, Math.min(limit, cam.yaw - dx * 0.005)) : wrapAngle(cam.yaw - dx * 0.005);
     cam.pitch = Math.max(0.3, Math.min(1.25, cam.pitch + dy * 0.004));
   } else if (pointers.size === 2 && pinch) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (d > 10) cam.dist = Math.max(4, Math.min(26, (pinch.dist * pinch.d) / d));
+    if (d > 10) cam.dist = Math.max(world.cam.minDist, Math.min(world.cam.maxDist, (pinch.dist * pinch.d) / d));
   }
 });
 
@@ -1041,7 +1165,7 @@ canvas.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault();
-    cam.dist = Math.max(4, Math.min(26, cam.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1)));
+    cam.dist = Math.max(world.cam.minDist, Math.min(world.cam.maxDist, cam.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1)));
   },
   { passive: false },
 );
@@ -1049,11 +1173,124 @@ canvas.addEventListener(
 function selfPosition() {
   const mine = self();
   if (mine && mine.desk >= 0 && !mine.path) {
-    const a = DESKS[mine.desk].approach;
+    const a = place.desks[mine.desk].approach;
     return [a.x, a.z];
   }
   const w = avatars.where(room.selfId);
-  return w ? [round2(w.x), round2(w.z)] : [0, 15];
+  return w ? [round2(w.x), round2(w.z)] : [place.spawn.x, place.spawn.z];
+}
+
+/** Walks to the door that leads to `to`, then goes through it. */
+function goToDoor(to) {
+  const mine = self();
+  if (!joined || !mine || transition) return;
+  if (mine.st === STATE.FOCUS) {
+    ui.toast(t('inFocus'));
+    return;
+  }
+  const d = place.doors.find((x) => x.to === to);
+  if (!d) return;
+  const from = selfPosition();
+  sound.tap();
+  pendingDoor = { to, x: d.x, z: d.z };
+  if (mine.desk < 0 && Math.hypot(from[0] - d.x, from[1] - d.z) < 0.9) {
+    enterDoor();
+    return;
+  }
+  if (mine.desk >= 0) net.send({ t: 'stand' });
+  net.send({ t: 'go', from, to: [d.x, d.z] });
+  tapRing.position.set(d.x, 0.02, d.z);
+  tapRingAge = 0;
+  refresh();
+}
+
+/** You reached the door: fade out and ask for the next place. */
+function enterDoor() {
+  const to = pendingDoor?.to;
+  pendingDoor = null;
+  if (!to) return;
+  travel({ t: 'enter', place: to }, to);
+}
+
+function travel(msg, to) {
+  if (transition) return;
+  sound.door?.(to ?? '');
+  transition = { to, at: Date.now() };
+  ui.fade(true);
+  setTimeout(() => net.send(msg), 260);
+  setTimeout(() => {
+    if (transition && Date.now() - transition.at >= 5900) {
+      transition = null;
+      ui.fade(false);
+    }
+  }, 6000);
+}
+
+// ------------------------------------------------------------------ name tags over doors
+
+/** Floating tags over each door: where it leads and how many people are there. */
+const tagEls = new Map();
+const tagVec = new THREE.Vector3();
+function placeCounts() {
+  const counts = {};
+  for (const [, n, ki] of room.g?.h ?? []) {
+    const k = PLACE_KINDS[ki];
+    if (k) counts[k] = (counts[k] ?? 0) + n;
+  }
+  return counts;
+}
+function refreshTags() {
+  const counts = placeCounts();
+  for (const el of tagEls.values()) {
+    const n = (counts[el.dataset.kind] ?? 0).toLocaleString();
+    const html = `${esc(placeName(el.dataset.kind))}<small>${esc(t(el.dataset.kind === 'square' ? 'placeOutside' : 'placePeople', { n }))}</small>`;
+    if (el.dataset.html !== html) {
+      el.dataset.html = html;
+      el.innerHTML = html;
+    }
+  }
+}
+function updateTags() {
+  const show = joined && world && !cam.focusView && !transition && !tour;
+  const tags = show ? (world.tags ?? []) : [];
+  const wanted = new Set(tags.map((tg) => `${world.kind}:${tg.kind}`));
+  for (const [key, el] of tagEls) {
+    if (!wanted.has(key)) {
+      el.remove();
+      tagEls.delete(key);
+    }
+  }
+  if (!tags.length) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  let added = false;
+  for (const tg of tags) {
+    const key = `${world.kind}:${tg.kind}`;
+    let el = tagEls.get(key);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'place-tag';
+      el.dataset.kind = tg.kind;
+      document.getElementById('labels').append(el);
+      tagEls.set(key, el);
+      added = true;
+    }
+    tagVec.set(tg.at[0], tg.at[1], tg.at[2]).project(camera);
+    const visible = tagVec.z < 1 && Math.abs(tagVec.x) < 1.1 && Math.abs(tagVec.y) < 1.1;
+    el.style.opacity = visible ? '1' : '0';
+    if (visible) el.style.transform = `translate3d(${(((tagVec.x + 1) / 2) * w).toFixed(1)}px, ${(((1 - tagVec.y) / 2) * h).toFixed(1)}px, 0) translate(-50%, -100%)`;
+  }
+  if (added) refreshTags();
+}
+
+/** Called every frame: go through the door once you've walked up to it. */
+function checkDoor() {
+  if (!pendingDoor) return;
+  const mine = self();
+  const w = avatars.where(room.selfId);
+  if (!mine || !w || mine.path) return;
+  if (Math.hypot(w.x - pendingDoor.x, w.z - pendingDoor.z) < 0.9) enterDoor();
+  else pendingDoor = null;
 }
 
 function onTap(x, y) {
@@ -1064,14 +1301,20 @@ function onTap(x, y) {
     return;
   }
   setRay(x, y);
+  const doorTo = world.pickDoor(raycaster);
   const desk = world.pickDesk(raycaster, camera, ndc);
-  if (desk >= 0) return onDeskTap(desk, mine);
+  if (doorTo && desk < 0) return goToDoor(doorTo);
+  if (desk >= 0) {
+    pendingDoor = null;
+    return onDeskTap(desk, mine);
+  }
   const p = world.pickFloor(raycaster);
   if (!p) return;
   if (mine.st === STATE.FOCUS) {
     ui.toast(t('inFocus'));
     return;
   }
+  pendingDoor = null;
   const from = selfPosition();
   if (mine.desk >= 0) net.send({ t: 'stand' });
   net.send({ t: 'go', from, to: [round2(p.x), round2(p.z)] });
@@ -1099,17 +1342,23 @@ function updateHover() {
   if (!hoverAt || !joined || pointers.size > 0) return;
   setRay(hoverAt.x, hoverAt.y);
   const desk = world.pickDesk(raycaster, camera, ndc);
+  const doorTo = desk < 0 ? world.pickDoor(raycaster) : null;
   world.setHover(desk);
-  canvas.style.cursor = desk >= 0 ? 'pointer' : '';
+  canvas.style.cursor = desk >= 0 || doorTo ? 'pointer' : '';
+  if (doorTo) {
+    ui.tooltip(t('goTo', { place: placeIn(doorTo) }), hoverAt.x, hoverAt.y);
+    return;
+  }
   if (desk < 0) {
     ui.tooltip(null);
     return;
   }
   const m = room.members.get(room.desks[desk]);
-  let text = `${t('desk', { n: desk + 1 })}`;
+  const seatName = place.desks[desk].rest ? t('bench') : t('desk', { n: desk + 1 });
+  let text = seatName;
   if (m) {
     const name = displayName(m.nm, getLang());
-    text = m.st === STATE.FOCUS ? `${name} · ${t('focusingFor', { t: formatMinutes((net.now() - m.since) / MIN) })}` : `${name} · ${t('desk', { n: desk + 1 })}`;
+    text = m.st === STATE.FOCUS ? `${name} · ${t('focusingFor', { t: formatMinutes((net.now() - m.since) / MIN) })}` : `${name} · ${seatName}`;
   }
   ui.tooltip(text, hoverAt.x, hoverAt.y);
 }
@@ -1143,6 +1392,9 @@ fetch('/api/status')
   .catch(() => {});
 checkToken();
 
+// Behind the sign-in panel: the place you were last in, or the town square for newcomers.
+usePlace(isPlace(settings.place) ? settings.place : OUTSIDE);
+
 let slowFrames = 0;
 let last = performance.now();
 function frame(nowMs) {
@@ -1151,7 +1403,10 @@ function frame(nowMs) {
   const time = nowMs / 1000;
   const serverNow = net.now();
   const arrived = avatars.update(serverNow, time, dt);
-  if (arrived.includes(room.selfId)) setTimeout(refresh, 520);
+  if (arrived.includes(room.selfId)) {
+    checkDoor();
+    setTimeout(refresh, 520);
+  }
   world.update(dt, time);
   updateCamera(dt, time);
   world.cullFor(camera);
@@ -1162,7 +1417,8 @@ function frame(nowMs) {
     tapRing.scale.setScalar(1 + tapRingAge * 1.2);
   }
   labels.update(camera, avatars, room.selfId, window.innerWidth, window.innerHeight, joined && !cam.focusView);
-  renderer.render(world.scene, camera);
+  updateTags();
+  renderer.render(scene, camera);
 
   // Lower the resolution on devices that struggle (Auto quality only).
   if (settings.quality === 'auto') {
@@ -1190,8 +1446,14 @@ window.lamplit = {
     return me;
   },
   deskPos(i) {
-    return [DESKS[i].x, 0.6, DESKS[i].z + 0.3];
+    const d = place.desks[i];
+    return [(d.x + d.seat.x) / 2, 0.6, (d.z + d.seat.z) / 2];
   },
+  get place() {
+    return place;
+  },
+  usePlace,
+  goToDoor,
   screenOf(x, y, z) {
     const v = new THREE.Vector3(x, y, z).project(camera);
     return { x: ((v.x + 1) / 2) * window.innerWidth, y: ((1 - v.y) / 2) * window.innerHeight, visible: v.z < 1 };

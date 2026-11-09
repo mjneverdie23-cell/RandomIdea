@@ -4,8 +4,9 @@
 // changes of outfit, pets and held items trivial.
 
 import * as THREE from '../vendor/three.module.min.js';
-import { DESKS, WALK_SPEED } from '../shared/layout.js';
+import { WALK_SPEED, KITS } from '../shared/layout.js';
 import { samplePath } from '../shared/path.js';
+import * as tex from './textures.js';
 import { STATE } from '../shared/protocol.js';
 import { SWEATERS } from '../shared/words.js';
 import { sanitizeLook } from '../shared/catalog.js';
@@ -44,7 +45,18 @@ export class Avatars {
     this.hair = this.mesh(new THREE.SphereGeometry(0.213, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), new THREE.MeshStandardMaterial({ roughness: 0.9 }), max, true);
     this.eyes = this.mesh(new THREE.SphereGeometry(0.024, 8, 6), new THREE.MeshBasicMaterial({ color: 0x1b1716 }), max * 2, false);
     this.hands = this.mesh(new THREE.SphereGeometry(0.055, 10, 8), this.matSkin, max * 2, true);
-    this.base = [this.body, this.head, this.hair, this.eyes, this.hands];
+    // Soft contact shadows under everyone and their pets.
+    this.shadows = this.mesh(
+      new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: tex.blob(), color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }),
+      max * 2,
+      false,
+    );
+    this.shadows.renderOrder = 1;
+    this.base = [this.body, this.head, this.hair, this.eyes, this.hands, this.shadows];
+    /** Seats of the place being shown (from shared/places.js). */
+    this.desks = [];
+    this._frame = new THREE.Matrix4();
     /** `${item}:${variant}` -> [[group, InstancedMesh], ...] */
     this.parts = new Map();
 
@@ -104,6 +116,17 @@ export class Avatars {
   clear() {
     this.list = [];
     this.slots.clear();
+  }
+
+  /** The seats of the place now on screen. */
+  setDesks(desks) {
+    this.desks = desks;
+  }
+
+  /** Seat d's frame (at the desk, turned the way the sitter faces), times a local offset. */
+  deskMatrix(d, x, y, z, out) {
+    this._frame.makeRotationY(d.rot).setPosition(d.x, 0, d.z);
+    return out.multiplyMatrices(this._frame, this._local.makeTranslation(x, y, z));
   }
 
   add(m) {
@@ -201,13 +224,13 @@ export class Avatars {
           y = Math.abs(Math.sin(stride)) * 0.05;
           headRoll = Math.sin(stride) * 0.05;
         }
-      } else if (m.desk >= 0) {
-        const d = DESKS[m.desk];
+      } else if (m.desk >= 0 && this.desks[m.desk]) {
+        const d = this.desks[m.desk];
         const k = ease(clamp01(m.sitT ? (now - m.sitT) / SIT_MS : 1));
-        x = d.x;
+        x = d.approach.x + (d.seat.x - d.approach.x) * k;
         z = d.approach.z + (d.seat.z - d.approach.z) * k;
         y = SEAT_LIFT * k;
-        m.yaw = lerpAngle(m.yaw, Math.PI, Math.max(turn, k));
+        m.yaw = lerpAngle(m.yaw, Math.PI + d.rot, Math.max(turn, k));
         seated = k >= 1;
         if (seated) {
           if (m.st === STATE.FOCUS) {
@@ -216,6 +239,11 @@ export class Avatars {
           } else if (m.st === STATE.BREAK) {
             headPitch = -0.28;
             lean = -0.12;
+          } else if (d.rest) {
+            // Sitting on a bench, looking around.
+            headPitch = -0.05 + Math.sin(time * 0.3 + m.id) * 0.06;
+            headRoll = Math.sin(time * 0.21 + m.id * 2) * 0.05;
+            lean = -0.06;
           } else {
             headPitch = 0.12;
           }
@@ -253,7 +281,11 @@ export class Avatars {
       m.rx = x;
       m.rz = z;
       m.ry = y;
-      this.drawAvatar(m, x, y, z, { lean, headPitch, headRoll, scaleY, seated, walking, stride, emote, ek, time, dt, now });
+      const bench = seated && this.desks[m.desk]?.rest;
+      this.drawAvatar(m, x, y, z, { lean, headPitch, headRoll, scaleY, seated, bench, walking, stride, emote, ek, time, dt, now });
+      // A soft shadow on the ground, smaller while sitting up on a chair.
+      const sh = seated ? 0.62 : 0.56 - Math.min(0.2, y * 0.6);
+      this.push(this.shadows, this._out.makeScale(sh, 1, sh).setPosition(x, 0.011, z));
       if (m.id === this.selfId) {
         this.ring.visible = true;
         this.ring.position.set(x, 0.015, z);
@@ -306,8 +338,9 @@ export class Avatars {
       this.push(this.eyes, this._out.multiplyMatrices(head, this._local));
     }
 
-    // Hands: by your sides, swinging, holding something, on the desk, or in the air.
-    const holding = look.held && !o.seated;
+    // Hands: by your sides, swinging, holding something, on the desk, in your lap, or in the air.
+    const atDesk = o.seated && !o.bench;
+    const holding = look.held && !atDesk;
     for (const s of [-1, 1]) {
       let hx = s * 0.215;
       let hy = 0.23;
@@ -318,11 +351,15 @@ export class Avatars {
         hy = 0.33;
         hz = 0.22;
       }
-      if (o.seated) {
+      if (atDesk) {
         hx = s * 0.17;
         hy = 0.37;
         hz = 0.4;
         if (m.st === STATE.FOCUS && s > 0) hx += Math.sin(o.time * 5 + m.id) * 0.015;
+      } else if (o.bench && !holding) {
+        hx = s * 0.13;
+        hy = 0.2;
+        hz = 0.2;
       }
       if (o.emote === 0 && s > 0) {
         hx = 0.25;
@@ -346,9 +383,8 @@ export class Avatars {
       if (look[slot]) this.emit(look[slot], 'acc', accessoryAnchor(look[slot]) === 'body' ? body : head);
     }
     if (look.held) {
-      if (o.seated) {
-        const d = DESKS[m.desk];
-        this.emit(look.held, 'desk', this._out.makeTranslation(d.x, DESK_TOP, d.z));
+      if (atDesk) {
+        this.emit(look.held, 'desk', this.deskMatrix(this.desks[m.desk], 0, DESK_TOP, 0, this._out));
       } else {
         this._local.makeTranslation(HAND_ANCHOR.x, HAND_ANCHOR.y * o.scaleY, HAND_ANCHOR.z);
         this.emit(look.held, 'hand', this._out.multiplyMatrices(root, this._local));
@@ -359,11 +395,14 @@ export class Avatars {
 
   drawPet(m, pet, x, z, root, body, head, o) {
     const out = this._out;
+    const atDesk = o.seated && !o.bench;
     if (SMALL_PETS.has(pet)) {
-      if (o.seated) {
-        const d = DESKS[m.desk];
-        // On top of the stack of books at the back of the desk.
-        out.compose(this._p.set(d.x - 0.38, DESK_TOP + 0.145, d.z - 0.13), this._q.setFromEuler(this._e.set(0, 0.2, 0)), this._s.set(1, 1, 1));
+      if (atDesk) {
+        // On top of the stack of books at the back of the desk (or just on the desk).
+        const d = this.desks[m.desk];
+        const onBooks = d.kit === 'desk';
+        this.deskMatrix(d, onBooks ? -0.38 : -0.3, DESK_TOP + (onBooks ? 0.145 : 0), onBooks ? -0.13 : -0.05, out);
+        out.multiply(this._local.makeRotationY(0.2));
       } else if (pet === 'hamster') {
         this._local.makeTranslation(0, 0.215, -0.01);
         out.multiplyMatrices(head, this._local);
@@ -383,10 +422,15 @@ export class Avatars {
       pz = z + 0.1;
       pyaw = -0.35;
     } else if (o.seated) {
-      const d = DESKS[m.desk];
-      px = d.x + 0.52;
-      pz = d.seat.z + 0.05;
-      pyaw = 0.35;
+      // Beside your chair, or on the ground in front of your bench.
+      const d = this.desks[m.desk];
+      const lx = o.bench ? 0.5 : 0.52;
+      const lz = o.bench ? -0.55 : KITS[d.kit].chairZ + 0.05;
+      const c = Math.cos(d.rot);
+      const s = Math.sin(d.rot);
+      px = d.x + lx * c + lz * s;
+      pz = d.z - lx * s + lz * c;
+      pyaw = d.rot + (o.bench ? 0.4 : 0.35);
     } else {
       // Follow a little behind and to the right.
       const fx = Math.sin(m.yaw);

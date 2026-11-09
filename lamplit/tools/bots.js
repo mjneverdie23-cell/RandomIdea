@@ -1,29 +1,34 @@
 #!/usr/bin/env node
 // Simulated visitors, for demos and load tests. They speak the real protocol: each one
 // continues as a guest, spends its lumens in the shop, walks in, takes a free desk,
-// lights the lamp, finishes sessions, takes breaks, waves, sends tea and sometimes leaves.
+// lights the lamp, finishes sessions, takes breaks, waves, sends tea, sometimes steps out
+// to the town square (strolling, sitting on benches, wandering into another building)
+// and sometimes leaves.
 //
-//   node tools/bots.js --count 60 --room 1            # liven up room 1
+//   node tools/bots.js --count 80                      # spread across every place
+//   node tools/bots.js --count 40 --place cafe         # fill the coffee shop
 //   node tools/bots.js --count 5000 --ramp 200 --quiet # load test (see README)
 //
 // Every bot creates a guest profile, so start the server with a higher sign-in rate
 // limit, e.g. AUTH_PER_MIN=100000 AUTH_BURST=100000 MAX_CONN_PER_IP=100000 npm start
 //
 // Options: --url ws://localhost:8080/ws  --count N  --room N  --ramp N per second
+//          --place library|cafe|netcafe|square|mix (default mix)
 //          --duration seconds (0 = forever)  --short (5-minute sessions)  --quiet
 
 import WebSocket from 'ws';
 import { PROTOCOL, STATE, FOCUS_PRESETS } from '../shared/protocol.js';
-import { DESKS, DESK_COUNT, WALK_SPEED } from '../shared/layout.js';
+import { WALK_SPEED } from '../shared/layout.js';
+import { PLACES, isPlace } from '../shared/places.js';
 import { SWEATERS, SUBJECTS } from '../shared/words.js';
 import { ITEMS } from '../shared/catalog.js';
 
 function parseArgs(argv) {
-  const out = { url: 'ws://localhost:8080/ws', count: 40, room: 0, ramp: 10, duration: 0, short: false, quiet: false };
+  const out = { url: 'ws://localhost:8080/ws', count: 40, room: 0, ramp: 10, duration: 0, short: false, quiet: false, place: 'mix' };
   for (let i = 2; i < argv.length; i++) {
     const key = argv[i].replace(/^--/, '');
     if (key === 'short' || key === 'quiet') out[key] = true;
-    else if (key in out) out[key] = key === 'url' ? argv[++i] : Number(argv[++i]);
+    else if (key in out) out[key] = key === 'url' || key === 'place' ? argv[++i] : Number(argv[++i]);
   }
   return out;
 }
@@ -35,13 +40,22 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const stats = { open: 0, joined: 0, welcomeMs: [], msgs: 0, bytes: 0, errors: 0, closed: 0, bought: 0 };
 const httpBase = opts.url.replace(/^ws/, 'http').replace(/\/ws$/, '');
 const ZONES = ['Asia/Seoul', 'Asia/Tokyo', 'Asia/Taipei', 'Asia/Ho_Chi_Minh', 'Europe/London', 'America/New_York'];
+/** Where a bot starts out: most study in the library, some in the café or net café, a few outside. */
+function startPlace() {
+  if (isPlace(opts.place)) return opts.place;
+  const r = Math.random();
+  return r < 0.4 ? 'library' : r < 0.7 ? 'cafe' : r < 0.9 ? 'netcafe' : 'square';
+}
+const STUDY_PLACES = ['library', 'cafe', 'netcafe'];
 
 class Bot {
   constructor(n) {
     this.n = n;
     this.timers = new Set();
     this.memberDesk = new Map();
-    this.desks = new Int32Array(DESK_COUNT);
+    this.kind = startPlace();
+    this.place = PLACES[this.kind];
+    this.desks = new Int32Array(this.place.desks.length);
     this.self = 0;
     this.desk = -1;
     this.state = STATE.STAND;
@@ -85,7 +99,7 @@ class Bot {
     this.ws = ws;
     ws.on('open', () => {
       stats.open++;
-      const hello = { t: 'hello', v: PROTOCOL, auth: this.token, tz: this.tz };
+      const hello = { t: 'hello', v: PROTOCOL, auth: this.token, tz: this.tz, place: this.kind };
       if (opts.room) hello.hall = opts.room;
       this.send(hello);
     });
@@ -124,7 +138,10 @@ class Bot {
       stats.joined++;
       stats.welcomeMs.push(Date.now() - this.startedAt);
       this.self = msg.id;
-      this.desks.fill(0);
+      this.kind = msg.place;
+      this.place = PLACES[msg.place];
+      this.pendingEnter = null;
+      this.desks = new Int32Array(this.place.desks.length);
       this.memberDesk.clear();
       for (const m of msg.members) {
         if (m.desk >= 0) {
@@ -136,11 +153,15 @@ class Bot {
       this.desk = -1;
       this.state = STATE.STAND;
       this.goShopping(msg.me);
-      this.later(rand(500, 4000), () => this.findDesk());
+      // Outside, a bot strolls and sits for a good while before heading in to study.
+      if (this.kind === 'square') this.later(rand(800, 3000), () => this.stroll(8 + Math.floor(Math.random() * 8)));
+      else this.later(rand(500, 4000), () => this.findDesk());
     } else if (msg.t === 'b') {
       for (const ev of msg.ev) this.onEvent(ev);
     } else if (msg.t === 'err' && msg.code === 'taken') {
       this.later(rand(300, 1200), () => this.findDesk());
+    } else if (msg.t === 'err' && msg.code === 'wait' && this.pendingEnter) {
+      this.later((msg.left ?? 1500) + 200, () => this.enter(this.pendingEnter));
     }
   }
 
@@ -164,7 +185,8 @@ class Bot {
       const path = ev[2];
       const len = path.reduce((s, p, i) => (i ? s + Math.hypot(p[0] - path[i - 1][0], p[1] - path[i - 1][1]) : 0), 0);
       this.pos = path[path.length - 1];
-      if (this.desk >= 0) this.later((len / WALK_SPEED) * 1000 + rand(800, 3000), () => this.startFocus());
+      if (this.desk >= 0 && !this.place.desks[this.desk]?.rest) this.later((len / WALK_SPEED) * 1000 + rand(800, 3000), () => this.startFocus());
+      this.walkMs = (len / WALK_SPEED) * 1000;
     } else if (kind === 'st' && id === this.self) {
       this.state = ev[2];
     } else if (kind === 'fin' && id === this.self) {
@@ -196,12 +218,43 @@ class Bot {
   findDesk() {
     if (this.desk >= 0) return;
     const free = [];
-    for (let i = 0; i < DESK_COUNT; i++) if (!this.desks[i]) free.push(i);
+    for (let i = 0; i < this.desks.length; i++) if (!this.desks[i]) free.push(i);
     if (free.length === 0) {
       this.later(rand(5000, 10000), () => this.findDesk());
       return;
     }
     this.send({ t: 'sit', desk: pick(free), from: this.pos });
+  }
+
+  enter(place) {
+    if (this.kind === place) return;
+    this.pendingEnter = place;
+    this.send({ t: 'enter', place });
+  }
+
+  /** Outside: walk about, sit on a bench for a while, then head into a building to study. */
+  stroll(steps) {
+    if (this.kind !== 'square') return;
+    if (steps <= 0) {
+      const to = pick(STUDY_PLACES);
+      const door = this.place.doors.find((d) => d.to === to);
+      if (this.desk >= 0) this.send({ t: 'stand' });
+      this.send({ t: 'go', from: this.pos, to: [door.x, door.z] });
+      this.later(1500, () => this.later(this.walkMs ?? 8000, () => this.enter(to)));
+      return;
+    }
+    if (Math.random() < 0.35 && this.desk < 0) {
+      this.findDesk();
+      this.later(rand(30_000, 90_000), () => {
+        this.send({ t: 'stand' });
+        this.later(rand(800, 2000), () => this.stroll(steps - 1));
+      });
+      return;
+    }
+    if (this.desk >= 0) this.send({ t: 'stand' });
+    const { width: w, depth: d } = this.place;
+    this.send({ t: 'go', from: this.pos, to: [Math.round(rand(-w / 3, w / 3) * 100) / 100, Math.round(rand(-d / 3, d / 2.4) * 100) / 100] });
+    this.later(rand(6000, 14_000), () => this.stroll(steps - 1));
   }
 
   startFocus() {
@@ -223,7 +276,7 @@ class Bot {
       if (r < 0.5) this.send({ t: 'emote', e: 1 });
       else if (r < 0.65) {
         const others = [];
-        for (let i = 0; i < DESK_COUNT; i++) if (this.desks[i] && this.desks[i] !== this.self) others.push(i);
+        for (let i = 0; i < this.desks.length; i++) if (this.desks[i] && this.desks[i] !== this.self) others.push(i);
         if (others.length) this.send({ t: 'gift', desk: pick(others) });
       } else if (r < 0.8) this.send({ t: 'emote', e: 2 });
       this.scheduleFidget(remaining - wait);
@@ -237,12 +290,21 @@ class Bot {
       this.later(5 * 60_000 + rand(2000, 20_000), () => this.startFocus());
     } else if (r < 0.8) {
       this.later(rand(2000, 15_000), () => this.startFocus());
-    } else if (r < 0.92) {
+    } else if (r < 0.86) {
       this.send({ t: 'stand' });
       this.later(rand(3000, 8000), () => {
-        const d = pick(DESKS);
-        this.send({ t: 'go', from: [d.approach.x, d.approach.z], to: [rand(-10, 10), rand(-14, 14)] });
+        const d = this.place.desks[Math.max(0, this.desk)] ?? this.place.desks[0];
+        const { width: w, depth: dd } = this.place;
+        this.send({ t: 'go', from: [d.approach.x, d.approach.z], to: [rand(-w / 3, w / 3), rand(-dd / 3, dd / 3)] });
         this.later(rand(6000, 15_000), () => this.findDesk());
+      });
+    } else if (r < 0.94) {
+      // A walk outside: through the door to the town square.
+      this.send({ t: 'stand' });
+      const door = this.place.doors[0];
+      this.later(rand(1000, 3000), () => {
+        this.send({ t: 'go', from: this.pos, to: [door.x, door.z] });
+        this.later(rand(7000, 12_000), () => this.enter('square'));
       });
     } else {
       this.send({ t: 'leave' });

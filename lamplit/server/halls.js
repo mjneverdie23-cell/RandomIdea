@@ -1,16 +1,20 @@
-// All reading-room logic, independent of sockets so it can be tested directly.
+// All room logic, independent of sockets so it can be tested directly.
 //
 // A "client" is anything with `id`, `send(obj)`, `sendRaw(string)` and optionally
 // `close(reason)`. Every member belongs to a profile (a guest or an account); a profile can
 // only be in the rooms once, so reconnecting or opening a second tab takes over your seat.
+//
+// Each room ("hall") is a copy of one place: the library, the coffee shop, the net café or
+// the town square outside them. Walking through a door moves you to a room of another place.
 
-import { DESKS, DESK_COUNT, WALK_SPEED, buildWalkGrid, spawnPoint, round2 } from '../shared/layout.js';
+import { WALK_SPEED, buildWalkGrid, spawnPoint, round2 } from '../shared/layout.js';
+import { PLACES, PLACE_KINDS, PLACE_CAP, DEFAULT_PLACE, placeIndex } from '../shared/places.js';
 import { findPath, pathLength, samplePath } from '../shared/path.js';
 import { STATE, COOLDOWN, OPEN_FOCUS_CAP, TEA_MS, RESUME_GRACE_MS, STANDING_GRACE_MS } from '../shared/protocol.js';
 import { sanitizeLook } from '../shared/catalog.js';
 import { validTimeZone } from './accounts.js';
 
-const GRID = buildWalkGrid();
+const GRIDS = Object.fromEntries(PLACE_KINDS.map((k) => [k, buildWalkGrid(PLACES[k])]));
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 /** How far a client-reported position may drift from the server's own estimate. */
@@ -21,13 +25,18 @@ const DONE_GRACE_MS = 2 * MIN;
 const DONE_EARLY_MS = 5000;
 
 export class Hall {
-  constructor(id, capacity) {
+  /** `n` numbers the rooms of each kind of place: the second coffee shop is n = 2. */
+  constructor(id, capacity, kind = DEFAULT_PLACE, n = 1) {
     this.id = id;
     this.capacity = capacity;
+    this.kind = kind;
+    this.place = PLACES[kind];
+    this.grid = GRIDS[kind];
+    this.n = n;
     /** @type {Map<number, object>} member id -> member */
     this.members = new Map();
     /** Member id sitting at each desk, 0 when free. */
-    this.desks = new Array(DESK_COUNT).fill(0);
+    this.desks = new Array(this.place.desks.length).fill(0);
     /** desk -> time the cup of tea disappears */
     this.tea = new Map();
     this.events = [];
@@ -73,7 +82,7 @@ export class HallManager {
   constructor({ profiles, capacity = 100, maxHalls = 100, maxQueue = 5000, now = () => Date.now(), random = Math.random } = {}) {
     if (!profiles) throw new Error('HallManager needs a ProfileService');
     this.profiles = profiles;
-    this.capacity = Math.max(1, Math.min(DESK_COUNT, capacity));
+    this.capacity = Math.max(1, Math.min(100, capacity));
     this.maxHalls = Math.max(1, maxHalls);
     this.maxQueue = maxQueue;
     this.now = now;
@@ -91,7 +100,7 @@ export class HallManager {
     this.lastGlobal = 0;
     this.lastStats = 0;
     this.statusCache = null;
-    this.ensureHall(1);
+    this.ensureHall(1, DEFAULT_PLACE);
   }
 
   // ---------------------------------------------------------------- joining & leaving
@@ -120,7 +129,7 @@ export class HallManager {
       this.reattach(existing, client, now);
       return 'resumed';
     }
-    const hall = this.pickHall(hello.hall);
+    const hall = this.pickHall(hello.hall, hello.place ?? DEFAULT_PLACE);
     if (!hall) {
       if (this.queue.length >= this.maxQueue) {
         client.send({ t: 'bye', reason: 'full' });
@@ -155,7 +164,8 @@ export class HallManager {
     else m.ghostUntil = now + (m.desk >= 0 ? RESUME_GRACE_MS : STANDING_GRACE_MS);
   }
 
-  pickHall(preferred) {
+  /** A room with space: the preferred one if it has room, else the busiest of that kind of place. */
+  pickHall(preferred, kind = DEFAULT_PLACE) {
     if (preferred) {
       const h = this.halls.get(preferred);
       if (h && h.count < h.capacity) return h;
@@ -163,18 +173,18 @@ export class HallManager {
     // Fill the busiest room first so rooms feel alive.
     let best = null;
     for (const h of this.halls.values()) {
-      if (h.count >= h.capacity) continue;
+      if (h.kind !== kind || h.count >= h.capacity) continue;
       if (!best || h.count > best.count || (h.count === best.count && h.id < best.id)) best = h;
     }
     if (best) return best;
-    if (this.halls.size < this.maxHalls) return this.ensureHall(this.freeHallId());
+    if (this.halls.size < this.maxHalls) return this.ensureHall(this.freeHallId(), kind);
     return null;
   }
 
-  ensureHall(id) {
+  ensureHall(id, kind = DEFAULT_PLACE) {
     let h = this.halls.get(id);
     if (!h) {
-      h = new Hall(id, this.capacity);
+      h = new Hall(id, Math.min(this.capacity, PLACE_CAP[kind]), kind, this.freeNumber(kind));
       this.halls.set(id, h);
     }
     return h;
@@ -184,6 +194,15 @@ export class HallManager {
     let id = 1;
     while (this.halls.has(id)) id++;
     return id;
+  }
+
+  /** The lowest room number not in use for this kind of place. */
+  freeNumber(kind) {
+    const used = new Set();
+    for (const h of this.halls.values()) if (h.kind === kind) used.add(h.n);
+    let n = 1;
+    while (used.has(n)) n++;
+    return n;
   }
 
   admit(client, hello, hall, now, profile, tz) {
@@ -200,7 +219,7 @@ export class HallManager {
       since: now,
       mins: 0,
       tag: 0,
-      pos: spawnPoint(this.random),
+      pos: spawnPoint(hall.place, this.random),
       path: null,
       t0: 0,
       len: 0,
@@ -234,8 +253,9 @@ export class HallManager {
     this.admitQueue(now);
   }
 
+  /** Empty rooms close, except the first room of each place. */
   retireIfEmpty(hall) {
-    if (hall.count === 0 && hall.id !== 1) this.halls.delete(hall.id);
+    if (hall.count === 0 && hall.n !== 1) this.halls.delete(hall.id);
   }
 
   admitQueue(now) {
@@ -246,7 +266,7 @@ export class HallManager {
         this.join(next.client, next.hello);
         continue;
       }
-      const hall = this.pickHall(next.hello.hall);
+      const hall = this.pickHall(next.hello.hall, next.hello.place ?? DEFAULT_PLACE);
       if (!hall) return;
       this.queue.shift();
       this.admit(next.client, next.hello, hall, now, next.profile, next.tz);
@@ -258,6 +278,8 @@ export class HallManager {
       t: 'welcome',
       id: m.id,
       hall: hall.id,
+      place: hall.kind,
+      n: hall.n,
       cap: hall.capacity,
       now,
       members: [...hall.members.values()].map((x) => this.view(x, now)),
@@ -310,6 +332,8 @@ export class HallManager {
         return this.onGift(hall, m, msg, now);
       case 'switch':
         return this.onSwitch(hall, m, msg, now);
+      case 'enter':
+        return this.onEnter(hall, m, msg, now);
       case 'style':
         return this.onStyle(hall, m, msg, now);
       case 'buy':
@@ -345,7 +369,7 @@ export class HallManager {
     if (m.desk >= 0) return this.error(m, 'seated');
     if (!this.cool(m, 'go', now)) return;
     const from = this.trustedFrom(m, msg.from, now);
-    const path = findPath(GRID, from, msg.to);
+    const path = findPath(hall.grid, from, msg.to);
     if (!path) return this.error(m, 'nopath');
     this.setPath(m, path, now);
     hall.push(['go', m.id, path, now]);
@@ -353,7 +377,7 @@ export class HallManager {
 
   onSit(hall, m, msg, now) {
     const d = msg.desk;
-    if (m.desk === d) return;
+    if (m.desk === d || d >= hall.desks.length) return;
     const owner = hall.desks[d];
     if (owner && owner !== m.id) return this.error(m, 'taken', { desk: d });
     if (!this.cool(m, 'sit', now)) return;
@@ -364,8 +388,8 @@ export class HallManager {
     } else {
       from = this.trustedFrom(m, msg.from, now);
     }
-    const a = DESKS[d].approach;
-    const path = findPath(GRID, from, [a.x, a.z]);
+    const a = hall.place.desks[d].approach;
+    const path = findPath(hall.grid, from, [a.x, a.z]);
     if (!path) return this.error(m, 'nopath');
     hall.desks[d] = m.id;
     m.desk = d;
@@ -380,6 +404,7 @@ export class HallManager {
 
   onFocus(hall, m, msg, now) {
     if (m.desk < 0) return this.error(m, 'notseated');
+    if (hall.place.desks[m.desk].rest) return this.error(m, 'bench');
     if (!this.cool(m, 'session', now)) return;
     this.endSession(hall, m, now);
     m.state = STATE.FOCUS;
@@ -392,6 +417,7 @@ export class HallManager {
 
   onRest(hall, m, msg, now) {
     if (m.desk < 0) return this.error(m, 'notseated');
+    if (hall.place.desks[m.desk].rest) return this.error(m, 'bench');
     if (!this.cool(m, 'session', now)) return;
     this.endSession(hall, m, now);
     m.state = STATE.BREAK;
@@ -408,25 +434,40 @@ export class HallManager {
 
   onGift(hall, m, msg, now) {
     const owner = hall.desks[msg.desk];
-    if (!owner || owner === m.id) return this.error(m, 'nogift');
+    if (!owner || owner === m.id || hall.place.desks[msg.desk].rest) return this.error(m, 'nogift');
     if (!this.cool(m, 'gift', now)) return this.error(m, 'cooldown', { left: COOLDOWN.gift - (now - m.last.gift) });
     const until = now + TEA_MS;
     hall.tea.set(msg.desk, until);
     hall.push(['tea', m.id, msg.desk, until]);
   }
 
+  /** Moves to a particular room (from the room list, or to join a friend). */
   onSwitch(hall, m, msg, now) {
     if (msg.hall === hall.id) return;
     const target = this.halls.get(msg.hall);
     if (!target || target.count >= target.capacity) return this.error(m, 'full', { hall: msg.hall });
-    if (!this.cool(m, 'switch', now)) return;
+    if (!this.cool(m, 'switch', now)) return this.error(m, 'wait', { left: COOLDOWN.switch - (now - m.last.switch) });
+    this.moveTo(hall, m, target, now);
+  }
+
+  /** Goes through a door (or uses the map) into the busiest room of another place. */
+  onEnter(hall, m, msg, now) {
+    if (msg.place === hall.kind) return this.error(m, 'here');
+    if (!this.cool(m, 'switch', now)) return this.error(m, 'wait', { left: COOLDOWN.switch - (now - m.last.switch) });
+    const target = this.pickHall(null, msg.place);
+    if (!target) return this.error(m, 'full', { place: msg.place });
+    this.moveTo(hall, m, target, now);
+  }
+
+  /** Leaves one room for another; you appear at the door you came through. */
+  moveTo(hall, m, target, now) {
     if (m.desk >= 0) this.freeDesk(hall, m, now);
     hall.members.delete(m.id);
     hall.push(['l', m.id]);
     this.retireIfEmpty(hall);
     m.hallId = target.id;
     m.path = null;
-    m.pos = spawnPoint(this.random);
+    m.pos = spawnPoint(target.place, this.random, hall.kind);
     m.state = STATE.STAND;
     m.since = now;
     target.members.set(m.id, m);
@@ -467,8 +508,9 @@ export class HallManager {
   /** What a friend is doing right now, if they're in a room. */
   presence(profileId) {
     const f = this.byProfile.get(profileId);
-    if (!f) return { online: false };
-    return { online: true, hall: f.hallId, st: f.state, since: f.since, mins: f.mins };
+    const hall = f && this.halls.get(f.hallId);
+    if (!hall) return { online: false };
+    return { online: true, hall: f.hallId, place: hall.kind, n: hall.n, st: f.state, since: f.since, mins: f.mins };
   }
 
   sendFriends(m) {
@@ -550,7 +592,7 @@ export class HallManager {
     const d = m.desk;
     this.endSession(hall, m, now);
     const current = this.position(m, now); // also finishes the walk if it is over
-    const a = DESKS[d].approach;
+    const a = hall.place.desks[d].approach;
     m.pos = m.path ? current : [a.x, a.z];
     m.path = null;
     hall.desks[d] = 0;
@@ -626,7 +668,7 @@ export class HallManager {
     for (const hall of this.halls.values()) {
       on += hall.count;
       fo += hall.lit;
-      h.push([hall.id, hall.count]);
+      h.push([hall.id, hall.count, placeIndex(hall.kind), hall.n, hall.capacity]);
     }
     h.sort((a, b) => a[0] - b[0]);
     return { on, fo, h, cap: this.capacity, max: this.maxHalls, q: this.queue.length };

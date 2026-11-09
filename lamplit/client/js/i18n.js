@@ -63,11 +63,11 @@ const STRINGS = {
     join: 'Join',
     full: 'Full',
     youAreHere: "You're here",
-    switchInFocus: 'End your session to change rooms',
+    switchInFocus: 'End your session to go somewhere else',
     queue: 'Every room is full right now — you are #{n} in line',
     connecting: 'Opening the doors…',
     reconnecting: 'Reconnecting…',
-    offline: "Can't reach the reading room. Retrying…",
+    offline: "Can't reach Lamplit. Retrying…",
     replaced: 'Lamplit is open in another tab.',
     useHere: 'Use this tab',
     newVersion: 'A new version is ready.',
@@ -76,8 +76,8 @@ const STRINGS = {
     language: 'Language',
     sound: 'Sound',
     volume: 'Volume',
-    rain: 'Rain on the windows',
-    roomSounds: 'Room sounds',
+    rain: 'Rain sounds',
+    roomSounds: 'Background sounds',
     sweater: 'Sweater',
     lamp: 'Desk lamp',
     unlockAt: 'At {n} h',
@@ -161,17 +161,17 @@ const STRINGS = {
     taken: '방금 다른 분이 앉았어요',
     noPath: '그곳으로는 갈 수 없어요',
     inFocus: '먼저 집중을 끝내 주세요',
-    roomFull: '그 열람실은 만석이에요',
+    roomFull: '그 방은 만석이에요',
     rooms: '열람실 목록',
     roomsHint: '모두 말없이 공부하는 중이에요. 자리가 있는 곳을 골라 주세요.',
     join: '입장',
     full: '만석',
     youAreHere: '현재 위치',
-    switchInFocus: '열람실을 옮기려면 집중을 먼저 끝내 주세요',
-    queue: '지금은 모든 열람실이 만석이에요 — 대기 {n}번',
+    switchInFocus: '다른 곳으로 가려면 집중을 먼저 끝내 주세요',
+    queue: '지금은 모든 방이 만석이에요 — 대기 {n}번',
     connecting: '문을 여는 중…',
     reconnecting: '다시 연결하는 중…',
-    offline: '열람실에 연결할 수 없어요. 다시 시도하는 중…',
+    offline: '램프릿에 연결할 수 없어요. 다시 시도하는 중…',
     replaced: '다른 탭에서 램프릿이 열려 있어요.',
     useHere: '이 탭에서 사용',
     newVersion: '새 버전이 있어요.',
@@ -180,8 +180,8 @@ const STRINGS = {
     language: '언어',
     sound: '소리',
     volume: '음량',
-    rain: '창밖 빗소리',
-    roomSounds: '열람실 소리',
+    rain: '빗소리',
+    roomSounds: '배경 소리',
     sweater: '스웨터',
     lamp: '스탠드',
     unlockAt: '{n}시간 달성',
@@ -300,7 +300,7 @@ Object.assign(STRINGS.en, {
   tourDone: 'Start studying',
   tourSkipStep: 'Next',
   tour1Title: 'Welcome to Lamplit',
-  tour1Body: "A quiet reading room where everyone studies together. Here's a quick tour.",
+  tour1Body: "Quiet places where everyone studies together: a library, a coffee shop and a net café around a town square. Here's a quick tour.",
   tour2Title: 'Find a desk',
   tour2Body: "Free desks have a small floating marker. Tap one and you'll walk over and sit down.",
   tour3Title: 'Turn on your lamp',
@@ -314,7 +314,7 @@ Object.assign(STRINGS.en, {
   tour7Title: 'No chat, on purpose',
   tour7Body: "Wave, stretch or cheer instead, or tap someone's desk to send them a cup of tea.",
   tour8Title: "You're all set",
-  tour8Body: 'Good luck with your studies. See you in the reading room!',
+  tour8Body: 'Good luck with your studies. See you around town!',
 });
 
 Object.assign(STRINGS.ko, {
@@ -405,7 +405,7 @@ Object.assign(STRINGS.ko, {
   tourDone: '공부 시작',
   tourSkipStep: '다음',
   tour1Title: '램프릿에 오신 걸 환영해요',
-  tour1Body: '모두가 함께 공부하는 조용한 열람실이에요. 잠깐 둘러볼까요?',
+  tour1Body: '광장을 둘러싼 도서관, 카페, PC방에서 모두가 조용히 함께 공부해요. 잠깐 둘러볼까요?',
   tour2Title: '자리 찾기',
   tour2Body: '빈 책상 위에는 작은 표시가 떠 있어요. 하나를 누르면 걸어가서 앉아요.',
   tour3Title: '스탠드 켜기',
@@ -419,7 +419,91 @@ Object.assign(STRINGS.ko, {
   tour7Title: '일부러 채팅이 없어요',
   tour7Body: '대신 손을 흔들거나 기지개를 켜거나 응원해요. 다른 사람 책상을 눌러 차 한 잔을 보낼 수도 있어요.',
   tour8Title: '준비 완료',
-  tour8Body: '공부 화이팅! 열람실에서 만나요.',
+  tour8Body: '공부 화이팅! 동네에서 또 만나요.',
+});
+
+// Places: the library, the coffee shop, the net café and the town square.
+Object.assign(STRINGS.en, {
+  intro: 'Study together in a sunlit library, a cozy coffee shop or a neon net café, and step outside to the town square for a break.',
+  place_library: 'Library',
+  place_cafe: 'Coffee shop',
+  place_netcafe: 'Net café',
+  place_square: 'Town square',
+  placeN: '{place} {n}',
+  placeIn_library: 'the library',
+  placeIn_cafe: 'the coffee shop',
+  placeIn_netcafe: 'the net café',
+  placeIn_square: 'the town square',
+  placeInN: '{place} (room {n})',
+  placeAbout_library: 'Long oak tables and green lamps, full of sunlight',
+  placeAbout_cafe: 'Window seats, warm light and the smell of coffee',
+  placeAbout_netcafe: 'Rows of glowing screens in a neon hideout',
+  placeAbout_square: 'Outside: a fountain, cherry trees and benches',
+  placePeople: '{n} here',
+  placeOutside: '{n} outside',
+  placesTitle: 'Places',
+  placesHint: 'Walk through a door, or go straight there from here.',
+  goThere: 'Go',
+  goTo: 'Go to {place}',
+  goOutside: 'Go outside',
+  headingTo: 'Heading to {place}…',
+  pickPlace: 'Tap a building to go in, or sit on a bench',
+  bench: 'Bench',
+  benchHint: 'Taking a break outside. Head into a building to study.',
+  benchRest: 'Resting on a bench in the square.',
+  restingOutside: 'Taking a break outside',
+  walkingBench: 'Walking to the bench…',
+  errBench: 'Benches are for resting — find a desk inside to study',
+  placeFull: 'Sorry, {place} is full right now',
+  friendFocusAt: 'Studying in {place} · {t}',
+  friendBreakAt: 'On a break in {place}',
+  friendHereAt: 'In {place}',
+  friendOutside: 'Out in the town square',
+  tour2OutTitle: 'Pick a place to study',
+  tour2OutBody: 'Tap a building, or a button below, to walk over: the library, the coffee shop or the net café. Benches are for resting.',
+  tour9Title: 'Other places',
+  tour9Body: 'Tap here to see every place: the coffee shop, the net café and the town square outside. You can also walk out through the door.',
+});
+Object.assign(STRINGS.ko, {
+  intro: '햇살 드는 도서관, 아늑한 카페, 네온 가득한 PC방에서 함께 공부하고, 쉬고 싶을 땐 광장으로 나가 보세요.',
+  place_library: '도서관',
+  place_cafe: '카페',
+  place_netcafe: 'PC방',
+  place_square: '광장',
+  placeN: '{place} {n}',
+  placeIn_library: '도서관',
+  placeIn_cafe: '카페',
+  placeIn_netcafe: 'PC방',
+  placeIn_square: '광장',
+  placeInN: '{place} {n}',
+  placeAbout_library: '긴 원목 책상과 초록 스탠드, 햇살 가득한 열람실',
+  placeAbout_cafe: '창가 자리, 따뜻한 조명, 커피 향',
+  placeAbout_netcafe: '네온 불빛 아래 줄지어 빛나는 화면들',
+  placeAbout_square: '바깥: 분수, 벚나무, 벤치',
+  placePeople: '{n}명',
+  placeOutside: '바깥에 {n}명',
+  placesTitle: '장소',
+  placesHint: '문으로 걸어 나가거나, 여기서 바로 이동하세요.',
+  goThere: '이동',
+  goTo: '{place}(으)로 가기',
+  goOutside: '밖으로 나가기',
+  headingTo: '{place}(으)로 가는 중…',
+  pickPlace: '건물을 눌러 들어가거나 벤치에 앉아 보세요',
+  bench: '벤치',
+  benchHint: '바깥에서 쉬는 중이에요. 공부하려면 건물로 들어가세요.',
+  benchRest: '광장 벤치에서 쉬는 중이에요.',
+  restingOutside: '바깥에서 쉬는 중',
+  walkingBench: '벤치로 가는 중…',
+  errBench: '벤치는 쉬는 곳이에요 — 공부는 안에 있는 책상에서 해요',
+  placeFull: '지금 {place}은(는) 자리가 없어요',
+  friendFocusAt: '{place}에서 공부 중 · {t}',
+  friendBreakAt: '{place}에서 쉬는 중',
+  friendHereAt: '{place}에 있어요',
+  friendOutside: '광장에 나와 있어요',
+  tour2OutTitle: '공부할 곳 고르기',
+  tour2OutBody: '건물이나 아래 버튼을 눌러 걸어가 보세요: 도서관, 카페, PC방. 벤치는 쉬는 곳이에요.',
+  tour9Title: '다른 장소',
+  tour9Body: '여기를 누르면 카페, PC방, 바깥 광장까지 모든 장소를 볼 수 있어요. 문으로 걸어 나갈 수도 있어요.',
 });
 
 export const LANGS = ['en', 'ko'];
@@ -443,6 +527,22 @@ export function getLang() {
 export function t(key, vars) {
   const s = STRINGS[lang][key] ?? STRINGS.en[key] ?? key;
   return vars ? s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? '')) : s;
+}
+
+/** The name of a kind of place ("Coffee shop"). */
+export function placeName(kind) {
+  return t(`place_${kind}`);
+}
+
+/** A place inside a sentence: "the coffee shop", or "the coffee shop (room 2)". */
+export function placeIn(kind, n = 1) {
+  const name = t(`placeIn_${kind}`);
+  return n > 1 ? t('placeInN', { place: name, n }) : name;
+}
+
+/** A particular room: "Coffee shop", or "Coffee shop 2" when there's more than one. */
+export function placeLabel(kind, n = 1) {
+  return n > 1 ? t('placeN', { place: placeName(kind), n }) : placeName(kind);
 }
 
 /** "1h 25m" / "1시간 25분" for a number of minutes. */

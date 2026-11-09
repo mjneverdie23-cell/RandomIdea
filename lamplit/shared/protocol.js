@@ -2,11 +2,12 @@
 // type field `t`. The server never trusts the client: every incoming message goes through
 // sanitizeClientMessage(), which returns a clean copy or null.
 
-import { HALL, DESK_COUNT } from './layout.js';
+import { WORLD_LIMIT } from './layout.js';
+import { MAX_DESKS, isPlace } from './places.js';
 import { ADJECTIVES, ANIMALS, SUBJECTS, SWEATERS, LAMPS, EMOTES } from './words.js';
 import { isItem, SLOTS } from './catalog.js';
 
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 export const MAX_MESSAGE_BYTES = 512;
 
 /** What a visitor is doing. Walking is tracked separately (a member with a path). */
@@ -36,7 +37,7 @@ export const COOLDOWN = Object.freeze({
   session: 600,
   emote: 2000,
   gift: 20000,
-  switch: 3000,
+  switch: 1500,
   style: 1500,
   shop: 250,
   friend: 1500,
@@ -49,8 +50,8 @@ const isPoint = (p) =>
   p.length === 2 &&
   Number.isFinite(p[0]) &&
   Number.isFinite(p[1]) &&
-  Math.abs(p[0]) <= HALL.width / 2 &&
-  Math.abs(p[1]) <= HALL.depth / 2;
+  Math.abs(p[0]) <= WORLD_LIMIT &&
+  Math.abs(p[1]) <= WORLD_LIMIT;
 const pt = (p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100];
 export const isName = (n) =>
   Array.isArray(n) && n.length === 3 && isInt(n[0], 0, ADJECTIVES.length - 1) && isInt(n[1], 0, ANIMALS.length - 1) && isInt(n[2], 1, 99);
@@ -75,12 +76,16 @@ export function sanitizeClientMessage(msg) {
         if (!isTimeZone(msg.tz)) return null;
         out.tz = msg.tz;
       }
+      if (msg.place !== undefined && msg.place !== null) {
+        if (!isPlace(msg.place)) return null;
+        out.place = msg.place;
+      }
       return out;
     }
     case 'go':
       return isPoint(msg.from) && isPoint(msg.to) ? { t: 'go', from: pt(msg.from), to: pt(msg.to) } : null;
     case 'sit':
-      return isInt(msg.desk, 0, DESK_COUNT - 1) && isPoint(msg.from) ? { t: 'sit', desk: msg.desk, from: pt(msg.from) } : null;
+      return isInt(msg.desk, 0, MAX_DESKS - 1) && isPoint(msg.from) ? { t: 'sit', desk: msg.desk, from: pt(msg.from) } : null;
     case 'stand':
     case 'stop':
     case 'done':
@@ -96,9 +101,11 @@ export function sanitizeClientMessage(msg) {
     case 'emote':
       return isInt(msg.e, 0, EMOTES.length - 1) ? { t: 'emote', e: msg.e } : null;
     case 'gift':
-      return isInt(msg.desk, 0, DESK_COUNT - 1) ? { t: 'gift', desk: msg.desk } : null;
+      return isInt(msg.desk, 0, MAX_DESKS - 1) ? { t: 'gift', desk: msg.desk } : null;
     case 'switch':
       return isInt(msg.hall, 1, 100000) ? { t: 'switch', hall: msg.hall } : null;
+    case 'enter':
+      return isPlace(msg.place) ? { t: 'enter', place: msg.place } : null;
     case 'style': {
       const out = { t: 'style' };
       if (msg.name !== undefined) {

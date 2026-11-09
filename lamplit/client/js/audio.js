@@ -1,6 +1,8 @@
-// All sound is synthesised at runtime with the Web Audio API: rain on the windows,
-// pages and pencils from the people around you (more of them when more lamps are lit),
-// the click of a lamp, and a soft bell when a session ends.
+// All sound is synthesised at runtime with the Web Audio API. Each place has its own
+// background: the hush of the library, the murmur of the coffee shop, the hum and
+// keyboards of the net café, the fountain and birds of the town square. On top: pages and
+// pencils from the people around you (more of them when more lamps are lit), optional
+// rain, the click of a lamp, doors, and a soft bell when a session ends.
 
 export class Sound {
   constructor({ volume = 0.7, muted = false, rain = true, roomSounds = true } = {}) {
@@ -10,6 +12,8 @@ export class Sound {
     this.rainOn = rain;
     this.roomOn = roomSounds;
     this.activity = 0;
+    this.place = 'library';
+    this.bed = null;
   }
 
   /** Must be called from a user gesture (the Enter button). */
@@ -29,8 +33,86 @@ export class Sound {
     this.sfx.gain.value = 0.9;
     this.sfx.connect(this.master);
     this.white = this.noiseBuffer(1.5, false);
+    this.loop = this.loopBuffer(6);
     this.startRain();
+    this.startBed(this.place);
     this.roomTimer = setInterval(() => this.roomTick(), 850);
+  }
+
+  /** The place you're in: crossfades to its background sound. */
+  setPlace(kind) {
+    if (kind === this.place && this.bed) return;
+    this.place = kind;
+    if (this.ctx) this.startBed(kind);
+  }
+
+  /** Looped stereo pink noise with the loop seam cross-faded away. */
+  loopBuffer(seconds) {
+    const ctx = this.ctx;
+    const fade = Math.floor(ctx.sampleRate * 0.5);
+    const raw = this.noiseBuffer(seconds + 0.5, true).getChannelData(0);
+    const len = raw.length - fade;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const out = buf.getChannelData(ch);
+      const shift = ch * 7919;
+      for (let i = 0; i < len; i++) {
+        const j = (i + shift) % len;
+        out[i] = j < fade ? raw[j] * (j / fade) + raw[len + j] * (1 - j / fade) : raw[j];
+      }
+    }
+    return buf;
+  }
+
+  /** A background bed per place: filtered noise, gently swelling. */
+  startBed(kind) {
+    const ctx = this.ctx;
+    const old = this.bed;
+    if (old) {
+      old.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
+      setTimeout(() => old.nodes.forEach((n) => n.stop?.()), 3000);
+    }
+    const recipes = {
+      library: [{ type: 'lowpass', f: 700, q: 0.5, gain: 0.025, lfo: 0.05 }],
+      cafe: [
+        { type: 'bandpass', f: 520, q: 0.9, gain: 0.16, lfo: 0.35 },
+        { type: 'bandpass', f: 1300, q: 1.4, gain: 0.05, lfo: 0.6 },
+      ],
+      netcafe: [
+        { type: 'lowpass', f: 220, q: 0.7, gain: 0.12, lfo: 0.02 },
+        { type: 'highpass', f: 5500, q: 0.5, gain: 0.012, lfo: 0.03 },
+      ],
+      square: [
+        { type: 'bandpass', f: 1400, q: 0.6, gain: 0.07, lfo: 0.2 },
+        { type: 'lowpass', f: 380, q: 0.6, gain: 0.12, lfo: 0.07 },
+      ],
+    };
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(this.master);
+    const nodes = [];
+    for (const r of recipes[kind] ?? []) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.loop;
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = r.type;
+      f.frequency.value = r.f;
+      f.Q.value = r.q;
+      const g = ctx.createGain();
+      g.gain.value = r.gain;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = r.lfo;
+      const depth = ctx.createGain();
+      depth.gain.value = r.gain * 0.45;
+      lfo.connect(depth).connect(g.gain);
+      src.connect(f).connect(g).connect(gain);
+      src.start(ctx.currentTime, Math.random() * 3);
+      lfo.start();
+      nodes.push(src, lfo);
+    }
+    gain.gain.setTargetAtTime(this.roomOn ? 1 : 0, ctx.currentTime, 0.8);
+    this.bed = { gain, nodes };
   }
 
   setVolume(v) {
@@ -50,6 +132,7 @@ export class Sound {
 
   setRoomSounds(on) {
     this.roomOn = on;
+    if (this.bed) this.bed.gain.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.4);
   }
 
   /** Number of lamps lit nearby; drives how often pages turn. */
@@ -202,11 +285,74 @@ export class Sound {
     this.tone({ freq: 1250, dur: 0.05, gain: 0.03, type: 'triangle' });
   }
 
+  /** Going through a door: the coffee shop's bell, or a soft door and latch. */
+  door(to) {
+    if (!this.ctx) return;
+    if (to === 'cafe' || this.place === 'cafe') {
+      this.tone({ freq: 1568, dur: 1.4, gain: 0.07 });
+      this.tone({ at: 0.09, freq: 2093, dur: 1.2, gain: 0.05 });
+      this.tone({ at: 0.18, freq: 1568, dur: 1.0, gain: 0.04 });
+    }
+    this.noise({ dur: 0.7, type: 'lowpass', freq: 500, sweepTo: 1400, q: 0.5, gain: 0.05 });
+    this.noise({ at: 0.5, dur: 0.05, type: 'bandpass', freq: 2400, q: 2, gain: 0.08 });
+  }
+
+  /** A short bird call: a few quick whistles. */
+  chirp(pan) {
+    const ctx = this.ctx;
+    const n = 2 + Math.floor(Math.random() * 4);
+    const base = 2600 + Math.random() * 1800;
+    for (let k = 0; k < n; k++) {
+      const t = ctx.currentTime + k * (0.09 + Math.random() * 0.05);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(base * (0.9 + Math.random() * 0.25), t);
+      o.frequency.exponentialRampToValueAtTime(base * (1.25 + Math.random() * 0.3), t + 0.06);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.025, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (p) p.pan.value = pan;
+      o.connect(g);
+      (p ? g.connect(p) : g).connect(this.sfx);
+      o.start(t);
+      o.stop(t + 0.1);
+    }
+  }
+
   roomTick() {
     if (!this.ctx || !this.roomOn || this.muted || document.hidden) return;
+    const pan = (Math.random() - 0.5) * 1.6;
+    const place = this.place;
+    if (place === 'square') {
+      if (Math.random() < 0.3) this.chirp(pan);
+      return;
+    }
+    if (place === 'cafe' && Math.random() < 0.12) {
+      // Cups and spoons.
+      const f = 2400 + Math.random() * 1600;
+      this.tone({ freq: f, dur: 0.25, gain: 0.018 });
+      this.tone({ at: 0.05, freq: f * 1.33, dur: 0.18, gain: 0.012 });
+      return;
+    }
+    if (place === 'cafe' && Math.random() < 0.025) {
+      // The espresso machine steaming milk.
+      this.noise({ dur: 2.2, type: 'bandpass', freq: 3200, sweepTo: 2200, q: 1.5, gain: 0.03, pan: -0.4 });
+      return;
+    }
     const p = Math.min(0.6, this.activity / 30);
     if (Math.random() > p) return;
-    const pan = (Math.random() - 0.5) * 1.6;
+    if (place === 'netcafe') {
+      // Typing, or a couple of mouse clicks.
+      const n = Math.random() < 0.3 ? 2 : 5 + Math.floor(Math.random() * 9);
+      let at = 0;
+      for (let k = 0; k < n; k++) {
+        this.noise({ at, dur: 0.025, type: 'highpass', freq: 3000 + Math.random() * 2000, gain: 0.02 + Math.random() * 0.015, pan });
+        at += n === 2 ? 0.11 : 0.06 + Math.random() * 0.07;
+      }
+      return;
+    }
     if (Math.random() < 0.55) {
       // A page turning.
       this.noise({ dur: 0.32 + Math.random() * 0.15, freq: 1400, sweepTo: 4200, q: 0.7, gain: 0.03 + Math.random() * 0.03, pan });

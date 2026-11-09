@@ -120,7 +120,7 @@ class MinHeap {
  * (first = start, last = destination), or null when no path exists. Start and goal
  * points inside furniture are moved to the nearest open cell.
  */
-export function findPath(grid, from, to, maxExpand = 40000) {
+export function findPath(grid, from, to, maxExpand = Math.max(40000, grid.cols * grid.rows)) {
   let start = nearestOpen(grid, cellOf(grid, from[0], from[1]));
   let goal = nearestOpen(grid, cellOf(grid, to[0], to[1]));
   if (start < 0 || goal < 0) return null;
@@ -131,9 +131,12 @@ export function findPath(grid, from, to, maxExpand = 40000) {
 
   const { cols, rows, blocked } = grid;
   const n = cols * rows;
-  const gScore = new Float32Array(n).fill(Infinity);
-  const came = new Int32Array(n).fill(-1);
-  const closed = new Uint8Array(n);
+  // Scratch arrays are kept on the grid and reused, so walking around doesn't churn memory.
+  grid.scratch ??= { gScore: new Float32Array(n), came: new Int32Array(n), closed: new Uint8Array(n) };
+  const { gScore, came, closed } = grid.scratch;
+  gScore.fill(Infinity);
+  came.fill(-1);
+  closed.fill(0);
   const gx = goal % cols;
   const gz = (goal - gx) / cols;
   const h = (idx) => {

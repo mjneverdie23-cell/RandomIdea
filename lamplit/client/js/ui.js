@@ -3,16 +3,19 @@
 // session, someone's desk), toasts, the connection overlay and the sign-in panel.
 // Buttons carry data-action attributes that map onto the `actions` object from main.js.
 
-import { t, getLang, formatMinutes, formatClock } from './i18n.js';
+import { t, getLang, formatMinutes, formatClock, placeName, placeLabel, placeIn } from './i18n.js';
 import { ICONS, EMOTE_ICONS } from './icons.js';
 import { SUBJECTS, subjectName } from '../shared/words.js';
 import { FOCUS_PRESETS } from '../shared/protocol.js';
+import { PLACE_KINDS } from '../shared/places.js';
 import { authHTML, accountHTML, shopHTML, profileHTML, settingsHTML, esc } from './views.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const EMOTE_KEYS = ['wave', 'stretch', 'cheer'];
+/** Icons for each place (and for going outside). */
+const PLACE_ICONS = { library: 'book', cafe: 'tea', netcafe: 'screen', square: 'tree' };
 const VIEWS = { shop: shopHTML, profile: profileHTML, settings: settingsHTML, account: accountHTML };
 
 export class UI {
@@ -35,6 +38,7 @@ export class UI {
       auth: $('#auth'),
       focusbar: $('#focusbar'),
       focusTime: $('#focus-time'),
+      fade: $('#fade'),
     };
     this.dockKey = '';
     this.model = null;
@@ -128,9 +132,15 @@ export class UI {
     this.el.hud.hidden = !on;
   }
 
-  setRoom(hall, count, cap, fo) {
-    this.el.roomPill.innerHTML = `<span>${esc(t('room', { n: hall }))}</span><span class="room-count"> · ${esc(t('liveHud', { fo: (fo ?? 0).toLocaleString() }))}</span>`;
-    this.el.roomPill.parentElement.title = `${t('room', { n: hall })} · ${t('roomCount', { n: count, cap })}`;
+  /** The header: where you are ("Coffee shop 2") and how many people are studying. */
+  setRoom(label, count, cap, fo) {
+    this.el.roomPill.innerHTML = `<span>${esc(label)}</span><span class="room-count"> · ${esc(t('liveHud', { fo: (fo ?? 0).toLocaleString() }))}</span>`;
+    this.el.roomPill.parentElement.title = `${label} · ${t('roomCount', { n: count, cap })} · ${t('placesTitle')}`;
+  }
+
+  /** Fades the screen out (going through a door) and back in. */
+  fade(on) {
+    this.el.fade.classList.toggle('on', Boolean(on));
   }
 
   setLumens(n) {
@@ -217,7 +227,7 @@ export class UI {
     d.hidden = false;
     this.el.emotes.hidden = false;
     this.model = model;
-    const key = [model.mode, model.desk, model.since, model.planned, model.mins, model.tag, model.subject, this.confirming, getLang()].join('|');
+    const key = [model.mode, model.desk, model.since, model.planned, model.mins, model.tag, model.subject, model.kind, model.heading, this.confirming, getLang()].join('|');
     if (key === this.dockKey) return;
     this.dockKey = key;
     d.dataset.mode = model.mode;
@@ -232,10 +242,23 @@ export class UI {
   dockHTML(m) {
     const lang = getLang();
     switch (m.mode) {
-      case 'standing':
-        return `<div class="hint"><span class="beacon" aria-hidden="true"></span>${esc(t('pickDesk'))}</div>`;
+      case 'standing': {
+        const doors = m.doors
+          .map((to) => `<button class="chip door-chip" data-action="door" data-v="${to}">${ICONS[PLACE_ICONS[to]] ?? ''}<span>${esc(m.indoor ? t('goOutside') : placeName(to))}</span></button>`)
+          .join('');
+        return `<div class="card standing">
+          <div class="hint inline"><span class="beacon" aria-hidden="true"></span>${esc(t(m.indoor ? 'pickDesk' : 'pickPlace'))}</div>
+          <div class="chips door-chips">${doors}</div>
+        </div>`;
+      }
       case 'walking':
-        return `<div class="hint">${esc(t('walking', { n: m.desk + 1 }))}</div>`;
+        if (m.heading) return `<div class="hint">${esc(t('headingTo', { place: placeIn(m.heading) }))}</div>`;
+        return `<div class="hint">${esc(m.bench ? t('walkingBench') : t('walking', { n: m.desk + 1 }))}</div>`;
+      case 'bench':
+        return `<div class="card bench">
+          <div class="card-head"><span class="eyebrow">${esc(t('bench'))}</span><button class="link" data-action="stand">${esc(t('standUp'))}</button></div>
+          <p class="muted small">${esc(t('benchHint'))}</p>
+        </div>`;
       case 'seated': {
         const lengths = [...FOCUS_PRESETS, 0]
           .map((v) => `<button class="chip${v === m.mins ? ' on' : ''}" data-action="mins" data-v="${v}" aria-pressed="${v === m.mins}" ${v === 0 ? `title="${esc(t('openLong'))}"` : ''}>${v === 0 ? t('open') : esc(t('minShort', { n: v }))}</button>`)
@@ -398,38 +421,59 @@ export class UI {
     </div>`;
   }
 
-  hallsHTML({ g, current, inFocus }) {
-    const rows = g.h
-      .map(([id, n]) => {
-        const here = id === current;
-        const full = n >= g.cap;
-        const right = here
-          ? `<span class="badge">${esc(t('youAreHere'))}</span>`
-          : full
-            ? `<span class="badge muted">${esc(t('full'))}</span>`
-            : `<button class="btn small" data-action="switchRoom" data-v="${id}" ${inFocus ? 'disabled' : ''}>${esc(t('join'))}</button>`;
-        return `<li class="room${here ? ' here' : ''}">
-          <div class="room-meta"><b>${esc(t('room', { n: id }))}</b><span class="muted">${n}/${g.cap}</span></div>
-          <div class="meter"><i style="transform:scaleX(${clamp01(n / g.cap).toFixed(3)})"></i></div>
-          ${right}
-        </li>`;
-      })
-      .join('');
+  /** The places sheet: each place with how many are there, and its rooms. */
+  hallsHTML({ g, current, kind, inFocus }) {
+    const cards = PLACE_KINDS.map((k, ki) => {
+      const rooms = g.h.filter((h) => h[2] === ki).sort((a, b) => a[3] - b[3]);
+      const people = rooms.reduce((sum, h) => sum + h[1], 0);
+      const here = k === kind;
+      const roomRows =
+        rooms.length > 1 || (here && rooms.length === 1 && rooms[0][0] !== current)
+          ? `<ul class="room-list">${rooms
+              .map(([id, n, , num, cap]) => {
+                const mine = id === current;
+                const right = mine
+                  ? `<span class="badge">${esc(t('youAreHere'))}</span>`
+                  : n >= cap
+                    ? `<span class="badge muted">${esc(t('full'))}</span>`
+                    : `<button class="btn small" data-action="switchRoom" data-v="${id}" ${inFocus ? 'disabled' : ''}>${esc(t('join'))}</button>`;
+                return `<li class="room${mine ? ' here' : ''}">
+                  <div class="room-meta"><b>${esc(placeLabel(k, num))}</b><span class="muted">${n}/${cap}</span></div>
+                  <div class="meter"><i style="transform:scaleX(${clamp01(n / cap).toFixed(3)})"></i></div>
+                  ${right}
+                </li>`;
+              })
+              .join('')}</ul>`
+          : '';
+      const action = here
+        ? `<span class="badge">${esc(t('youAreHere'))}</span>`
+        : `<button class="btn small primary" data-action="goPlace" data-v="${k}" ${inFocus ? 'disabled' : ''}>${esc(t('goThere'))}</button>`;
+      return `<li class="place-card place-${k}${here ? ' here' : ''}">
+        <div class="place-head"><span class="place-icon" aria-hidden="true">${ICONS[PLACE_ICONS[k]] ?? ''}</span>
+          <div class="place-meta"><b>${esc(placeName(k))}</b><span class="muted small">${esc(t(`placeAbout_${k}`))}</span></div>
+          ${action}</div>
+        <p class="muted small place-count">${esc(t(k === 'square' ? 'placeOutside' : 'placePeople', { n: people.toLocaleString() }))}</p>
+        ${roomRows}
+      </li>`;
+    }).join('');
     return `<div class="sheet-body">
-      <h2>${esc(t('rooms'))}</h2>
-      <p class="muted">${esc(t('roomsHint'))}</p>
-      <ul class="room-list">${rows}</ul>
+      <h2>${esc(t('placesTitle'))}</h2>
+      <p class="muted">${esc(t('placesHint'))}</p>
+      <ul class="place-list">${cards}</ul>
       ${inFocus ? `<p class="muted small">${esc(t('switchInFocus'))}</p>` : ''}
     </div>`;
   }
 
-  deskHTML({ desk, name, sweater, status, subject, teaWait }) {
+  deskHTML({ desk, bench, name, sweater, status, subject, teaWait }) {
+    const tea = bench
+      ? `<p class="muted">${esc(t('benchRest'))}</p>`
+      : `<button class="btn primary wide" data-action="gift" data-v="${desk}" ${teaWait > 0 ? 'disabled' : ''}>${ICONS.tea}<span>${esc(t('sendTea'))}</span></button>
+      ${teaWait > 0 ? `<p class="muted small">${esc(t('teaWait', { n: Math.ceil(teaWait / 1000) }))}</p>` : ''}`;
     return `<div class="sheet-body">
-      <div class="who"><span class="avatar-dot" style="--c:${hex(sweater)}"></span><div><b>${esc(name)}</b><span class="muted">${esc(t('desk', { n: desk + 1 }))}</span></div></div>
-      <p class="status">${esc(status)}</p>
+      <div class="who"><span class="avatar-dot" style="--c:${hex(sweater)}"></span><div><b>${esc(name)}</b><span class="muted">${esc(bench ? t('bench') : t('desk', { n: desk + 1 }))}</span></div></div>
+      <p class="status">${esc(bench ? t('restingOutside') : status)}</p>
       ${subject ? `<p class="muted">${esc(t('subject'))} · ${esc(subject)}</p>` : ''}
-      <button class="btn primary wide" data-action="gift" data-v="${desk}" ${teaWait > 0 ? 'disabled' : ''}>${ICONS.tea}<span>${esc(t('sendTea'))}</span></button>
-      ${teaWait > 0 ? `<p class="muted small">${esc(t('teaWait', { n: Math.ceil(teaWait / 1000) }))}</p>` : ''}
+      ${tea}
       <p class="muted small">${esc(t('noChat'))}</p>
     </div>`;
   }

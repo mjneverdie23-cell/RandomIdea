@@ -2,7 +2,7 @@
 // Pure functions of their models; ui.js puts them on screen and main.js handles the
 // data-action buttons inside them.
 
-import { t, getLang, formatMinutes, LANGS } from './i18n.js';
+import { t, getLang, formatMinutes, LANGS, placeIn } from './i18n.js';
 import { ICONS } from './icons.js';
 import { ITEMS, ITEM, CATEGORIES, itemName } from '../shared/catalog.js';
 import { SWEATERS, LAMPS, displayName } from '../shared/words.js';
@@ -167,9 +167,11 @@ function statsHTML(me) {
 
 function friendStatus(f, now) {
   if (!f.online) return t('friendAway');
-  if (f.st === STATE.FOCUS) return t('friendFocus', { n: f.hall, t: formatMinutes((now - f.since) / 60_000) });
-  if (f.st === STATE.BREAK) return t('friendBreak', { n: f.hall });
-  return t('friendHere', { n: f.hall });
+  const place = placeIn(f.place, f.n);
+  if (f.st === STATE.FOCUS) return t('friendFocusAt', { place, t: formatMinutes((now - f.since) / 60_000) });
+  if (f.st === STATE.BREAK) return t('friendBreakAt', { place });
+  if (f.place === 'square') return t('friendOutside');
+  return t('friendHereAt', { place });
 }
 
 function friendsHTML(me, lists, hall, now, inFocus) {

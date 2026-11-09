@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { HallManager, Hall } from '../server/halls.js';
 import { openDb } from '../server/db.js';
 import { ProfileService } from '../server/profiles.js';
-import { DESKS } from '../shared/layout.js';
+import { PLACES } from '../shared/places.js';
+
+const DESKS = PLACES.library.desks;
 import { STATE, PROTOCOL, RESUME_GRACE_MS, OPEN_FOCUS_CAP, TEA_MS } from '../shared/protocol.js';
 
 const MIN = 60_000;
@@ -409,8 +411,94 @@ test('friends: accounts add each other by code and see where the other is', asyn
   advance(2000);
   mgr.handle(a.c, { t: 'friends' });
   const f = a.c.last('friends').friends[0];
-  assert.deepEqual([f.id, f.online, f.hall], [rb.id, true, 1]);
+  assert.deepEqual([f.id, f.online, f.hall, f.place, f.n], [rb.id, true, 1, 'library', 1]);
+  advance(2000);
+  mgr.handle(b.c, { t: 'enter', place: 'cafe' });
+  advance(2000);
+  mgr.handle(a.c, { t: 'friends' });
+  const moved = a.c.last('friends').friends[0];
+  assert.deepEqual([moved.place, moved.n], ['cafe', 1], 'friends see you move to the coffee shop');
   advance(2000);
   mgr.handle(b.c, { t: 'friendRemove', id: ra.id });
   assert.equal(a.c.last('friends').friends.length, 0);
+});
+
+// ---------------------------------------------------------------- places
+
+test('rooms belong to a place; new visitors start in the library unless they ask for another', () => {
+  const { mgr, join } = setup();
+  const a = join();
+  assert.deepEqual([a.c.last('welcome').place, a.c.last('welcome').n], ['library', 1]);
+  const b = join({ place: 'netcafe' });
+  const w = b.c.last('welcome');
+  assert.equal(w.place, 'netcafe');
+  assert.equal(w.n, 1);
+  assert.notEqual(w.hall, 1);
+  assert.equal(mgr.halls.get(w.hall).desks.length, PLACES.netcafe.desks.length);
+  const summary = mgr.globalSummary().h;
+  assert.deepEqual(summary.find((h) => h[0] === w.hall), [w.hall, 1, 2, 1, PLACES.netcafe.desks.length], '[id, people, place, number, capacity]');
+});
+
+test('going out to the square and into the coffee shop: you appear at the door you used', () => {
+  const { mgr, join, me, advance } = setup();
+  const a = join();
+  const b = join();
+  mgr.handle(a.c, { t: 'sit', desk: 4, from: me(a.c).pos });
+  advance(60_000);
+  mgr.handle(a.c, { t: 'focus', mins: 25, tag: 0 });
+  advance(5 * MIN);
+  mgr.handle(a.c, { t: 'enter', place: 'square' });
+  const out = a.c.last('welcome');
+  assert.equal(out.place, 'square');
+  assert.equal(a.c.last('earn').mins, 5, 'leaving ends the session and credits it');
+  const arrive = PLACES.square.arrive.library;
+  const [x, z] = me(a.c).pos;
+  assert.ok(Math.abs(x - arrive.x) <= arrive.w / 2 && Math.abs(z - arrive.z) <= arrive.d / 2, 'in front of the library');
+  assert.equal(mgr.halls.get(1).desks[4], 0, 'the desk is free again');
+  advance(250);
+  assert.ok(b.c.events('l').some((e) => e[1] === a.id), 'the library sees you leave');
+
+  mgr.handle(a.c, { t: 'enter', place: 'cafe' });
+  assert.equal(a.c.last('err').code, 'wait', 'one door at a time');
+  advance(2000);
+  mgr.handle(a.c, { t: 'enter', place: 'cafe' });
+  assert.equal(a.c.last('welcome').place, 'cafe');
+  const spawn = PLACES.cafe.spawn;
+  assert.ok(Math.abs(me(a.c).pos[0] - spawn.x) <= spawn.w / 2, 'just inside the coffee shop door');
+  advance(2000);
+  mgr.handle(a.c, { t: 'enter', place: 'cafe' });
+  assert.equal(a.c.last('err').code, 'here');
+});
+
+test('benches: you can sit outside but not start a session, and tea is for desks', () => {
+  const { mgr, join, me, advance } = setup();
+  const a = join({ place: 'square' });
+  const b = join({ place: 'square' });
+  mgr.handle(a.c, { t: 'sit', desk: 0, from: me(a.c).pos });
+  assert.equal(me(a.c).desk, 0);
+  advance(30_000);
+  mgr.handle(a.c, { t: 'focus', mins: 25, tag: 0 });
+  assert.equal(a.c.last('err').code, 'bench');
+  assert.equal(me(a.c).state, STATE.SEATED);
+  mgr.handle(a.c, { t: 'rest', mins: 5 });
+  assert.equal(a.c.last('err').code, 'bench');
+  mgr.handle(b.c, { t: 'gift', desk: 0 });
+  assert.equal(b.c.last('err').code, 'nogift');
+  mgr.handle(a.c, { t: 'sit', desk: PLACES.square.desks.length, from: me(a.c).pos });
+  assert.equal(me(a.c).desk, 0, 'no seat past the last bench');
+});
+
+test('each place fills its own rooms; empty extra rooms close, the first of each place stays', () => {
+  const { mgr, join } = setup({ capacity: 1, maxHalls: 6 });
+  const a = join({ place: 'cafe' });
+  const b = join({ place: 'cafe' });
+  const wa = a.c.last('welcome');
+  const wb = b.c.last('welcome');
+  assert.deepEqual([wa.place, wa.n, wb.place, wb.n], ['cafe', 1, 'cafe', 2]);
+  mgr.leave(b.c, { immediate: true });
+  assert.ok(!mgr.halls.has(wb.hall), 'the second coffee shop closed');
+  mgr.leave(a.c, { immediate: true });
+  assert.ok(mgr.halls.has(wa.hall), 'the first coffee shop stays open');
+  const c = join({ place: 'cafe' });
+  assert.equal(c.c.last('welcome').hall, wa.hall);
 });
