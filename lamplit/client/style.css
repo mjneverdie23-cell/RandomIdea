@@ -767,3 +767,201 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .place-tag small { color: var(--muted); font-weight: 600; margin-left: 6px; }
 body.focus-view .place-tag { display: none; }
+
+/* ------------------------------------------------------------ world map mode */
+#fade .fade-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  font: 600 18px/1.3 var(--font);
+  opacity: 0;
+  transition: opacity 0.3s ease 0.1s;
+}
+#fade.flying .fade-label { opacity: 1; }
+#fade .fade-label svg { width: 28px; height: 28px; color: var(--accent); animation: fly 1.4s ease-in-out infinite; }
+@keyframes fly { 0%, 100% { transform: translate(-4px, 3px) rotate(-6deg); } 50% { transform: translate(4px, -3px) rotate(4deg); } }
+
+#world-btn svg { color: #9fd3ff; }
+@media (max-width: 560px) { #world-btn { display: none; } }
+
+#world {
+  position: fixed;
+  inset: 0;
+  z-index: 52;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--safe-top) + 12px) 12px calc(var(--safe-bottom) + 12px);
+  background: rgba(6, 9, 20, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+#world.in { opacity: 1; }
+.world-card {
+  position: relative;
+  width: min(1120px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 22px 22px 18px;
+  border-radius: 22px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+}
+.world-card h2 { margin: 0 44px 4px 0; font: 700 24px/1.2 var(--serif); }
+.world-card > p { margin: 0 0 14px; }
+.world-card .sheet-close { position: absolute; right: 14px; top: 14px; }
+.world-map {
+  position: relative;
+  aspect-ratio: 1000 / 435;
+  border-radius: 16px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, #1f4a73 0%, #12304f 60%, #0b1f36 100%);
+  border: 1px solid rgba(160, 200, 255, 0.15);
+}
+.map-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.map-svg .graticule path { stroke: rgba(170, 210, 255, 0.08); stroke-width: 1; fill: none; }
+.map-svg path.land {
+  fill: #3a4d68;
+  stroke: #1a2a40;
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  cursor: pointer;
+  transition: fill 0.15s ease;
+}
+.map-svg path.land:hover { fill: #4f6788; }
+.map-svg path.avail-egypt { fill: #e3b25a; }
+.map-svg path.avail-italy { fill: #7cc48a; }
+.map-svg path.avail-japan { fill: #f29bb5; }
+.map-svg path.avail:hover { filter: brightness(1.15); }
+.map-svg path.flash { animation: soon-flash 0.7s ease; }
+@keyframes soon-flash { 0%, 100% { fill: #3a4d68; } 40% { fill: #8a9bb8; } }
+.map-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(10, 16, 30, 0.9);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid var(--line-strong);
+}
+.map-pin {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.map-pin .pin-dot {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 196, 107, 0.35), 0 0 16px rgba(255, 196, 107, 0.8);
+  z-index: 1;
+  animation: pin-pulse 1.8s ease-in-out infinite;
+}
+@keyframes pin-pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(255, 196, 107, 0.35), 0 0 12px rgba(255, 196, 107, 0.6); } 50% { box-shadow: 0 0 0 8px rgba(255, 196, 107, 0.1), 0 0 22px rgba(255, 196, 107, 0.9); } }
+.map-pin .pin-badge {
+  position: absolute;
+  top: -4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 7px;
+  border-radius: 999px;
+  background: rgba(12, 18, 34, 0.92);
+  border: 1px solid rgba(255, 196, 107, 0.55);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.map-pin .pin-badge svg { width: 18px; height: 18px; color: var(--accent); }
+.map-pin.lbl-right .pin-badge { left: 25px; }
+.map-pin.lbl-left .pin-badge { right: 25px; }
+.map-pin:hover .pin-badge, .map-pin.selected .pin-badge { border-color: var(--accent); transform: scale(1.06); }
+.map-pin.selected .pin-badge { background: var(--accent); color: var(--accent-ink); }
+.map-pin.selected .pin-badge svg { color: var(--accent-ink); }
+.map-pin.here .pin-dot { background: #8fe3d2; box-shadow: 0 0 0 3px rgba(143, 227, 210, 0.35), 0 0 16px rgba(143, 227, 210, 0.8); }
+
+.dests { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.dest {
+  display: grid;
+  grid-template-rows: 92px 1fr;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.dest.selected { border-color: var(--accent); transform: translateY(-2px); }
+.dest.here { border-color: rgba(143, 227, 210, 0.6); }
+.dest-art { border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; }
+.dest-egypt .dest-art { background: linear-gradient(160deg, #f6d38a 0%, #e0a24f 55%, #b8743a 100%); }
+.dest-italy .dest-art { background: linear-gradient(160deg, #f3e2c0 0%, #d9a86a 50%, #6f9a5a 100%); }
+.dest-japan .dest-art { background: linear-gradient(160deg, #fbd3df 0%, #f29bb5 50%, #c8402c 100%); }
+.dest-town .dest-art { background: linear-gradient(160deg, #3a4d78 0%, #24304f 60%, #141b30 100%); }
+.dest-icon { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; background: rgba(255, 255, 255, 0.28); color: #2b1904; }
+.dest-town .dest-icon { color: var(--accent); background: rgba(255, 196, 107, 0.12); }
+.dest-icon svg { width: 30px; height: 30px; }
+.dest-body { padding: 12px 14px 14px; display: grid; gap: 6px; align-content: start; }
+.dest-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dest-head b { font-size: 17px; }
+.dest-body p { margin: 0; }
+.dest-body .btn, .dest-body .badge { justify-self: start; }
+.dest-body .btn svg { width: 16px; height: 16px; }
+
+.world-banner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(120deg, rgba(79, 143, 216, 0.22), rgba(242, 155, 181, 0.16));
+  border: 1px solid rgba(160, 200, 255, 0.25);
+}
+.world-globe { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: rgba(159, 211, 255, 0.16); color: #9fd3ff; }
+.world-banner-text { display: grid; gap: 2px; min-width: 0; }
+.home-btn { margin-top: 12px; }
+.place-tag svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; color: var(--accent); }
+.world-chip svg { color: #9fd3ff !important; }
+
+@media (max-width: 900px) {
+  .dests { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .world-card { padding: 16px 14px 14px; border-radius: 18px; }
+  .world-card h2 { font-size: 20px; }
+  .dests { grid-template-columns: 1fr; }
+  .dest { grid-template-rows: none; grid-template-columns: 76px 1fr; }
+  /* Just the icon, right against its dot, so each country reads as one marker. */
+  .map-pin .pin-badge { padding: 4px; top: -1px; }
+  .map-pin .pin-badge b { display: none; }
+  .map-pin .pin-badge svg { width: 14px; height: 14px; }
+  .map-pin.lbl-right .pin-badge { left: 17px; }
+  .map-pin.lbl-left .pin-badge, .map-pin.pin-japan .pin-badge { left: auto; right: 17px; }
+  .world-banner { grid-template-columns: auto 1fr; }
+  .world-banner .btn { grid-column: 1 / -1; }
+}

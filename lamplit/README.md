@@ -6,6 +6,11 @@ A browser-based online study game. You're a little student in a small town. You 
 **turn on your lamp**. Everyone else in the room is doing the same. You can see their lamps glowing,
 but there is **no chat**, just the quiet company of other people working.
 
+Or open the **world map** and travel. Study inside the **Great Pyramid** and step out into the
+Giza desert with its Sphinx and camels, study in the arena of the **Colosseum** and walk out into
+the streets of Rome, or study in a **temple hall in Japan** and wander its garden. More countries
+are on their way.
+
 Every minute your lamp is on earns **lumens (✦)**. Spend them in the **shop** on clothes,
 accessories, pets and things to hold; everyone sees your look. Play as a guest straight away, or
 create an account to keep your progress everywhere and add friends.
@@ -16,13 +21,22 @@ create an account to keep your progress everywhere and add friends.
 |---|---|---|
 | ![The library](docs/library.jpg) | ![The coffee shop](docs/cafe.jpg) | ![The net café](docs/netcafe.jpg) |
 
+![The world map: Egypt, Italy and Japan are open, and the rest of the world is coming soon](docs/world-map.jpg)
+
+| | Egypt | Italy | Japan |
+|---|---|---|---|
+| **Study inside** | ![Desks in a torch-lit hall inside the Great Pyramid](docs/egypt-pyramid.jpg) | ![Desks on the arena floor of the Colosseum](docs/italy-colosseum.jpg) | ![Low desks on tatami in a temple hall](docs/japan-temple.jpg) |
+| **Step outside** | ![Out in the desert: an obelisk, a market and camels](docs/egypt-outside.jpg) | ![Out in Rome: a piazza with a fountain](docs/italy-outside.jpg) | ![Out in the temple garden: stone lanterns and a torii gate](docs/japan-outside.jpg) |
+| **Look around** | ![The Great Pyramid from the desert](docs/egypt-giza.jpg) | ![The Colosseum from the street](docs/italy-rome.jpg) | ![The temple hall, the koi pond and the tunnel of torii](docs/japan-garden.jpg) |
+
 | Places | The shop, with a 3D try-on | Your profile |
 |---|---|---|
 | ![The places sheet](docs/places.jpg) | ![The shop](docs/shop.jpg) | ![The profile](docs/profile.jpg) |
 
 <p align="center">
-  <img src="docs/phone-signin.jpg" width="280" alt="Signing in on a phone">
-  <img src="docs/phone.jpg" width="280" alt="The first-visit tour on a phone">
+  <img src="docs/phone-signin.jpg" width="260" alt="Signing in on a phone">
+  <img src="docs/phone.jpg" width="260" alt="The first-visit tour on a phone">
+  <img src="docs/phone-map.jpg" width="260" alt="The world map on a phone">
 </p>
 
 Lamplit is an original game in the "quiet shared space" genre that online temples such as
@@ -50,10 +64,11 @@ the bots buy pets and clothes, which makes the place look lived-in:
 START_LUMENS=2500 AUTH_PER_MIN=100000 AUTH_BURST=100000 MAX_CONN_PER_IP=100000 npm start
 npm run bots -- --count 90                  # spread across every place
 npm run bots -- --count 20 --place square   # a crowd outside
+npm run bots -- --count 30 --place pyramid  # fill the Great Pyramid
 ```
 
-Run the tests (59 tests covering every place's layout, pathfinding, protocol validation, room
-logic, moving between places, accounts and passwords, the shop and the economy, friends, and a
+Run the tests (62 tests covering every place's layout, pathfinding, protocol validation, room
+logic, moving between places and countries, accounts and passwords, the shop and the economy, friends, and a
 real server with real HTTP and WebSocket clients):
 
 ```bash
@@ -73,6 +88,9 @@ npm test
    another, or stay.
 7. **Go outside** any time: walk out of the door (or tap *Go outside*) to the town square, sit on
    a bench, and walk into another building.
+8. **Travel the world**: tap the globe at the top (or the airport shuttle at the bus stop), pick
+   Egypt, Italy or Japan, and you land inside that country's building. Walk out of its door to
+   look around outside.
 
 ### The places
 
@@ -94,6 +112,31 @@ You can move between places in two ways:
 Each place has its own background sound: a hushed library, the murmur and cups of the coffee shop
 (with a bell on its door), the hum and keyboards of the net café, and the fountain and birds outside.
 
+### World map mode
+
+The town is the default. Tap the **globe** at the top right (or the airport shuttle at the bus stop
+in the square) to open the world map. Every country is on it. The ones you can visit light up and
+wear a pin; point at or tap any other country and it says *coming soon*. Pick a country and tap
+**Travel**: you land inside its building, and its door takes you outside.
+
+| | Inside: study | Outside: walk around and rest |
+|---|---|---|
+| **Egypt** | **Great Pyramid.** A torch-lit hall with painted walls, columns of hieroglyphs, a golden sarcophagus, two seated colossi and a shaft of daylight. 48 desks with oil lamps. | **Giza desert.** The Great Pyramid with two more behind it, the Sphinx, an obelisk, an oasis with palms, a Bedouin tent with cushions, a market stall, ruins and dunes, resting camels and a caravan of camels on the move. |
+| **Italy** | **Colosseum.** Desks on the sand of the arena under the open sky, with tiers of seats all round, canvas sails, banners, braziers and statues. 48 desks. | **Rome.** The Colosseum from outside, a triumphal arch, a piazza with a fountain and pigeons, café tables under awnings, ochre streets with green shutters, umbrella pines and cypresses, scooters, a little car and a gelato cart. |
+| **Japan** | **Temple hall.** Low desks on tatami with floor cushions and paper lanterns, vermilion pillars, shoji screens, a golden altar with candles and incense, a taiko drum and gold folding screens. 36 desks. | **Temple garden.** The hall's curved roofs, a five-storey pagoda, a bell tower, a torii gate and a tunnel of torii, a koi pond with a bridge, a raked rock garden, stone lanterns, cherry and maple trees, a bamboo grove, and Mt. Fuji in the distance. |
+
+- Outside you can sit on the tent's cushions, stone blocks, café chairs or garden benches. As in the
+  square, those seats are for resting, not studying.
+- When you walk out of a building you turn round to face the view. The camera slides in front of
+  the building behind you rather than through it.
+- The places sheet lists the places of the country you're in, with buttons to open the world map
+  and to go **back to Lamplit town**. You can't travel during a session; end it first.
+- Each place has its own sounds: torches crackling in the pyramid, camel bells in the desert,
+  scooters and birds in Rome, a singing bowl in the temple and a bamboo water knocker in the garden.
+- Friends see where you are ("Studying in the Great Pyramid") and can join you there.
+
+### Everything else
+
 | | |
 |---|---|
 | **Shop** (bag icon, or tap your ✦ balance) | Clothes, accessories (hats, glasses, ears, neckwear), pets and things to hold, in 38 items. Try anything on the 3D preview before buying. Pets follow you around and settle by your desk; things you hold move onto the desk when you sit. |
@@ -103,7 +146,7 @@ Each place has its own background sound: a hushed library, the murmur and cups o
 | **Focus view** | Zooms in on your desk and hides everything except the timer. |
 | **Wave, stretch, cheer** | The three buttons at the bottom right (top right on phones). |
 | **Send a cup of tea** | Tap someone's desk to see what they're working on and leave them a cup of tea. |
-| **Rooms** | Each place holds as many people as it has seats (the square holds 100). When one fills up, a second copy opens. |
+| **Rooms** | Each place holds as many people as it has seats (the square and the other outdoor places hold 100). When one fills up, a second copy opens. |
 | **Languages** | English and Korean. Names, subjects, places and items appear in each viewer's own language. |
 
 ### Why there's no chat
@@ -138,7 +181,8 @@ lamplit/
 │   ├── rate-limit.js   token bucket
 │   └── config.js       environment variables
 ├── shared/             used by both the server and the browser
-│   ├── places.js       the four places: seats, furniture you can't walk through, doors, spawns
+│   ├── places.js       every place: seats, furniture you can't walk through, doors, spawns
+│   ├── world.js        the countries on the world map and their places (Egypt, Italy, Japan)
 │   ├── layout.js       seat kits, turned seats, obstacles, the walk grid, spawn points
 │   ├── path.js         A* pathfinding with smoothing
 │   ├── protocol.js     message types, limits and validation
@@ -150,7 +194,9 @@ lamplit/
 │   └── js/
 │       ├── main.js      ties everything together: places, doors, camera, input
 │       ├── place.js     one place on screen: instanced seats, lamps and their glow
-│       ├── scenes/      library.js, cafe.js, netcafe.js, square.js (+ common.js)
+│       ├── scenes/      library.js, cafe.js, netcafe.js, square.js, egypt.js, italy.js, japan.js
+│       │                (+ common.js, and outdoor.js: sky, fire, palms, petals, camera blockers)
+│       ├── worldmap.js  the world map screen (worldmap-data.js is the map itself, generated)
 │       ├── geo.js       merging shapes into a few meshes per place
 │       ├── avatars.js   instanced students, their clothes, items, pets and shadows
 │       ├── look.js      3D recipes for every shop item, built from simple shapes
@@ -160,7 +206,9 @@ lamplit/
 │       ├── api.js, net.js    sign-in requests; WebSocket with reconnects and clock sync
 │       ├── audio.js     Web Audio synthesis, with a background per place
 │       └── store.js, i18n.js, labels.js, icons.js, textures.js
-├── tools/bots.js       simulated visitors for demos and load tests
+├── tools/
+│   ├── bots.js         simulated visitors for demos and load tests
+│   └── build-world-map.js   writes client/js/worldmap-data.js from Natural Earth shapes
 └── tests/              node --test suites
 ```
 
@@ -183,12 +231,15 @@ lamplit/
 - Seats can face any direction. A seat records its rotation; the chair, lamp, notebook, held items and pets are placed in the seat's own frame.
 - New visitors join the busiest room of their place that still has space. When every room of a place is full, a new one opens, up to `MAX_HALLS` in total; after that, visitors wait in a queue. The first room of each place stays open; other empty rooms close.
 - Going through a door asks the server for a room of the next place. You appear just inside the door, or outside in front of the building you left.
+- A country is a group of places. Travelling asks for a room of the country's building; its door and the way back work like any other door. Outdoor places reuse the square's rules: seats there are for resting only.
 - If your connection drops, you keep your desk and session for 2 minutes. Logging in again (or opening a second tab) takes over your seat.
 
 **Rendering.**
 - Each place is built the first time you go there, then kept, so coming back is instant.
 - Each kind of seat part, body part and shop item is drawn once for the whole room (instancing), however many people use it. All of a place's decoration is merged into a few meshes by material.
 - Indoors, walls are one-sided and whatever hangs on a wall hides when the camera looks in through it, so you always see into the room. Doors stay visible.
+- Outdoors, big buildings (the pyramid, the Colosseum, the temple hall, the town's buildings) block the camera: it slides in front of them, drops toward shoulder height and looks out past you, instead of ending up inside a wall or on a roof.
+- The world map is an SVG of Natural Earth's 1:110m countries on an Equal Earth projection (74 KB, about 26 KB compressed), loaded the first time you open it. Country names come from the browser (`Intl.DisplayNames`), so they're in the viewer's language. To rebuild it, run `npm run map`.
 - Lamp glow, sunbeams, neon and contact shadows are fake light (additive and blended sprites), so a phone can draw a full room.
 - The 3D preview and the shop thumbnails share one extra WebGL context. Browsers cap live contexts and drop the oldest, which would be the room itself.
 
@@ -243,6 +294,7 @@ rooms. Accounts, lumens, wardrobes and stats live in the database and survive re
   - day and night for the square, and seasons (snow, autumn leaves)
   - seasonal items and events (a New Year wish hill)
   - friend study groups
+  - more countries on the world map (every other country already says *coming soon*)
   - more places (a rooftop, a park pavilion)
   - notifications when a session ends
   - mini-app versions (Toss, LINE)
@@ -251,3 +303,7 @@ rooms. Accounts, lumens, wardrobes and stats live in the database and survive re
 
 MIT, same as the rest of this repository. three.js is MIT-licensed
 (`client/vendor/THREE_LICENSE.txt`). The `ws` package is MIT-licensed.
+
+The world map's country shapes come from [Natural Earth](https://www.naturalearthdata.com/)
+(public domain) through the `world-atlas` package (ISC). `topojson-client` (ISC) and
+`i18n-iso-countries` (MIT) are used only by `tools/build-world-map.js` to generate the map.

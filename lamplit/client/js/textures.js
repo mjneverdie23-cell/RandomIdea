@@ -403,7 +403,7 @@ export function grass({ seed = 31, repeat = [24, 24] } = {}) {
     const rad = 20 + r() * 50;
     const grad = g.createRadialGradient(x, y, 0, x, y, rad);
     const light = r() < 0.5;
-    grad.addColorStop(0, light ? 'rgba(180, 210, 110, 0.25)' : 'rgba(60, 110, 50, 0.25)');
+    grad.addColorStop(0, light ? 'rgba(180, 210, 110, 0.12)' : 'rgba(60, 110, 50, 0.12)');
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grad;
     g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
@@ -890,6 +890,503 @@ export function facade({ wall = '#e8d9c0', frame = '#ffffff', glass = '#8fb3d1',
         g.fillRect(wx - 6, wy + wh + 4, ww + 12, 5);
       }
     }
+  }
+  return finish(c);
+}
+
+// ------------------------------------------------------------------ world places
+
+/** Desert sand with wind ripples. */
+export function sand({ seed = 61, repeat = [30, 30], base = '#e3c48f' } = {}) {
+  const [c, g] = canvas(256, 256);
+  const r = rng(seed);
+  g.fillStyle = base;
+  g.fillRect(0, 0, 256, 256);
+  for (let y = 4; y < 256; y += 7 + r() * 5) {
+    g.strokeStyle = `rgba(150, 105, 55, ${0.06 + r() * 0.06})`;
+    g.lineWidth = 1.2;
+    g.beginPath();
+    for (let x = 0; x <= 256; x += 8) g.lineTo(x, y + Math.sin(x / 22 + y) * 2.5);
+    g.stroke();
+  }
+  for (let i = 0; i < 2500; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.18)' : 'rgba(110,70,30,0.12)';
+    g.fillRect(r() * 256, r() * 256, 1, 1);
+  }
+  return finish(c, { repeat, aniso: 8 });
+}
+
+/** Little painted symbols: an ankh, an eye, a bird, a scarab, a lotus, water, a sun. */
+function glyph(g, kind, x, y, s, color) {
+  g.save();
+  g.translate(x, y);
+  g.scale(s, s);
+  g.strokeStyle = color;
+  g.fillStyle = color;
+  g.lineWidth = 2.2;
+  g.lineCap = 'round';
+  g.beginPath();
+  switch (kind % 8) {
+    case 0: // ankh
+      g.ellipse(0, -9, 4, 6, 0, 0, Math.PI * 2);
+      g.moveTo(0, -3);
+      g.lineTo(0, 13);
+      g.moveTo(-7, 0);
+      g.lineTo(7, 0);
+      g.stroke();
+      break;
+    case 1: // eye
+      g.moveTo(-10, 0);
+      g.quadraticCurveTo(0, -8, 10, 0);
+      g.quadraticCurveTo(0, 6, -10, 0);
+      g.stroke();
+      g.beginPath();
+      g.arc(0, -1, 2.6, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.moveTo(-2, 4);
+      g.lineTo(-4, 11);
+      g.moveTo(3, 4);
+      g.quadraticCurveTo(8, 10, 12, 8);
+      g.stroke();
+      break;
+    case 2: // bird
+      g.ellipse(0, 2, 8, 5, -0.2, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.arc(7, -5, 3.2, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.moveTo(9, -5);
+      g.lineTo(13, -3);
+      g.moveTo(-2, 7);
+      g.lineTo(-3, 13);
+      g.moveTo(2, 7);
+      g.lineTo(3, 13);
+      g.stroke();
+      break;
+    case 3: // scarab
+      g.ellipse(0, 2, 6, 8, 0, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.arc(0, -8, 3.5, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      for (const s2 of [-1, 1]) {
+        g.moveTo(s2 * 5, -2);
+        g.lineTo(s2 * 10, -6);
+        g.moveTo(s2 * 5, 4);
+        g.lineTo(s2 * 10, 8);
+      }
+      g.stroke();
+      break;
+    case 4: // lotus
+      for (const a of [-0.5, 0, 0.5]) {
+        g.save();
+        g.rotate(a);
+        g.beginPath();
+        g.ellipse(0, -6, 3, 8, 0, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+      }
+      g.fillRect(-1, 2, 2, 11);
+      break;
+    case 5: // water
+      for (let k = 0; k < 3; k++) {
+        g.moveTo(-10, -6 + k * 6);
+        for (let x = -10; x <= 10; x += 5) g.lineTo(x + 2.5, -6 + k * 6 + (x % 10 === 0 ? -3 : 3));
+      }
+      g.stroke();
+      break;
+    case 6: // sun
+      g.arc(0, 0, 7, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.moveTo(-12, 9);
+      g.lineTo(12, 9);
+      g.stroke();
+      break;
+    default: // seated figure
+      g.arc(0, -9, 3.6, 0, Math.PI * 2);
+      g.fill();
+      g.fillRect(-4, -5, 8, 9);
+      g.fillRect(-4, 4, 10, 3);
+      g.fillRect(4, 4, 3, 9);
+  }
+  g.restore();
+}
+
+/** Sandstone blocks with painted friezes of symbols, for the inside of the pyramid. */
+export function egyptWall({ seed = 3, repeat = [6, 1], wallHeight = 9 } = {}) {
+  const [c, g] = canvas(256, 512);
+  const r = rng(seed);
+  g.fillStyle = '#d8b37a';
+  g.fillRect(0, 0, 256, 512);
+  for (let i = 0; i < 3000; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,240,210,0.08)' : 'rgba(90,60,30,0.08)';
+    g.fillRect(r() * 256, r() * 512, 2, 2);
+  }
+  g.strokeStyle = 'rgba(110, 75, 40, 0.35)';
+  g.lineWidth = 2;
+  const rowH = 512 / (wallHeight * 1.6);
+  for (let row = 0; row * rowH < 512; row++) {
+    const y = row * rowH;
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(256, y);
+    g.stroke();
+    for (let x = (row % 2) * 48; x < 256; x += 96) {
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x, y + rowH);
+      g.stroke();
+    }
+  }
+  // A painted band at eye height, a band of symbols above it, and stars near the top.
+  const band = (y0, h, bg) => {
+    g.fillStyle = bg;
+    g.fillRect(0, y0, 256, h);
+    g.fillStyle = '#c9a43a';
+    g.fillRect(0, y0, 256, 3);
+    g.fillRect(0, y0 + h - 3, 256, 3);
+  };
+  const v = (m) => 512 - (m / wallHeight) * 512;
+  band(v(2.2), v(1.4) - v(2.2), '#1f5c7a');
+  for (let k = 0; k < 8; k++) {
+    g.fillStyle = k % 2 ? '#b8452f' : '#e6c46a';
+    g.fillRect(k * 32 + 4, v(2.2) + 8, 24, v(1.4) - v(2.2) - 16);
+  }
+  const symbolsTop = v(4.6);
+  const symbolsBottom = v(2.4);
+  g.fillStyle = 'rgba(230, 205, 150, 0.6)';
+  g.fillRect(0, symbolsTop, 256, symbolsBottom - symbolsTop);
+  const colors = ['#1f5c7a', '#b8452f', '#2f6b4a', '#7a4a1f'];
+  for (let col = 0; col < 6; col++) {
+    for (let row = 0; row < 3; row++) {
+      glyph(g, Math.floor(r() * 8), 22 + col * 42, symbolsTop + 26 + row * ((symbolsBottom - symbolsTop - 30) / 3), 0.95, colors[(col + row) % 4]);
+    }
+    g.fillStyle = 'rgba(90, 60, 30, 0.35)';
+    g.fillRect(col * 42 + 42, symbolsTop + 6, 2, symbolsBottom - symbolsTop - 12);
+  }
+  band(v(8.4), v(7.4) - v(8.4), '#123f5a');
+  g.fillStyle = '#f0d27a';
+  for (let k = 0; k < 10; k++) {
+    const x = 14 + k * 25;
+    const y = (v(8.4) + v(7.4)) / 2 + (k % 2 ? -6 : 6);
+    g.beginPath();
+    for (let p = 0; p < 10; p++) {
+      const a = (p / 10) * Math.PI * 2 - Math.PI / 2;
+      const rr = p % 2 ? 2.5 : 6;
+      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    g.fill();
+  }
+  return finish(c, { repeat });
+}
+
+/** A column of symbols for obelisks and pillars. */
+export function glyphColumn({ seed = 8, bg = '#d8b37a', ink = '#5a3a1a' } = {}) {
+  const [c, g] = canvas(64, 512);
+  const r = rng(seed);
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 64, 512);
+  g.strokeStyle = 'rgba(90,60,30,0.4)';
+  g.strokeRect(6, 6, 52, 500);
+  for (let y = 30; y < 500; y += 34) glyph(g, Math.floor(r() * 8), 32, y, 1.05, ink);
+  return finish(c);
+}
+
+/** Roman cobblestones ("sampietrini") laid in arcs. */
+export function cobbles({ seed = 33, repeat = [14, 14] } = {}) {
+  const [c, g] = canvas(256, 256);
+  const r = rng(seed);
+  g.fillStyle = '#5b5550';
+  g.fillRect(0, 0, 256, 256);
+  const s = 16;
+  for (let row = 0; row < 256 / s + 2; row++) {
+    for (let col = -1; col < 256 / s + 1; col++) {
+      const x = col * s + (row % 2) * (s / 2);
+      const y = row * s - Math.sin((col * s) / 256 * Math.PI) * 6;
+      const k = 0.75 + r() * 0.4;
+      g.fillStyle = `rgb(${(122 * k) | 0}, ${(116 * k) | 0}, ${(108 * k) | 0})`;
+      g.beginPath();
+      g.roundRect ? g.roundRect(x + 1.2, y + 1.2, s - 2.4, s - 2.4, 3) : g.rect(x + 1.2, y + 1.2, s - 2.4, s - 2.4);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.08)';
+      g.fillRect(x + 3, y + 3, s - 8, 2);
+    }
+  }
+  return finish(c, { repeat, aniso: 8 });
+}
+
+/** Travertine with tiers of arches, for the Colosseum. `levels` rows of `arches` openings. */
+export function arcade({ arches = 8, levels = 3, attic = true, seed = 21, stone = '#d9c8a6', dark = '#3b2e24', lit = null } = {}) {
+  const [c, g] = canvas(512, 512);
+  const r = rng(seed);
+  g.fillStyle = stone;
+  g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 4000; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,250,235,0.1)' : 'rgba(80,60,40,0.1)';
+    g.fillRect(r() * 512, r() * 512, 2, 2);
+  }
+  const atticH = attic ? 512 * 0.2 : 0;
+  const levelH = (512 - atticH) / levels;
+  const w = 512 / arches;
+  for (let L = 0; L < levels; L++) {
+    const top = atticH + L * levelH;
+    g.fillStyle = 'rgba(120, 95, 65, 0.35)';
+    g.fillRect(0, top, 512, 6);
+    for (let k = 0; k < arches; k++) {
+      const x = k * w;
+      const ax = x + w * 0.2;
+      const aw = w * 0.6;
+      const ay = top + levelH * 0.22;
+      const ah = levelH * 0.72;
+      g.fillStyle = lit && r() < 0.25 ? lit : dark;
+      g.beginPath();
+      g.moveTo(ax, ay + ah);
+      g.lineTo(ax, ay + aw / 2);
+      g.arc(ax + aw / 2, ay + aw / 2, aw / 2, Math.PI, 0);
+      g.lineTo(ax + aw, ay + ah);
+      g.closePath();
+      g.fill();
+      g.fillStyle = 'rgba(255, 245, 220, 0.25)';
+      g.fillRect(x + w * 0.04, top + 8, w * 0.1, levelH - 8);
+      g.fillRect(x + w * 0.86, top + 8, w * 0.1, levelH - 8);
+    }
+  }
+  if (attic) {
+    for (let k = 0; k < arches; k++) {
+      g.fillStyle = dark;
+      g.fillRect(k * w + w * 0.4, atticH * 0.4, w * 0.2, atticH * 0.3);
+    }
+    g.fillStyle = 'rgba(120, 95, 65, 0.4)';
+    g.fillRect(0, 0, 512, 5);
+  }
+  return finish(c);
+}
+
+/** Stone steps, for the Colosseum's seating. */
+export function steps({ seed = 4 } = {}) {
+  const [c, g] = canvas(256, 256);
+  const r = rng(seed);
+  g.fillStyle = '#cdb994';
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,250,235,0.12)' : 'rgba(80,60,40,0.12)';
+    g.fillRect(r() * 256, r() * 256, 2, 2);
+  }
+  for (let y = 0; y < 256; y += 32) {
+    g.fillStyle = 'rgba(90, 70, 45, 0.4)';
+    g.fillRect(0, y, 256, 4);
+    for (let x = (y / 32) % 2 ? 0 : 40; x < 256; x += 80) g.fillRect(x, y, 3, 32);
+  }
+  return finish(c, { repeat: [24, 1] });
+}
+
+/** Tatami mats: woven green-gold straw with dark cloth borders. */
+export function tatami({ seed = 5, repeat = [6, 6] } = {}) {
+  const [c, g] = canvas(256, 256);
+  const r = rng(seed);
+  g.fillStyle = '#c9bb7a';
+  g.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 3) {
+    g.fillStyle = `rgba(${r() < 0.5 ? '120, 110, 50' : '235, 225, 160'}, 0.25)`;
+    g.fillRect(0, y, 256, 1.5);
+  }
+  g.fillStyle = '#2d3a2a';
+  // Two mats: one long side horizontal, one vertical, borders along the long sides.
+  g.fillRect(0, 0, 256, 7);
+  g.fillRect(0, 121, 256, 7);
+  g.fillRect(0, 128, 7, 128);
+  g.fillRect(121, 128, 7, 128);
+  g.fillRect(249, 128, 7, 128);
+  return finish(c, { repeat, aniso: 8 });
+}
+
+/** Shoji: paper panes in a wooden lattice, glowing with daylight. */
+export function shoji({ cols = 4, rows = 6 } = {}) {
+  const [c, g] = canvas(256, 512);
+  g.fillStyle = '#f7f1e3';
+  g.fillRect(0, 0, 256, 512);
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, 'rgba(255,255,255,0.4)');
+  grad.addColorStop(1, 'rgba(230,215,185,0.3)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 512);
+  g.fillStyle = '#5a3f28';
+  for (let x = 0; x <= cols; x++) g.fillRect((x * 256) / cols - 3, 0, 6, 512);
+  for (let y = 0; y <= rows; y++) g.fillRect(0, (y * 512) / rows - 3, 256, 6);
+  g.fillRect(0, 512 - 60, 256, 60);
+  return finish(c);
+}
+
+/** A gold-leaf folding screen painted with pines, a crane and waves. */
+export function goldScreen({ seed = 9, panels = 6 } = {}) {
+  const [c, g] = canvas(512, 256);
+  const r = rng(seed);
+  for (let p = 0; p < panels; p++) {
+    const x = (p * 512) / panels;
+    for (let i = 0; i < 12; i++) {
+      g.fillStyle = `hsl(${42 + r() * 6}, ${70 + r() * 15}%, ${52 + r() * 10}%)`;
+      g.fillRect(x + (i % 3) * (512 / panels / 3), Math.floor(i / 3) * 64, 512 / panels / 3 + 1, 65);
+    }
+  }
+  g.strokeStyle = 'rgba(120, 85, 20, 0.35)';
+  for (let p = 1; p < panels; p++) {
+    g.beginPath();
+    g.moveTo((p * 512) / panels, 0);
+    g.lineTo((p * 512) / panels, 256);
+    g.stroke();
+  }
+  // Waves.
+  g.strokeStyle = '#2e5a8a';
+  g.lineWidth = 3;
+  for (let k = 0; k < 4; k++) {
+    g.beginPath();
+    for (let x = 0; x <= 512; x += 10) g.lineTo(x, 200 + k * 12 + Math.sin(x / 24 + k) * 6);
+    g.stroke();
+  }
+  // Pines.
+  const pine = (px, py, s) => {
+    g.strokeStyle = '#4a3020';
+    g.lineWidth = 6 * s;
+    g.beginPath();
+    g.moveTo(px, py + 90 * s);
+    g.quadraticCurveTo(px + 30 * s, py + 40 * s, px - 10 * s, py);
+    g.stroke();
+    g.fillStyle = '#2f5a3a';
+    for (const [dx, dy, w] of [[-30, 0, 46], [10, 30, 40], [-14, 56, 34]]) {
+      g.beginPath();
+      g.ellipse(px + dx * s, py + dy * s, w * s, 12 * s, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  pine(120, 50, 1);
+  pine(390, 70, 0.8);
+  // A crane in flight.
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.ellipse(270, 70, 26, 8, -0.2, 0, Math.PI * 2);
+  g.fill();
+  g.beginPath();
+  g.moveTo(255, 70);
+  g.lineTo(215, 30);
+  g.lineTo(265, 62);
+  g.moveTo(280, 66);
+  g.lineTo(320, 28);
+  g.lineTo(290, 70);
+  g.fill();
+  g.fillStyle = '#d63a2a';
+  g.beginPath();
+  g.arc(298, 62, 3.5, 0, Math.PI * 2);
+  g.fill();
+  return finish(c);
+}
+
+/** Raked gravel, in straight lines with rings around the rocks. */
+export function gravel({ seed = 2, repeat = [3, 2], rings = [] } = {}) {
+  const [c, g] = canvas(512, 256);
+  const r = rng(seed);
+  g.fillStyle = '#ddd8cc';
+  g.fillRect(0, 0, 512, 256);
+  for (let i = 0; i < 6000; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.4)' : 'rgba(120,115,100,0.25)';
+    g.fillRect(r() * 512, r() * 256, 1.5, 1.5);
+  }
+  g.strokeStyle = 'rgba(140, 132, 115, 0.55)';
+  g.lineWidth = 2;
+  const inRing = (x, y) => rings.some(([rx, ry, rr]) => Math.hypot(x - rx, y - ry) < rr + 26);
+  for (let y = 6; y < 256; y += 8) {
+    g.beginPath();
+    let pen = false;
+    for (let x = 0; x <= 512; x += 4) {
+      if (inRing(x, y)) {
+        pen = false;
+        continue;
+      }
+      if (!pen) g.moveTo(x, y);
+      else g.lineTo(x, y);
+      pen = true;
+    }
+    g.stroke();
+  }
+  for (const [rx, ry, rr] of rings) {
+    for (let k = 1; k <= 3; k++) {
+      g.beginPath();
+      g.arc(rx, ry, rr + k * 8, 0, Math.PI * 2);
+      g.stroke();
+    }
+  }
+  return finish(c, { repeat });
+}
+
+/** Dark grey roof tiles in rows, for Japanese roofs. */
+export function roofTiles({ repeat = [8, 4] } = {}) {
+  const [c, g] = canvas(128, 128);
+  g.fillStyle = '#4a4f57';
+  g.fillRect(0, 0, 128, 128);
+  for (let x = 0; x < 128; x += 16) {
+    const grad = g.createLinearGradient(x, 0, x + 16, 0);
+    grad.addColorStop(0, '#30343b');
+    grad.addColorStop(0.5, '#6a707a');
+    grad.addColorStop(1, '#30343b');
+    g.fillStyle = grad;
+    g.fillRect(x, 0, 16, 128);
+  }
+  g.fillStyle = 'rgba(20,22,26,0.5)';
+  for (let y = 0; y < 128; y += 32) g.fillRect(0, y, 128, 4);
+  return finish(c, { repeat });
+}
+
+/** A Roman facade: warm plaster, windows with green shutters, a shop at street level. */
+export function romanFacade({ wall = '#e3b36a', shutter = '#3f6b4a', rows = 3, cols = 4, seed = 15, shop = '#7a3b26' } = {}) {
+  const [c, g] = canvas(256, 256);
+  const r = rng(seed);
+  g.fillStyle = wall;
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1500; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,240,210,0.1)' : 'rgba(120,70,30,0.08)';
+    g.fillRect(r() * 256, r() * 256, 3, 3);
+  }
+  const groundH = 256 / (rows + 1);
+  const cw = 256 / cols;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const wx = x * cw + cw * 0.3;
+      const wy = y * groundH + groundH * 0.22;
+      const ww = cw * 0.4;
+      const wh = groundH * 0.6;
+      g.fillStyle = '#f2e6cf';
+      g.fillRect(wx - 4, wy - 6, ww + 8, wh + 10);
+      const open = r() < 0.4;
+      g.fillStyle = open ? '#3a2a20' : shutter;
+      g.fillRect(wx, wy, ww, wh);
+      if (!open) {
+        g.fillStyle = 'rgba(0,0,0,0.25)';
+        for (let k = 4; k < wh; k += 5) g.fillRect(wx + 2, wy + k, ww - 4, 1.5);
+        g.fillRect(wx + ww / 2 - 1, wy, 2, wh);
+      } else {
+        g.fillStyle = shutter;
+        g.fillRect(wx - ww * 0.45, wy, ww * 0.42, wh);
+        g.fillRect(wx + ww * 1.03, wy, ww * 0.42, wh);
+      }
+      if (r() < 0.3) {
+        g.fillStyle = '#5f8f3a';
+        g.fillRect(wx - 3, wy + wh, ww + 6, 6);
+        g.fillStyle = '#e04a6a';
+        for (let k = 0; k < 5; k++) g.fillRect(wx + k * (ww / 5), wy + wh - 3, 3, 3);
+      }
+    }
+  }
+  const gy = 256 - groundH;
+  g.fillStyle = 'rgba(0,0,0,0.15)';
+  g.fillRect(0, gy - 4, 256, 4);
+  for (let x = 0; x < cols; x++) {
+    g.fillStyle = shop;
+    g.fillRect(x * cw + cw * 0.12, gy + groundH * 0.18, cw * 0.76, groundH * 0.82);
+    g.fillStyle = 'rgba(255, 225, 160, 0.55)';
+    g.fillRect(x * cw + cw * 0.18, gy + groundH * 0.28, cw * 0.64, groundH * 0.5);
   }
   return finish(c);
 }

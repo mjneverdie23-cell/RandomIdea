@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PLACES, PLACE_KINDS, PLACE_CAP, MAX_DESKS } from '../shared/places.js';
+import { PLACES, PLACE_KINDS, PLACE_CAP, MAX_DESKS, COUNTRIES, TOWN, countryOf } from '../shared/places.js';
 import { KITS, buildWalkGrid, spawnPoint, seatLocal } from '../shared/layout.js';
 import { findPath, cellOf, isOpen, lineOpen, pathLength, samplePath } from '../shared/path.js';
 
@@ -8,7 +8,8 @@ const grids = Object.fromEntries(PLACE_KINDS.map((k) => [k, buildWalkGrid(PLACES
 const open = (kind, x, z) => isOpen(grids[kind], cellOf(grids[kind], x, z));
 
 test('every place numbers its seats in order, with no two in the same spot', () => {
-  assert.deepEqual(PLACE_KINDS, ['library', 'cafe', 'netcafe', 'square']);
+  assert.deepEqual(PLACE_KINDS.slice(0, 4), ['library', 'cafe', 'netcafe', 'square'], 'the town keeps its indexes');
+  assert.deepEqual(PLACE_KINDS.slice(4), ['pyramid', 'giza', 'colosseum', 'rome', 'temple', 'garden']);
   for (const kind of PLACE_KINDS) {
     const { desks } = PLACES[kind];
     assert.ok(desks.length > 0, `${kind} has seats`);
@@ -20,9 +21,14 @@ test('every place numbers its seats in order, with no two in the same spot', () 
   for (const kind of ['library', 'cafe', 'netcafe']) assert.equal(PLACE_CAP[kind], PLACES[kind].desks.length, `one person per seat in the ${kind}`);
 });
 
-test('study seats are indoors; the square only has benches, which are for resting', () => {
-  for (const kind of ['library', 'cafe', 'netcafe']) assert.ok(PLACES[kind].desks.every((d) => !d.rest), kind);
-  assert.ok(PLACES.square.desks.every((d) => d.kit === 'bench' && d.rest));
+test('study seats are indoors; outside, every seat is for resting', () => {
+  for (const kind of PLACE_KINDS) {
+    const p = PLACES[kind];
+    if (p.indoor) assert.ok(p.desks.every((d) => !d.rest), `${kind} has study desks`);
+    else assert.ok(p.desks.every((d) => d.rest), `${kind} only has seats for resting`);
+  }
+  assert.ok(PLACES.square.desks.every((d) => d.kit === 'bench'));
+  assert.ok(PLACES.temple.desks.every((d) => d.kit === 'low'), 'low desks and cushions in the temple');
 });
 
 test('a seat faces its desk: the chair is behind it and you approach from further back', () => {
@@ -38,6 +44,8 @@ test('a seat faces its desk: the chair is behind it and you approach from furthe
       if (k.chair > 0) {
         assert.ok(ahead({ x: d.x, z: d.z }) > 0.3, `${kind} desk ${d.i} is in front of its chair`);
         assert.ok(ahead(d.approach) < -0.3, `${kind} desk ${d.i} is approached from behind`);
+      } else if (k.approachZ > 0) {
+        assert.ok(ahead(d.approach) < -0.5, `${kind} chair ${d.i} is approached from behind`);
       } else {
         assert.ok(ahead(d.approach) > 0.5, `${kind} bench ${d.i} is approached from the front`);
       }
@@ -70,6 +78,31 @@ test('the doors connect: every building opens onto the square and the square has
     assert.ok(PLACES.square.doors.some((d) => d.to === kind), `the square has a door to the ${kind}`);
     assert.ok(PLACES.square.arrive[kind], `walking out of the ${kind} puts you in front of it`);
   }
+});
+
+test('each country is a building and its outdoors, joined by a door; a visit starts inside', () => {
+  assert.deepEqual(Object.keys(COUNTRIES), ['egypt', 'italy', 'japan']);
+  for (const [name, c] of Object.entries(COUNTRIES)) {
+    const [inside, outside] = c.places;
+    assert.equal(c.start, inside);
+    assert.ok(PLACES[inside].indoor && !PLACES[outside].indoor, `${name}: a building and its outdoors`);
+    assert.deepEqual(PLACES[inside].doors.map((d) => d.to), [outside]);
+    assert.deepEqual(PLACES[outside].doors.map((d) => d.to), [inside]);
+    assert.ok(PLACES[outside].arrive[inside], `${name}: walking out puts you in front of the building`);
+    for (const k of c.places) assert.equal(countryOf(k), name);
+  }
+  for (const k of TOWN) assert.equal(countryOf(k), null, `${k} is in the town`);
+});
+
+test('the Colosseum floor is oval; the garden bridge crosses the pond', () => {
+  const { a, b } = PLACES.colosseum.arena;
+  assert.ok(open('colosseum', 0, 0) && open('colosseum', a - 1, 0) && open('colosseum', 0, b - 1), 'inside the arena');
+  assert.ok(!open('colosseum', a - 1.5, b - 1.5), 'the corners are the stands, not the arena');
+  const { pond } = PLACES.garden;
+  assert.ok(!open('garden', pond.x - 3, pond.z), 'the pond');
+  assert.ok(open('garden', -11, pond.z), 'the bridge over it');
+  const path = findPath(grids.garden, [-11, -1.6], [-11, 9.6]);
+  assert.ok(path && pathLength(path) < 12.5, 'straight across the bridge');
 });
 
 test('spawn and arrival points are walkable', () => {

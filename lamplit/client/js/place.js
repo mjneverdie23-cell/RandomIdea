@@ -7,7 +7,7 @@
 // by every seat in the place.
 
 import * as THREE from '../vendor/three.module.min.js';
-import { DESK_TOP, KITS } from '../shared/layout.js';
+import { KITS, deskTop } from '../shared/layout.js';
 import { LAMPS } from '../shared/words.js';
 import * as tex from './textures.js';
 import { HIDDEN, merge, box, cyl, instanced } from './geo.js';
@@ -41,6 +41,8 @@ export class PlaceView {
     this.updaters = [];
     this.cullers = [];
     this.doorPicks = [];
+    /** Big things outdoors the camera slides in front of rather than passing through. */
+    this.camBlockers = [];
     this.floors = [];
     this.clocks = [];
     this.board = null;
@@ -118,7 +120,7 @@ export class PlaceView {
         if (st.chairMesh) st.chairMesh.setMatrixAt(li, this.local(i, 0, 0, KITS[kit].chairZ, m));
         if (st.lamp) {
           const [lx, lz] = st.lamp.at;
-          this.local(i, lx, DESK_TOP, lz, m);
+          this.local(i, lx, deskTop(kit), lz, m);
           st.bodyMesh?.setMatrixAt(li, m);
           st.shadeMesh?.setMatrixAt(li, m);
           st.bulbMesh.setMatrixAt(li, m);
@@ -130,6 +132,7 @@ export class PlaceView {
         root.add(mesh);
       }
       if (st.shadeMesh) for (const i of list) this.setShade(i, 0);
+      if (st.lamp?.flame) this.hasFlames = true;
     }
 
     const mat = (o) => new THREE.MeshStandardMaterial(o);
@@ -165,7 +168,7 @@ export class PlaceView {
       if (st.books) {
         const [bx, bz, bs] = st.books;
         q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), (((i * 37) % 11) - 5) * 0.04);
-        this.books.setMatrixAt(i, this.tmpLocal.copy(this.frames[i]).multiply(m.compose(p.set(bx, DESK_TOP, bz), q, s.setScalar(bs ?? 1))));
+        this.books.setMatrixAt(i, this.tmpLocal.copy(this.frames[i]).multiply(m.compose(p.set(bx, deskTop(d.kit), bz), q, s.setScalar(bs ?? 1))));
         this.books.setColorAt(i, this.tmpColor.setHex(palette[i % palette.length]));
       } else {
         this.books.setMatrixAt(i, HIDDEN);
@@ -176,11 +179,11 @@ export class PlaceView {
       this.markers.setMatrixAt(i, HIDDEN);
       if (st.lamp) {
         const pool = st.lamp.pool;
-        this.deskPool.setMatrixAt(i, this.tmpLocal.copy(this.frames[i]).multiply(m.compose(p.set(pool[0], DESK_TOP + 0.004, pool[1]), q.identity(), s.set(pool[2], 1, pool[3]))));
+        this.deskPool.setMatrixAt(i, this.tmpLocal.copy(this.frames[i]).multiply(m.compose(p.set(pool[0], deskTop(d.kit) + 0.004, pool[1]), q.identity(), s.set(pool[2], 1, pool[3]))));
         const fl = st.lamp.floor;
         this.floorPool.setMatrixAt(i, this.tmpLocal.copy(this.frames[i]).multiply(m.compose(p.set(fl[0], 0.012, fl[1]), q.identity(), s.set(fl[2], 1, fl[2]))));
         const [lx, lz] = st.lamp.at;
-        const h = this.localPoint(i, lx + (st.lamp.halo?.[0] ?? 0), DESK_TOP + (st.lamp.halo?.[1] ?? 0.27), lz + (st.lamp.halo?.[2] ?? 0));
+        const h = this.localPoint(i, lx + (st.lamp.halo?.[0] ?? 0), deskTop(d.kit) + (st.lamp.halo?.[1] ?? 0.27), lz + (st.lamp.halo?.[2] ?? 0));
         haloPos.set([h.x, h.y, h.z], i * 3);
       } else {
         this.deskPool.setMatrixAt(i, HIDDEN);
@@ -212,6 +215,7 @@ export class PlaceView {
 
   show(scene, renderer) {
     scene.add(this.root);
+    this.root.updateMatrixWorld(true);
     scene.background = this.background;
     scene.fog = this.fog;
     renderer.toneMappingExposure = this.exposure;
@@ -241,7 +245,7 @@ export class PlaceView {
     this.occupied[i] = 1;
     const st = this.seatStyle[i];
     const at = st.notebook;
-    this.notebooks.setMatrixAt(i, notebook && at ? this.local(i, at[0], DESK_TOP, at[1]) : HIDDEN);
+    this.notebooks.setMatrixAt(i, notebook && at ? this.local(i, at[0], deskTop(this.desks[i].kit), at[1]) : HIDDEN);
     this.notebooks.instanceMatrix.needsUpdate = true;
     this.setShade(i, lampStyle);
   }
@@ -275,7 +279,7 @@ export class PlaceView {
     const at = this.seatStyle[i].tea;
     if (!at || this.teaOn[i] === (on ? 1 : 0)) return;
     this.teaOn[i] = on ? 1 : 0;
-    this.teaMesh.setMatrixAt(i, on ? this.local(i, at[0], DESK_TOP, at[1]) : HIDDEN);
+    this.teaMesh.setMatrixAt(i, on ? this.local(i, at[0], deskTop(this.desks[i].kit), at[1]) : HIDDEN);
     this.teaMesh.instanceMatrix.needsUpdate = true;
   }
 
@@ -306,7 +310,7 @@ export class PlaceView {
     const st = i >= 0 ? this.seatStyle[i] : null;
     if (st?.lamp) {
       const [lx, lz] = st.lamp.at;
-      const p = this.localPoint(i, lx, DESK_TOP + 0.24, lz + 0.05);
+      const p = this.localPoint(i, lx, deskTop(this.desks[i].kit) + 0.24, lz + 0.05);
       this.ownLight.position.copy(p);
       this.ownLight.color.copy(st.glow);
     }
@@ -393,8 +397,23 @@ export class PlaceView {
       this.paintLamp(i);
       if (v === t && this.flicker[i] <= 0) this.animating.delete(i);
     }
+    // Flames (oil lamps) keep flickering while they burn.
+    if (this.hasFlames) {
+      const c = this.tmpColor;
+      for (let i = 0; i < this.N; i++) {
+        const st = this.seatStyle[i];
+        const v = this.level[i];
+        if (!st.lamp?.flame || v < 0.05 || this.animating.has(i)) continue;
+        const f = 0.8 + 0.12 * Math.sin(time * 9 + i * 1.7) + 0.08 * Math.sin(time * 21 + i);
+        c.copy(st.glow).multiplyScalar(v * 0.8 * (st.lamp.strength ?? 1) * f);
+        this.haloColor[i * 3] = c.r;
+        this.haloColor[i * 3 + 1] = c.g;
+        this.haloColor[i * 3 + 2] = c.b;
+      }
+      this.haloAttr.needsUpdate = true;
+    }
     const own = this.ownDesk >= 0 ? this.level[this.ownDesk] : 0;
-    this.ownLight.intensity = own * 2.4;
+    this.ownLight.intensity = own * 2.4 * (this.hasFlames ? 0.9 + 0.1 * Math.sin(time * 11) : 1);
 
     if (this.markersOn) {
       const m = this.tmpMatrix;

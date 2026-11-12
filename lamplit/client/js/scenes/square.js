@@ -6,6 +6,7 @@ import * as THREE from '../../vendor/three.module.min.js';
 import * as tex from '../textures.js';
 import { Decor, decorMaterials, parts, merge, floorPlane, xform } from '../geo.js';
 import { HALF, door, wallClock, signMesh, tree, shadowDecal, box, cyl, sphere } from './common.js';
+import { pickBox, blockBox } from './outdoor.js';
 
 const IRON = 0x26262b;
 const STONE = 0xcdbfa6;
@@ -18,6 +19,10 @@ export function square(view) {
   const mats = decorMaterials();
   const decor = new Decor();
   const B = P.buildings;
+  // The camera slides in front of the buildings rather than through them.
+  blockBox(view, ...B.library, 10.5);
+  blockBox(view, ...B.cafe, 9.6);
+  blockBox(view, ...B.netcafe, 10.4);
 
   view.background = new THREE.Color(0xbfdcf4);
   view.fog = new THREE.Fog(0xd5e7f5, 60, 175);
@@ -30,7 +35,7 @@ export function square(view) {
     maxDist: 34,
     yawLimit: null,
     far: 340,
-    arrive: { library: 0.45, cafe: 0.85, netcafe: -0.85 },
+    arrive: { library: 0.45, cafe: 0.85, netcafe: -0.85, ...Object.fromEntries(['pyramid', 'giza', 'colosseum', 'rome', 'temple', 'garden'].map((k) => [k, 0.5])) },
     splash: { x: 0, z: 2, dist: 31, pitch: 0.5, swing: 0.45 },
   });
 
@@ -313,6 +318,7 @@ export function square(view) {
 
   // Name tags over each building, with how many people are inside.
   view.tags = [
+    ...(view.tags ?? []),
     { kind: 'library', at: [0, 11.0, B.library[3] + 0.6] },
     { kind: 'cafe', at: [B.cafe[2] + 0.6, 6.0, -2] },
     { kind: 'netcafe', at: [B.netcafe[0] - 0.6, 6.6, -2] },
@@ -505,6 +511,12 @@ export function square(view) {
     decor.add('gloss', IRON, cyl(0.04, 0.04, 2.6, 8), [bx0 - 0.6, 1.3, bz0]);
     const busSign = tex.sign({ text: 'BUS', sub: '버스 정류장', w: 256, h: 256, bg: '#2a6fb5', fg: '#ffffff', size: 0.36, subSize: 0.14, radius: 128 });
     signMesh(view, busSign, 0.7, 0.7, bx0 - 0.6, 2.75, bz0, 0);
+    // The airport shuttle stops here: tapping the bus stop opens the world map.
+    const airport = tex.sign({ text: '✈ AIRPORT', sub: '공항 셔틀 · World map', w: 512, h: 160, bg: '#1d3a5f', fg: '#ffffff', border: '#ffc46b', size: 0.36, subSize: 0.18 });
+    signMesh(view, airport, 2.2, 0.69, cx, 2.0, bz1 - 0.12, Math.PI);
+    signMesh(view, airport, 2.2, 0.69, cx, 2.0, bz1 - 0.02, 0);
+    pickBox(view, 'world', cx - 0.4, 1.4, (bz0 + bz1) / 2, bx1 - bx0 + 1.6, 2.8, bz1 - bz0 + 0.6);
+    view.tags = [...(view.tags ?? []), { kind: 'world', at: [cx, 3.3, bz0] }];
   }
   decor.add('leaf', 0x4f8a42, box(W - 2, 1.0, 0.8), [0, 0.5, D / 2 - 0.3]);
   for (const s of [-1, 1]) decor.add('leaf', 0x4f8a42, box(0.8, 1.0, D / 2 - 5.6), [s * (W / 2 - 0.3), 0.5, (D / 2 + 5) / 2]);

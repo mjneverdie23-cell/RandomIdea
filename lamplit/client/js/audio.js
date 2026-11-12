@@ -86,6 +86,33 @@ export class Sound {
         { type: 'bandpass', f: 1400, q: 0.6, gain: 0.07, lfo: 0.2 },
         { type: 'lowpass', f: 380, q: 0.6, gain: 0.12, lfo: 0.07 },
       ],
+      // Deep stone hush and the roar of torches.
+      pyramid: [
+        { type: 'lowpass', f: 140, q: 0.7, gain: 0.16, lfo: 0.04 },
+        { type: 'bandpass', f: 900, q: 0.8, gain: 0.025, lfo: 1.3 },
+      ],
+      // Desert wind and blowing sand.
+      giza: [
+        { type: 'lowpass', f: 420, q: 0.6, gain: 0.16, lfo: 0.09 },
+        { type: 'bandpass', f: 2600, q: 0.9, gain: 0.025, lfo: 0.15 },
+      ],
+      // Wind across the open bowl, and the murmur of visitors far off.
+      colosseum: [
+        { type: 'lowpass', f: 320, q: 0.6, gain: 0.12, lfo: 0.06 },
+        { type: 'bandpass', f: 480, q: 1.0, gain: 0.05, lfo: 0.3 },
+      ],
+      // The city: distant traffic and voices, and the fountain.
+      rome: [
+        { type: 'bandpass', f: 420, q: 0.8, gain: 0.1, lfo: 0.25 },
+        { type: 'bandpass', f: 1500, q: 0.6, gain: 0.06, lfo: 0.2 },
+      ],
+      // Near silence in the hall.
+      temple: [{ type: 'lowpass', f: 260, q: 0.5, gain: 0.03, lfo: 0.03 }],
+      // A trickle of water and leaves in the breeze.
+      garden: [
+        { type: 'bandpass', f: 2200, q: 1.2, gain: 0.03, lfo: 0.4 },
+        { type: 'lowpass', f: 500, q: 0.6, gain: 0.07, lfo: 0.08 },
+      ],
     };
     const gain = ctx.createGain();
     gain.gain.value = 0;
@@ -328,6 +355,57 @@ export class Sound {
     if (place === 'square') {
       if (Math.random() < 0.3) this.chirp(pan);
       return;
+    }
+    if (place === 'giza') {
+      // A camel's bell now and then.
+      if (Math.random() < 0.08) {
+        const f = 1900 + Math.random() * 400;
+        for (let k = 0; k < 3; k++) this.tone({ at: k * 0.32, freq: f * (k % 2 ? 1.12 : 1), dur: 0.6, gain: 0.025 });
+      }
+      return;
+    }
+    if (place === 'rome') {
+      if (Math.random() < 0.06) {
+        // A scooter buzzing past.
+        const ctx = this.ctx;
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        const t0 = ctx.currentTime;
+        o.frequency.setValueAtTime(95, t0);
+        o.frequency.linearRampToValueAtTime(130, t0 + 1.2);
+        o.frequency.linearRampToValueAtTime(85, t0 + 2.6);
+        const f = ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 700;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.02, t0 + 1.0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.6);
+        o.connect(f).connect(g).connect(this.sfx);
+        o.start(t0);
+        o.stop(t0 + 2.7);
+      } else if (Math.random() < 0.15) this.chirp(pan);
+      return;
+    }
+    if (place === 'garden') {
+      if (Math.random() < 0.05) {
+        // The bamboo water knocker: a hollow knock.
+        this.tone({ freq: 420, dur: 0.25, gain: 0.08, type: 'triangle' });
+        this.tone({ freq: 840, dur: 0.12, gain: 0.03 });
+      } else if (Math.random() < 0.25) this.chirp(pan);
+      return;
+    }
+    if (place === 'temple' && Math.random() < 0.03) {
+      // A singing bowl, struck softly.
+      const f = 392;
+      this.tone({ freq: f, dur: 5, gain: 0.06 });
+      this.tone({ freq: f * 2.71, dur: 3, gain: 0.025 });
+      this.tone({ freq: f * 5.2, dur: 1.6, gain: 0.01 });
+      return;
+    }
+    if (place === 'pyramid' && Math.random() < 0.3) {
+      // Torches crackling.
+      for (let k = 0; k < 3; k++) this.noise({ at: k * 0.05 + Math.random() * 0.1, dur: 0.03, type: 'bandpass', freq: 1200 + Math.random() * 1600, q: 2, gain: 0.03, pan });
     }
     if (place === 'cafe' && Math.random() < 0.12) {
       // Cups and spoons.

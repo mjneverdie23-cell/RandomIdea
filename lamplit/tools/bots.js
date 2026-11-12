@@ -13,7 +13,7 @@
 // limit, e.g. AUTH_PER_MIN=100000 AUTH_BURST=100000 MAX_CONN_PER_IP=100000 npm start
 //
 // Options: --url ws://localhost:8080/ws  --count N  --room N  --ramp N per second
-//          --place library|cafe|netcafe|square|mix (default mix)
+//          --place library|cafe|netcafe|square|pyramid|giza|colosseum|rome|temple|garden|mix
 //          --duration seconds (0 = forever)  --short (5-minute sessions)  --quiet
 
 import WebSocket from 'ws';
@@ -40,13 +40,19 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const stats = { open: 0, joined: 0, welcomeMs: [], msgs: 0, bytes: 0, errors: 0, closed: 0, bought: 0 };
 const httpBase = opts.url.replace(/^ws/, 'http').replace(/\/ws$/, '');
 const ZONES = ['Asia/Seoul', 'Asia/Tokyo', 'Asia/Taipei', 'Asia/Ho_Chi_Minh', 'Europe/London', 'America/New_York'];
-/** Where a bot starts out: most study in the library, some in the café or net café, a few outside. */
+/**
+ * Where a bot starts out: most study in town (the library, the café, the net café), a few
+ * are outside in the square, and some are abroad in Egypt, Italy or Japan.
+ */
 function startPlace() {
   if (isPlace(opts.place)) return opts.place;
   const r = Math.random();
-  return r < 0.4 ? 'library' : r < 0.7 ? 'cafe' : r < 0.9 ? 'netcafe' : 'square';
+  if (r < 0.3) return 'library';
+  if (r < 0.48) return 'cafe';
+  if (r < 0.6) return 'netcafe';
+  if (r < 0.66) return 'square';
+  return pick(['pyramid', 'colosseum', 'temple', 'pyramid', 'colosseum', 'temple', 'giza', 'rome', 'garden']);
 }
-const STUDY_PLACES = ['library', 'cafe', 'netcafe'];
 
 class Bot {
   constructor(n) {
@@ -154,7 +160,7 @@ class Bot {
       this.state = STATE.STAND;
       this.goShopping(msg.me);
       // Outside, a bot strolls and sits for a good while before heading in to study.
-      if (this.kind === 'square') this.later(rand(800, 3000), () => this.stroll(8 + Math.floor(Math.random() * 8)));
+      if (!this.place.indoor) this.later(rand(800, 3000), () => this.stroll(8 + Math.floor(Math.random() * 8)));
       else this.later(rand(500, 4000), () => this.findDesk());
     } else if (msg.t === 'b') {
       for (const ev of msg.ev) this.onEvent(ev);
@@ -234,13 +240,12 @@ class Bot {
 
   /** Outside: walk about, sit on a bench for a while, then head into a building to study. */
   stroll(steps) {
-    if (this.kind !== 'square') return;
+    if (this.place.indoor) return;
     if (steps <= 0) {
-      const to = pick(STUDY_PLACES);
-      const door = this.place.doors.find((d) => d.to === to);
+      const door = pick(this.place.doors);
       if (this.desk >= 0) this.send({ t: 'stand' });
       this.send({ t: 'go', from: this.pos, to: [door.x, door.z] });
-      this.later(1500, () => this.later(this.walkMs ?? 8000, () => this.enter(to)));
+      this.later(1500, () => this.later(this.walkMs ?? 8000, () => this.enter(door.to)));
       return;
     }
     if (Math.random() < 0.35 && this.desk < 0) {
@@ -299,12 +304,12 @@ class Bot {
         this.later(rand(6000, 15_000), () => this.findDesk());
       });
     } else if (r < 0.94) {
-      // A walk outside: through the door to the town square.
+      // A walk outside: through the door (to the square, or the outdoors abroad).
       this.send({ t: 'stand' });
       const door = this.place.doors[0];
       this.later(rand(1000, 3000), () => {
         this.send({ t: 'go', from: this.pos, to: [door.x, door.z] });
-        this.later(rand(7000, 12_000), () => this.enter('square'));
+        this.later(rand(7000, 12_000), () => this.enter(door.to));
       });
     } else {
       this.send({ t: 'leave' });

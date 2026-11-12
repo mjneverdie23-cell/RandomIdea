@@ -1,13 +1,20 @@
-// The places you can be in: a sunlit library, a warm coffee shop, a neon net café and the
-// town square outside them. Each has its seats, the furniture you can't walk through, its
-// doors and where people appear. Shared by the server and the client, so both agree on
-// every seat and wall; the client adds the decoration that needs no collision.
+// The places you can be in. Lamplit town (the default mode): a sunlit library, a warm
+// coffee shop, a neon net café and the town square outside them. World map mode adds
+// places in other countries (see world.js). Each has its seats, the furniture you can't
+// walk through, its doors and where people appear. Shared by the server and the client,
+// so both agree on every seat and wall; the client adds the decoration that needs no
+// collision.
 
 import { makeDesk } from './layout.js';
+import { WORLD_PLACES, COUNTRIES } from './world.js';
 
-export const PLACE_KINDS = Object.freeze(['library', 'cafe', 'netcafe', 'square']);
+/** Every kind of place. New kinds go at the end: rooms are reported by index. */
+export const PLACE_KINDS = Object.freeze(['library', 'cafe', 'netcafe', 'square', ...Object.keys(WORLD_PLACES)]);
+/** The town's places, in the order the places sheet lists them. */
+export const TOWN = Object.freeze(['library', 'cafe', 'netcafe', 'square']);
 export const DEFAULT_PLACE = 'library';
 export const OUTSIDE = 'square';
+export { COUNTRIES };
 
 const H = Math.PI / 2;
 
@@ -279,11 +286,12 @@ const square = {
     { to: 'netcafe', x: 18.2, z: -2 },
   ]),
   spawn: rect(0, 7.2, 5, 2),
-  /** Where you appear when you walk out of each building. */
+  /** Where you appear when you walk out of each building, or come home from abroad (the bus stop). */
   arrive: Object.freeze({
     library: rect(0, -12.4, 3.2, 1.2),
     cafe: rect(-16.6, -2, 1.0, 2.4),
     netcafe: rect(16.6, -2, 1.0, 2.4),
+    ...Object.fromEntries(Object.keys(WORLD_PLACES).map((k) => [k, rect(6, 21.5, 3, 1.0)])),
   }),
 };
 
@@ -294,10 +302,14 @@ export const PLACES = Object.freeze({
   cafe: Object.freeze(cafe),
   netcafe: Object.freeze(netcafe),
   square: Object.freeze(square),
+  ...WORLD_PLACES,
 });
 
 /** People per room of each kind: one per seat indoors, a crowd outside. */
-export const PLACE_CAP = Object.freeze({ library: 100, cafe: PLACES.cafe.desks.length, netcafe: PLACES.netcafe.desks.length, square: 100 });
+export const PLACE_CAP = Object.freeze(Object.fromEntries(PLACE_KINDS.map((k) => [k, PLACES[k].indoor ? PLACES[k].desks.length : 100])));
+
+/** The country a place is in, or null for the town. */
+export const countryOf = (kind) => PLACES[kind]?.country ?? null;
 
 /** The most seats any place has (for validating seat numbers). */
 export const MAX_DESKS = Math.max(...PLACE_KINDS.map((k) => PLACES[k].desks.length));

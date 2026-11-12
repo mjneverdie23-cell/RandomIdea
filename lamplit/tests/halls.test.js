@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { HallManager, Hall } from '../server/halls.js';
 import { openDb } from '../server/db.js';
 import { ProfileService } from '../server/profiles.js';
-import { PLACES } from '../shared/places.js';
+import { PLACES, PLACE_KINDS } from '../shared/places.js';
 
 const DESKS = PLACES.library.desks;
 import { STATE, PROTOCOL, RESUME_GRACE_MS, OPEN_FOCUS_CAP, TEA_MS } from '../shared/protocol.js';
@@ -501,4 +501,34 @@ test('each place fills its own rooms; empty extra rooms close, the first of each
   assert.ok(mgr.halls.has(wa.hall), 'the first coffee shop stays open');
   const c = join({ place: 'cafe' });
   assert.equal(c.c.last('welcome').hall, wa.hall);
+});
+
+test('world map: travelling to a country starts inside its building; you can walk out and back', () => {
+  const { mgr, join, me, advance } = setup();
+  const a = join();
+  advance(2000);
+  mgr.handle(a.c, { t: 'enter', place: 'pyramid' });
+  const w = a.c.last('welcome');
+  assert.deepEqual([w.place, w.n], ['pyramid', 1]);
+  const inside = PLACES.pyramid.spawn;
+  assert.ok(Math.abs(me(a.c).pos[0] - inside.x) <= inside.w / 2, 'just inside the pyramid door');
+  mgr.handle(a.c, { t: 'sit', desk: 10, from: me(a.c).pos });
+  advance(60_000);
+  mgr.handle(a.c, { t: 'focus', mins: 25, tag: 0 });
+  assert.equal(me(a.c).state, STATE.FOCUS, 'you can study inside the pyramid');
+  advance(2000);
+  mgr.handle(a.c, { t: 'enter', place: 'giza' });
+  assert.equal(a.c.last('welcome').place, 'giza');
+  const out = PLACES.giza.arrive.pyramid;
+  const [x, z] = me(a.c).pos;
+  assert.ok(Math.abs(x - out.x) <= out.w / 2 && Math.abs(z - out.z) <= out.d / 2, 'outside, in front of the pyramid');
+  mgr.handle(a.c, { t: 'sit', desk: 0, from: me(a.c).pos });
+  advance(30_000);
+  mgr.handle(a.c, { t: 'focus', mins: 25, tag: 0 });
+  assert.equal(a.c.last('err').code, 'bench', 'cushions in the tent are for resting');
+  advance(2000);
+  mgr.handle(a.c, { t: 'enter', place: 'library' });
+  assert.equal(a.c.last('welcome').place, 'library', 'and home again');
+  const kinds = mgr.globalSummary().h.map((h) => h[2]);
+  assert.ok(kinds.includes(PLACE_KINDS.indexOf('pyramid')), 'the first room of each place stays open');
 });

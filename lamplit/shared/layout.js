@@ -10,14 +10,17 @@ export const GRID_CELL = 0.25;
 export const AVATAR_RADIUS = 0.22;
 /** No place extends further than this from its centre, in x or z. */
 export const WORLD_LIMIT = 40;
-/** Height of every desk and table top. */
+/** Height of desk and table tops (low Japanese desks set their own). */
 export const DESK_TOP = 0.76;
+/** How far a seated avatar is lifted: onto a chair, or just onto a floor cushion. */
+export const SEAT_LIFT = 0.42;
 
 /**
  * Kinds of seat. A seat's frame has the sitter facing local -z with the desk (or nothing,
  * for a bench) in front: `w`×`d` is the desk footprint around the seat's origin, the
  * sitter's chair is `chairZ` behind it, and they walk to `approachZ` before sitting down.
- * `rest` seats (park benches) are for sitting only, not for focus sessions.
+ * `rest` seats (park benches) are for sitting only, not for focus sessions. `top` and
+ * `lift` override the desk height and how high the sitter sits (floor cushions).
  */
 export const KITS = Object.freeze({
   desk: Object.freeze({ w: 1.2, d: 0.7, chairZ: 0.68, approachZ: 1.42, chair: 0.46, rest: false }),
@@ -25,7 +28,20 @@ export const KITS = Object.freeze({
   bar: Object.freeze({ w: 0.8, d: 0.45, chairZ: 0.5, approachZ: 1.14, chair: 0.36, rest: false }),
   pc: Object.freeze({ w: 1.0, d: 0.65, chairZ: 0.72, approachZ: 1.5, chair: 0.52, rest: false }),
   bench: Object.freeze({ w: 0.9, d: 0.5, chairZ: 0.04, approachZ: -0.9, chair: 0, rest: true }),
+  /** A low Japanese desk with a floor cushion. */
+  low: Object.freeze({ w: 1.0, d: 0.6, chairZ: 0.5, approachZ: 1.2, chair: 0.5, rest: false, top: 0.38, lift: 0.03 }),
+  /** A cushion on a carpet, for resting. */
+  mat: Object.freeze({ w: 0.75, d: 0.75, chairZ: 0, approachZ: -0.85, chair: 0, rest: true, top: 0.38, lift: 0.03 }),
+  /** A plain seat with no back, sat on from the front: a stone block. */
+  stone: Object.freeze({ w: 0.7, d: 0.55, chairZ: 0.02, approachZ: -0.85, chair: 0, rest: true }),
+  /** A chair at someone else's table, for resting: approached from behind, like a desk chair. */
+  chair: Object.freeze({ w: 0.5, d: 0.5, chairZ: 0, approachZ: 0.8, chair: 0, rest: true }),
 });
+
+/** Desk height for a kind of seat. */
+export const deskTop = (kit) => KITS[kit]?.top ?? DESK_TOP;
+/** How far a sitter is lifted on a kind of seat. */
+export const seatLift = (kit) => KITS[kit]?.lift ?? SEAT_LIFT;
 
 export function round2(v) {
   return Math.round(v * 100) / 100;
@@ -60,7 +76,7 @@ export function makeDesk(i, kit, x, z, rot = 0) {
 
 /**
  * Everything an avatar can't walk through, as ['box', minX, minZ, maxX, maxZ],
- * ['obb', x, z, halfW, halfD, rot] or ['circle', x, z, r].
+ * ['obb', x, z, halfW, halfD, rot], ['circle', x, z, r] or ['ellipse', x, z, a, b].
  */
 export function obstacles(place) {
   const list = [];
@@ -71,6 +87,7 @@ export function obstacles(place) {
   }
   for (const b of place.blocks) list.push(['box', ...b]);
   for (const c of place.circles) list.push(['circle', ...c]);
+  for (const e of place.ellipses ?? []) list.push(['ellipse', ...e]);
   return list;
 }
 
@@ -115,6 +132,11 @@ export function buildWalkGrid(place) {
       const [, cx, cz, rad] = o;
       const R = rad + r;
       mark(cx - R, cz - R, cx + R, cz + R, (x, z) => (x - cx) ** 2 + (z - cz) ** 2 < R * R);
+    } else if (o[0] === 'ellipse') {
+      const [, cx, cz, a, b] = o;
+      const A = a + r;
+      const B = b + r;
+      mark(cx - A, cz - B, cx + A, cz + B, (x, z) => ((x - cx) / A) ** 2 + ((z - cz) / B) ** 2 < 1);
     } else {
       const [, cx, cz, hw, hd, rot] = o;
       const c = Math.cos(rot);
@@ -128,8 +150,46 @@ export function buildWalkGrid(place) {
       });
     }
   }
+  // An oval place (an arena) is only walkable inside its ellipse.
+  if (place.bounds?.ellipse) {
+    const [cx, cz, a, b] = place.bounds.ellipse;
+    const A = a - r;
+    const B = b - r;
+    for (let iz = 0; iz < rows; iz++) {
+      const z = originZ + (iz + 0.5) * cell;
+      for (let ix = 0; ix < cols; ix++) {
+        const x = originX + (ix + 0.5) * cell;
+        if (((x - cx) / A) ** 2 + ((z - cz) / B) ** 2 > 1) blocked[iz * cols + ix] = 1;
+      }
+    }
+  }
+  // Walkways (a bridge over a pond) stay open whatever is under them.
+  for (const [a, b, c, d] of place.open ?? []) {
+    for (let iz = Math.max(0, Math.floor((b - originZ) / cell)); iz <= Math.min(rows - 1, Math.floor((d - originZ) / cell)); iz++) {
+      const z = originZ + (iz + 0.5) * cell;
+      if (z < b || z > d) continue;
+      for (let ix = Math.max(0, Math.floor((a - originX) / cell)); ix <= Math.min(cols - 1, Math.floor((c - originX) / cell)); ix++) {
+        const x = originX + (ix + 0.5) * cell;
+        if (x >= a && x <= c) blocked[iz * cols + ix] = 0;
+      }
+    }
+  }
   return { cell, cols, rows, originX, originZ, blocked };
 }
+
+// ------------------------------------------------------------------ helpers for defining places
+
+/** A frozen list of seats, numbered in the order `build` adds them. */
+export function seatList(build) {
+  const desks = [];
+  build((kit, x, z, rot) => desks.push(makeDesk(desks.length, kit, x, z, rot)));
+  return Object.freeze(desks);
+}
+
+/** A spawn area: centre and size. */
+export const area = (x, z, w, d) => Object.freeze({ x, z, w, d });
+
+export const freezeAll = (list) => Object.freeze(list.map((v) => Object.freeze(v)));
 
 /**
  * A spread-out point where someone appears: in front of the door they came through

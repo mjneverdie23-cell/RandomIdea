@@ -3,7 +3,7 @@
 
 import * as THREE from '../../vendor/three.module.min.js';
 import * as tex from '../textures.js';
-import { Decor, box, cyl, sphere, xform, floorPlane } from '../geo.js';
+import { Decor, box, cyl, sphere, xform, floorPlane, merge } from '../geo.js';
 import { clockDrawer } from '../place.js';
 
 export const HALF = Math.PI / 2;
@@ -287,5 +287,32 @@ export function shadowDecal(root, x, z, w, d, opacity = 0.25, y = 0.01) {
   root.add(m);
   return m;
 }
+
+/** A clay oil lamp on a little bronze stand; the flame lights when you focus. */
+export function oilLamp({ color = 0xb5793c } = {}) {
+  return {
+    at: [0.33, -0.18],
+    body: {
+      geo: merge([
+        cyl(0.05, 0.07, 0.03, 12, 0, 0.015, 0),
+        cyl(0.012, 0.012, 0.08, 6, 0, 0.07, 0),
+        xform(new THREE.SphereGeometry(0.07, 14, 8), [0, 0.13, 0], [0, 0, 0], [1.25, 0.5, 1]),
+        xform(new THREE.ConeGeometry(0.03, 0.08, 8), [0.09, 0.14, 0], [0, 0, -HALF]),
+      ]),
+      mat: new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 }),
+    },
+    shade: { geo: new THREE.TorusGeometry(0.06, 0.012, 6, 16).rotateX(HALF).translate(0, 0.16, 0), mat: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }) },
+    bulb: { geo: new THREE.SphereGeometry(0.03, 8, 8).scale(0.8, 1.7, 0.8).translate(0.12, 0.2, 0) },
+    glow: 0xff9a3c,
+    on: 0xffd27a,
+    off: 0x4a3020,
+    halo: [0.12, 0.2, 0],
+    pool: [0.12, -0.04, 1.6, 1.2],
+    floor: [0.1, 0.2, 3.2],
+    strength: 1,
+    flame: true,
+  };
+}
+
 
 export { box, cyl, sphere, xform };

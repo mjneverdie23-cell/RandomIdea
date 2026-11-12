@@ -4,7 +4,7 @@
 // changes of outfit, pets and held items trivial.
 
 import * as THREE from '../vendor/three.module.min.js';
-import { WALK_SPEED, KITS } from '../shared/layout.js';
+import { WALK_SPEED, KITS, deskTop, seatLift } from '../shared/layout.js';
 import { samplePath } from '../shared/path.js';
 import * as tex from './textures.js';
 import { STATE } from '../shared/protocol.js';
@@ -14,9 +14,7 @@ import { itemGeometry, outfitBase, accessoryAnchor, SMALL_PETS } from './look.js
 
 const SKIN = [0xf3d3b8, 0xe3b590, 0xc99069, 0x9f6b4b, 0x7a4e35, 0xf7dfcc];
 const HAIR = [0x2b211c, 0x4a3324, 0x18181e, 0x7a5232, 0xb98a55, 0x5a2a2a, 0x3a3a48];
-const DESK_TOP = 0.76;
 const SIT_MS = 480;
-const SEAT_LIFT = 0.42;
 const EMOTE_MS = [1400, 1700, 1300];
 const HAND_ANCHOR = new THREE.Vector3(0, 0.34, 0.25);
 
@@ -166,6 +164,12 @@ export class Avatars {
     m.emoteT = now;
   }
 
+  /** Turn an avatar to face `yaw` straight away (when you arrive somewhere). */
+  face(id, yaw) {
+    const i = this.slots.get(id);
+    if (i !== undefined) this.list[i].yaw = yaw;
+  }
+
   /** Where an avatar is drawn right now (x, z), or null. */
   where(id) {
     const i = this.slots.get(id);
@@ -229,7 +233,7 @@ export class Avatars {
         const k = ease(clamp01(m.sitT ? (now - m.sitT) / SIT_MS : 1));
         x = d.approach.x + (d.seat.x - d.approach.x) * k;
         z = d.approach.z + (d.seat.z - d.approach.z) * k;
-        y = SEAT_LIFT * k;
+        y = seatLift(d.kit) * k;
         m.yaw = lerpAngle(m.yaw, Math.PI + d.rot, Math.max(turn, k));
         seated = k >= 1;
         if (seated) {
@@ -255,7 +259,7 @@ export class Avatars {
           const k = ease(clamp01((now - m.standT) / SIT_MS));
           x = m.standFrom.x + (x - m.standFrom.x) * k;
           z = m.standFrom.z + (z - m.standFrom.z) * k;
-          y = SEAT_LIFT * (1 - k);
+          y = (m.standFrom.lift ?? 0.42) * (1 - k);
           if (k >= 1) m.standT = 0;
         }
         scaleY = 1 + Math.sin(time * 2 + m.id) * 0.012;
@@ -384,7 +388,8 @@ export class Avatars {
     }
     if (look.held) {
       if (atDesk) {
-        this.emit(look.held, 'desk', this.deskMatrix(this.desks[m.desk], 0, DESK_TOP, 0, this._out));
+        const d = this.desks[m.desk];
+        this.emit(look.held, 'desk', this.deskMatrix(d, 0, deskTop(d.kit), 0, this._out));
       } else {
         this._local.makeTranslation(HAND_ANCHOR.x, HAND_ANCHOR.y * o.scaleY, HAND_ANCHOR.z);
         this.emit(look.held, 'hand', this._out.multiplyMatrices(root, this._local));
@@ -401,7 +406,7 @@ export class Avatars {
         // On top of the stack of books at the back of the desk (or just on the desk).
         const d = this.desks[m.desk];
         const onBooks = d.kit === 'desk';
-        this.deskMatrix(d, onBooks ? -0.38 : -0.3, DESK_TOP + (onBooks ? 0.145 : 0), onBooks ? -0.13 : -0.05, out);
+        this.deskMatrix(d, onBooks ? -0.38 : -0.3, deskTop(d.kit) + (onBooks ? 0.145 : 0), onBooks ? -0.13 : -0.05, out);
         out.multiply(this._local.makeRotationY(0.2));
       } else if (pet === 'hamster') {
         this._local.makeTranslation(0, 0.215, -0.01);

@@ -7,7 +7,7 @@ import { t, getLang, formatMinutes, formatClock, placeName, placeLabel, placeIn 
 import { ICONS, EMOTE_ICONS } from './icons.js';
 import { SUBJECTS, subjectName } from '../shared/words.js';
 import { FOCUS_PRESETS } from '../shared/protocol.js';
-import { PLACE_KINDS } from '../shared/places.js';
+import { PLACE_KINDS, TOWN, COUNTRIES, countryOf } from '../shared/places.js';
 import { authHTML, accountHTML, shopHTML, profileHTML, settingsHTML, esc } from './views.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -15,7 +15,7 @@ const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const EMOTE_KEYS = ['wave', 'stretch', 'cheer'];
 /** Icons for each place (and for going outside). */
-const PLACE_ICONS = { library: 'book', cafe: 'tea', netcafe: 'screen', square: 'tree' };
+const PLACE_ICONS = { library: 'book', cafe: 'tea', netcafe: 'screen', square: 'tree', pyramid: 'pyramid', giza: 'sun', colosseum: 'arch', rome: 'tree', temple: 'torii', garden: 'tree' };
 const VIEWS = { shop: shopHTML, profile: profileHTML, settings: settingsHTML, account: accountHTML };
 
 export class UI {
@@ -39,6 +39,8 @@ export class UI {
       focusbar: $('#focusbar'),
       focusTime: $('#focus-time'),
       fade: $('#fade'),
+      fadeLabel: $('#fade-label'),
+      world: $('#world'),
     };
     this.dockKey = '';
     this.model = null;
@@ -59,8 +61,12 @@ export class UI {
     });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
-      if (this.sheetKind) this.closeSheet();
+      if (!this.el.world.hidden) this.actions.closeWorld?.();
+      else if (this.sheetKind) this.closeSheet();
       else this.actions.focusView?.(0);
+    });
+    this.el.world.addEventListener('click', (e) => {
+      if (e.target === this.el.world) this.actions.closeWorld?.();
     });
     this.el.backdrop.addEventListener('click', () => this.closeSheet());
     this.renderStatic();
@@ -138,9 +144,42 @@ export class UI {
     this.el.roomPill.parentElement.title = `${label} · ${t('roomCount', { n: count, cap })} · ${t('placesTitle')}`;
   }
 
-  /** Fades the screen out (going through a door) and back in. */
-  fade(on) {
+  /** Fades the screen out (going through a door, or flying abroad) and back in. */
+  fade(on, label = '') {
+    if (on) this.el.fadeLabel.innerHTML = label ? `${ICONS.plane}<span>${esc(label)}</span>` : '';
     this.el.fade.classList.toggle('on', Boolean(on));
+    this.el.fade.classList.toggle('flying', Boolean(on && label));
+  }
+
+  // ---------------------------------------------------------------- the world map
+
+  get worldOpen() {
+    return !this.el.world.hidden;
+  }
+
+  /** Shows (or re-renders) the world map screen; returns its element. */
+  showWorld(html) {
+    const w = this.el.world;
+    const scroll = w.querySelector('.world-card')?.scrollTop ?? 0;
+    if (w.dataset.html !== html) {
+      w.dataset.html = html;
+      w.innerHTML = html;
+      const card = w.querySelector('.world-card');
+      if (card) card.scrollTop = scroll;
+    }
+    if (w.hidden) {
+      w.hidden = false;
+      requestAnimationFrame(() => w.classList.add('in'));
+    }
+    return w;
+  }
+
+  hideWorld() {
+    const w = this.el.world;
+    w.classList.remove('in');
+    setTimeout(() => {
+      if (!w.classList.contains('in')) w.hidden = true;
+    }, 220);
   }
 
   setLumens(n) {
@@ -243,9 +282,9 @@ export class UI {
     const lang = getLang();
     switch (m.mode) {
       case 'standing': {
-        const doors = m.doors
-          .map((to) => `<button class="chip door-chip" data-action="door" data-v="${to}">${ICONS[PLACE_ICONS[to]] ?? ''}<span>${esc(m.indoor ? t('goOutside') : placeName(to))}</span></button>`)
-          .join('');
+        const doors =
+          m.doors.map((to) => `<button class="chip door-chip" data-action="door" data-v="${to}">${ICONS[PLACE_ICONS[to]] ?? ''}<span>${esc(m.indoor ? t('goOutside') : placeName(to))}</span></button>`).join('') +
+          (m.indoor ? '' : `<button class="chip door-chip world-chip" data-action="world">${ICONS.globe}<span>${esc(t('worldMap'))}</span></button>`);
         return `<div class="card standing">
           <div class="hint inline"><span class="beacon" aria-hidden="true"></span>${esc(t(m.indoor ? 'pickDesk' : 'pickPlace'))}</div>
           <div class="chips door-chips">${doors}</div>
@@ -423,7 +462,11 @@ export class UI {
 
   /** The places sheet: each place with how many are there, and its rooms. */
   hallsHTML({ g, current, kind, inFocus }) {
-    const cards = PLACE_KINDS.map((k, ki) => {
+    // The places of where you are: the town, or the country you're visiting.
+    const country = countryOf(kind);
+    const area = country ? COUNTRIES[country].places : TOWN;
+    const cards = area.map((k) => {
+      const ki = PLACE_KINDS.indexOf(k);
       const rooms = g.h.filter((h) => h[2] === ki).sort((a, b) => a[3] - b[3]);
       const people = rooms.reduce((sum, h) => sum + h[1], 0);
       const here = k === kind;
@@ -456,10 +499,20 @@ export class UI {
         ${roomRows}
       </li>`;
     }).join('');
+    const banner = `<div class="world-banner">
+      <span class="world-globe" aria-hidden="true">${ICONS.globe}</span>
+      <div class="world-banner-text"><b>${esc(t('worldBanner'))}</b><span class="muted small">${esc(t('worldBannerBody'))}</span></div>
+      <button class="btn small primary" data-action="world">${esc(t('worldOpen'))}</button>
+    </div>`;
+    const home = country
+      ? `<button class="btn wide home-btn" data-action="goPlace" data-v="square" ${inFocus ? 'disabled' : ''}>${ICONS.lamp}<span>${esc(t('worldBack'))}</span></button>`
+      : '';
     return `<div class="sheet-body">
-      <h2>${esc(t('placesTitle'))}</h2>
+      <h2>${esc(country ? t(`country_${country}`) : t('placesTitle'))}</h2>
       <p class="muted">${esc(t('placesHint'))}</p>
+      ${banner}
       <ul class="place-list">${cards}</ul>
+      ${home}
       ${inFocus ? `<p class="muted small">${esc(t('switchInFocus'))}</p>` : ''}
     </div>`;
   }

@@ -28,6 +28,12 @@ export const ICONS = {
   tree: svg('<path d="M12 21v-6"/><path d="M12 3a5 5 0 0 0-4.6 7A4.5 4.5 0 0 0 9 18h6a4.5 4.5 0 0 0 1.6-8A5 5 0 0 0 12 3z"/>'),
   door: svg('<path d="M6 21V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21"/><path d="M3 21h18"/><circle cx="14.5" cy="12.5" r=".9" fill="currentColor"/>'),
   map: svg('<path d="M9 4L3.5 6v14L9 18l6 2 5.5-2V4L15 6z"/><path d="M9 4v14M15 6v14"/>'),
+  globe: svg('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.6 2.6 3.6 5.4 3.6 8.5s-1 5.9-3.6 8.5c-2.6-2.6-3.6-5.4-3.6-8.5s1-5.9 3.6-8.5z"/>'),
+  pyramid: svg('<path d="M12 4l9 15H3z"/><path d="M12 4l2.5 15"/>'),
+  sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>'),
+  arch: svg('<path d="M4 20V9a8 5 0 0 1 16 0v11"/><path d="M8 20v-6a4 3 0 0 1 8 0v6"/><path d="M3 20h18"/>'),
+  torii: svg('<path d="M3 6c4 1.3 14 1.3 18 0"/><path d="M5 10h14"/><path d="M7 7.5V20M17 7.5V20"/>'),
+  plane: svg('<path d="M21 4L3 11l6 2.5L11.5 20l3-6 6.5-10z"/><path d="M9 13.5l5-5"/>'),
 };
 
 export const EMOTE_ICONS = [ICONS.wave, ICONS.stretch, ICONS.cheer];

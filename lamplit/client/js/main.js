@@ -2,8 +2,8 @@
 // friends, the tour and the UI together.
 
 import * as THREE from '../vendor/three.module.min.js';
-import { round2 } from '../shared/layout.js';
-import { PLACES, PLACE_KINDS, DEFAULT_PLACE, OUTSIDE, isPlace } from '../shared/places.js';
+import { round2, seatLift } from '../shared/layout.js';
+import { PLACES, PLACE_KINDS, DEFAULT_PLACE, OUTSIDE, COUNTRIES, countryOf, isPlace } from '../shared/places.js';
 import { PROTOCOL, STATE, COOLDOWN } from '../shared/protocol.js';
 import { displayName, subjectName, randomName, SWEATERS } from '../shared/words.js';
 import { ITEMS, ITEM, itemName, sanitizeLook } from '../shared/catalog.js';
@@ -12,6 +12,9 @@ import { library } from './scenes/library.js';
 import { cafe } from './scenes/cafe.js';
 import { netcafe } from './scenes/netcafe.js';
 import { square } from './scenes/square.js';
+import { pyramid, giza } from './scenes/egypt.js';
+import { colosseum, rome } from './scenes/italy.js';
+import { temple, garden } from './scenes/japan.js';
 import { Avatars } from './avatars.js';
 import { Labels } from './labels.js';
 import { Net } from './net.js';
@@ -23,6 +26,7 @@ import { Preview } from './preview.js';
 import { Tutorial } from './tutorial.js';
 import { DESK_WORK_ITEMS } from './look.js';
 import { shopModelLook, esc } from './views.js';
+import { loadMap, worldHTML, bindMap } from './worldmap.js';
 import { getToken, setToken, timeZone, continueAsGuest, signUp, logIn, logOut, whoAmI } from './api.js';
 import { t, setLang, getLang, formatMinutes, placeName, placeLabel, placeIn } from './i18n.js';
 
@@ -42,7 +46,7 @@ const avatars = new Avatars(scene);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 140);
 
 // Each place is built the first time you go there, then kept for coming back.
-const RECIPES = { library, cafe, netcafe, square };
+const RECIPES = { library, cafe, netcafe, square, pyramid, giza, colosseum, rome, temple, garden };
 const views = new Map();
 function viewFor(kind) {
   if (!views.has(kind)) {
@@ -215,6 +219,8 @@ function onWelcome(msg) {
     requestAnimationFrame(() => requestAnimationFrame(() => ui.fade(false)));
   }
   for (const v of msg.members) addMember(v, true);
+  // Arriving somewhere new, you face the way the camera looks.
+  if (moved || cameFrom) avatars.face(msg.id, cam.yaw + Math.PI);
   for (const [desk, until] of msg.tea) {
     room.tea.set(desk, until);
     world.setTea(desk, true);
@@ -346,7 +352,7 @@ function onSeat(id, desk, pos) {
       world.setFree(old);
     }
     if (!m.path) {
-      m.standFrom = { x: place.desks[old].seat.x, z: place.desks[old].seat.z };
+      m.standFrom = { x: place.desks[old].seat.x, z: place.desks[old].seat.z, lift: seatLift(place.desks[old].kit) };
       m.standT = net.now();
     }
   }
@@ -426,6 +432,7 @@ function onGlobal(g) {
   if (room.hall) ui.setRoom(placeLabel(room.kind, room.n), mine ? mine[1] : room.members.size, room.cap, g.fo);
   ui.refreshSheet('halls', hallsModel());
   refreshTags();
+  if (atlas.open) renderAtlas();
 }
 
 function onNotice(msg) {
@@ -601,6 +608,7 @@ function leaveRoom() {
   pendingDoor = null;
   transition = null;
   ui.fade(false);
+  if (atlas.open) closeAtlas();
   for (let i = 0; i < world.N; i++) world.setFree(i);
   ui.closeSheet();
   ui.dock(null);
@@ -781,6 +789,51 @@ function getPreview() {
   return preview;
 }
 
+// ------------------------------------------------------------------ the world map
+
+/** World map mode: whether the map is open, and the destination picked on it. */
+const atlas = { open: false, selected: null, data: null, unbind: null };
+
+function atlasModel() {
+  const counts = { town: 0 };
+  for (const [, n, ki] of room.g?.h ?? []) {
+    const c = countryOf(PLACE_KINDS[ki]) ?? 'town';
+    counts[c] = (counts[c] ?? 0) + n;
+  }
+  return { here: countryOf(room.kind) ?? 'town', selected: atlas.selected, counts, inFocus: self()?.st === STATE.FOCUS };
+}
+
+function renderAtlas() {
+  if (!atlas.data) return;
+  const el = ui.showWorld(worldHTML(atlas.data, atlasModel()));
+  atlas.unbind?.();
+  atlas.unbind = bindMap(el, {
+    onPick: (c) => ui.actions.worldPick(c),
+    onSoon: (name) => ui.toast(t('worldSoonToast', { country: name }), 'globe'),
+  });
+}
+
+async function openAtlas() {
+  if (!joined) return;
+  atlas.open = true;
+  atlas.selected = atlas.selected ?? (countryOf(room.kind) ? null : 'egypt');
+  try {
+    atlas.data = await loadMap();
+  } catch {
+    atlas.open = false;
+    ui.toast(t('errNetwork'));
+    return;
+  }
+  if (atlas.open) renderAtlas();
+}
+
+function closeAtlas() {
+  atlas.open = false;
+  atlas.unbind?.();
+  atlas.unbind = null;
+  ui.hideWorld();
+}
+
 // ------------------------------------------------------------------ UI actions
 
 const ui = new UI({
@@ -900,6 +953,26 @@ const ui = new UI({
   /** From the dock: walk to the door that leads to a place. */
   door(kind) {
     goToDoor(kind);
+  },
+
+  // World map mode
+  world() {
+    ui.closeSheet();
+    openAtlas();
+  },
+  worldPick(c) {
+    atlas.selected = c;
+    renderAtlas();
+    ui.el.world.querySelector(`[data-dest="${c}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  },
+  worldTravel(c) {
+    closeAtlas();
+    const to = c === 'town' ? OUTSIDE : COUNTRIES[c]?.start;
+    if (!to || to === room.kind || self()?.st === STATE.FOCUS) return;
+    travel({ t: 'enter', place: to }, to);
+  },
+  closeWorld() {
+    closeAtlas();
   },
 
   // Shop
@@ -1053,8 +1126,14 @@ const cam = {
   snap: false,
   target: new THREE.Vector3(0, 0.9, 8),
   cur: { yaw: 0, pitch: 0.5, dist: 20 },
+  /** How far back the camera can get before a building is in the way. */
+  reach: Infinity,
 };
 const camTarget = new THREE.Vector3();
+const camRay = new THREE.Raycaster();
+const camDir = new THREE.Vector3();
+const camLook = new THREE.Vector3();
+const NO_BLOCKERS = [];
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 function updateCamera(dt, time) {
@@ -1084,23 +1163,53 @@ function updateCamera(dt, time) {
   }
   // Portrait phones see a narrow slice of the world: stand the camera back a little.
   if (!cam.focusView) dist *= camera.aspect < 0.8 ? 1.22 : 1;
-  const k = cam.snap ? 1 : 1 - Math.exp(-dt * 4.5);
-  if (cam.snap && joined && mine) {
+  const snapped = cam.snap;
+  const k = snapped ? 1 : 1 - Math.exp(-dt * 4.5);
+  if (snapped && joined && mine) {
     const w = avatars.where(room.selfId);
-    if (w) camTarget.set(w.x - Math.sin(yaw) * 3.5, 0.9, w.z - Math.cos(yaw) * 3.5);
+    const ahead = world.cam.ahead ?? 3.5;
+    if (w) camTarget.set(w.x - Math.sin(yaw) * ahead, 0.9, w.z - Math.cos(yaw) * ahead);
   }
   cam.snap = false;
   cam.target.lerp(camTarget, k);
   cam.cur.yaw += wrapAngle(yaw - cam.cur.yaw) * k;
   cam.cur.pitch += (pitch - cam.cur.pitch) * k;
   cam.cur.dist += (dist - cam.cur.dist) * k;
-  const cp = Math.cos(cam.cur.pitch);
-  camera.position.set(
-    cam.target.x + Math.sin(cam.cur.yaw) * cp * cam.cur.dist,
-    cam.target.y + Math.sin(cam.cur.pitch) * cam.cur.dist,
-    cam.target.z + Math.cos(cam.cur.yaw) * cp * cam.cur.dist,
-  );
-  camera.lookAt(cam.target);
+  // Outdoors a building can get between you and the camera (turn round by a door): then the
+  // camera comes in front of it, drops toward shoulder height and looks out past you, rather
+  // than going through the wall or staring down at your feet.
+  const blockers = joined && !cam.focusView ? world.camBlockers : NO_BLOCKERS;
+  aim(cam.cur.pitch);
+  const reach = castCamera(blockers, cam.cur.dist);
+  // In at once so nothing ever blocks the view; back out gently once it's clear.
+  cam.reach = snapped || reach < cam.reach ? reach : cam.reach + (reach - cam.reach) * (1 - Math.exp(-dt * 2.5));
+  const pulled = Math.max(0, 1 - cam.reach / cam.cur.dist);
+  if (pulled < 0.001) {
+    camera.position.copy(cam.target).addScaledVector(camDir, cam.cur.dist);
+    camera.lookAt(cam.target);
+    return;
+  }
+  const low = cam.cur.pitch + (Math.min(cam.cur.pitch, 0.24) - cam.cur.pitch) * pulled;
+  aim(low);
+  camera.position.copy(cam.target).addScaledVector(camDir, castCamera(blockers, cam.reach));
+  const look = low - Math.min(low * 0.4, 0.12) * pulled;
+  camLook.set(-Math.sin(cam.cur.yaw) * Math.cos(look), -Math.sin(look), -Math.cos(cam.cur.yaw) * Math.cos(look)).add(camera.position);
+  camera.lookAt(camLook);
+}
+
+/** Point camDir from the target back toward the camera, at the current yaw and this pitch. */
+function aim(pitch) {
+  const c = Math.cos(pitch);
+  camDir.set(Math.sin(cam.cur.yaw) * c, Math.sin(pitch), Math.cos(cam.cur.yaw) * c);
+}
+
+/** How far back along camDir the camera can go (up to `far`) before a blocker is in the way. */
+function castCamera(blockers, far) {
+  if (!blockers.length) return far;
+  camRay.set(cam.target, camDir);
+  camRay.far = far;
+  const hit = camRay.intersectObjects(blockers, false)[0];
+  return hit ? Math.max(1.6, hit.distance - 0.6) : far;
 }
 
 // ------------------------------------------------------------------ input
@@ -1182,6 +1291,10 @@ function selfPosition() {
 
 /** Walks to the door that leads to `to`, then goes through it. */
 function goToDoor(to) {
+  if (to === 'world') {
+    openAtlas();
+    return;
+  }
   const mine = self();
   if (!joined || !mine || transition) return;
   if (mine.st === STATE.FOCUS) {
@@ -1216,7 +1329,10 @@ function travel(msg, to) {
   if (transition) return;
   sound.door?.(to ?? '');
   transition = { to, at: Date.now() };
-  ui.fade(true);
+  // Crossing to another country (or home) is a flight.
+  const from = countryOf(room.kind);
+  const dest = to ? countryOf(to) : from;
+  ui.fade(true, to && dest !== from ? t('worldFlying', { country: t(`country_${dest ?? 'town'}`) }) : '');
   setTimeout(() => net.send(msg), 260);
   setTimeout(() => {
     if (transition && Date.now() - transition.at >= 5900) {
@@ -1242,8 +1358,12 @@ function placeCounts() {
 function refreshTags() {
   const counts = placeCounts();
   for (const el of tagEls.values()) {
-    const n = (counts[el.dataset.kind] ?? 0).toLocaleString();
-    const html = `${esc(placeName(el.dataset.kind))}<small>${esc(t(el.dataset.kind === 'square' ? 'placeOutside' : 'placePeople', { n }))}</small>`;
+    const kind = el.dataset.kind;
+    const n = (counts[kind] ?? 0).toLocaleString();
+    const html =
+      kind === 'world'
+        ? `${ICONS.plane}<span>${esc(t('worldMap'))}</span>`
+        : `${esc(placeName(kind))}<small>${esc(t(PLACES[kind]?.indoor ? 'placePeople' : 'placeOutside', { n }))}</small>`;
     if (el.dataset.html !== html) {
       el.dataset.html = html;
       el.innerHTML = html;
@@ -1346,7 +1466,7 @@ function updateHover() {
   world.setHover(desk);
   canvas.style.cursor = desk >= 0 || doorTo ? 'pointer' : '';
   if (doorTo) {
-    ui.tooltip(t('goTo', { place: placeIn(doorTo) }), hoverAt.x, hoverAt.y);
+    ui.tooltip(doorTo === 'world' ? t('busStop') : t('goTo', { place: placeIn(doorTo) }), hoverAt.x, hoverAt.y);
     return;
   }
   if (desk < 0) {
