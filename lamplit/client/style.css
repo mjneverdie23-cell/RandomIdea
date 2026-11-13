@@ -839,6 +839,7 @@ body.focus-view .place-tag { display: none; }
 .map-svg path.avail-egypt { fill: #e3b25a; }
 .map-svg path.avail-italy { fill: #7cc48a; }
 .map-svg path.avail-japan { fill: #f29bb5; }
+.map-svg path.avail-spain { fill: #ef7f5a; }
 .map-svg path.avail:hover { filter: brightness(1.15); }
 .map-svg path.flash { animation: soon-flash 0.7s ease; }
 @keyframes soon-flash { 0%, 100% { fill: #3a4d68; } 40% { fill: #8a9bb8; } }
@@ -899,12 +900,14 @@ body.focus-view .place-tag { display: none; }
 .map-pin .pin-badge svg { width: 18px; height: 18px; color: var(--accent); }
 .map-pin.lbl-right .pin-badge { left: 25px; }
 .map-pin.lbl-left .pin-badge { right: 25px; }
+/* Spain's label sits low, off the Iberian coast, so the country itself stays in view. */
+.map-pin.pin-spain .pin-badge { top: 14px; }
 .map-pin:hover .pin-badge, .map-pin.selected .pin-badge { border-color: var(--accent); transform: scale(1.06); }
 .map-pin.selected .pin-badge { background: var(--accent); color: var(--accent-ink); }
 .map-pin.selected .pin-badge svg { color: var(--accent-ink); }
 .map-pin.here .pin-dot { background: #8fe3d2; box-shadow: 0 0 0 3px rgba(143, 227, 210, 0.35), 0 0 16px rgba(143, 227, 210, 0.8); }
 
-.dests { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.dests { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 .dest {
   display: grid;
   grid-template-rows: 92px 1fr;
@@ -920,6 +923,7 @@ body.focus-view .place-tag { display: none; }
 .dest-egypt .dest-art { background: linear-gradient(160deg, #f6d38a 0%, #e0a24f 55%, #b8743a 100%); }
 .dest-italy .dest-art { background: linear-gradient(160deg, #f3e2c0 0%, #d9a86a 50%, #6f9a5a 100%); }
 .dest-japan .dest-art { background: linear-gradient(160deg, #fbd3df 0%, #f29bb5 50%, #c8402c 100%); }
+.dest-spain .dest-art { background: linear-gradient(160deg, #ffe08a 0%, #f2a03a 45%, #c8402c 100%); }
 .dest-town .dest-art { background: linear-gradient(160deg, #3a4d78 0%, #24304f 60%, #141b30 100%); }
 .dest-icon { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; background: rgba(255, 255, 255, 0.28); color: #2b1904; }
 .dest-town .dest-icon { color: var(--accent); background: rgba(255, 196, 107, 0.12); }
@@ -948,6 +952,9 @@ body.focus-view .place-tag { display: none; }
 .place-tag svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; color: var(--accent); }
 .world-chip svg { color: #9fd3ff !important; }
 
+@media (max-width: 1100px) {
+  .dests { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 900px) {
   .dests { grid-template-columns: repeat(2, 1fr); }
 }
@@ -962,6 +969,9 @@ body.focus-view .place-tag { display: none; }
   .map-pin .pin-badge svg { width: 14px; height: 14px; }
   .map-pin.lbl-right .pin-badge { left: 17px; }
   .map-pin.lbl-left .pin-badge, .map-pin.pin-japan .pin-badge { left: auto; right: 17px; }
+  /* Rome and Barcelona sit close together: smaller dots, and Italy's icon up out of Egypt's way. */
+  .map-pin .pin-dot { left: 6px; top: 6px; width: 10px; height: 10px; }
+  .map-pin.pin-italy .pin-badge { top: -14px; }
   .world-banner { grid-template-columns: auto 1fr; }
   .world-banner .btn { grid-column: 1 / -1; }
 }

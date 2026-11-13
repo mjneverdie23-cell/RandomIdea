@@ -37,7 +37,7 @@ export class PlaceView {
     this.fog = null;
     this.exposure = 1.1;
     /** Camera presets: default pitch and distance, how far it may turn, and the splash orbit. */
-    this.cam = { pitch: 0.56, dist: 13, minDist: 4, maxDist: 26, yawLimit: 1.1, far: 140, arrive: {}, splash: { x: 0, z: 2, dist: 21, pitch: 0.48, swing: 0.35 } };
+    this.cam = { pitch: 0.56, minPitch: 0.3, dist: 13, minDist: 4, maxDist: 26, yawLimit: 1.1, far: 140, arrive: {}, splash: { x: 0, z: 2, dist: 21, pitch: 0.48, swing: 0.35 } };
     this.updaters = [];
     this.cullers = [];
     this.doorPicks = [];

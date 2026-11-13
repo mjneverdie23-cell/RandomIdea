@@ -29,13 +29,14 @@ export function square(view) {
   view.exposure = 1.0;
   Object.assign(view.cam, {
     pitch: 0.74,
+    minPitch: -0.12,
     dist: 18,
     ahead: 0,
     minDist: 5,
     maxDist: 34,
     yawLimit: null,
     far: 340,
-    arrive: { library: 0.45, cafe: 0.85, netcafe: -0.85, ...Object.fromEntries(['pyramid', 'giza', 'colosseum', 'rome', 'temple', 'garden'].map((k) => [k, 0.5])) },
+    arrive: { library: 0.45, cafe: 0.85, netcafe: -0.85, ...Object.fromEntries(['pyramid', 'giza', 'colosseum', 'rome', 'temple', 'garden', 'basilica', 'barcelona'].map((k) => [k, 0.5])) },
     splash: { x: 0, z: 2, dist: 31, pitch: 0.5, swing: 0.45 },
   });
 

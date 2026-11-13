@@ -113,6 +113,16 @@ export class Sound {
         { type: 'bandpass', f: 2200, q: 1.2, gain: 0.03, lfo: 0.4 },
         { type: 'lowpass', f: 500, q: 0.6, gain: 0.07, lfo: 0.08 },
       ],
+      // A vast, echoing hush, and visitors murmuring far down the nave.
+      basilica: [
+        { type: 'lowpass', f: 200, q: 0.6, gain: 0.06, lfo: 0.03 },
+        { type: 'bandpass', f: 600, q: 0.9, gain: 0.025, lfo: 0.12 },
+      ],
+      // The city's hum, voices on the Rambla, the fountain.
+      barcelona: [
+        { type: 'bandpass', f: 380, q: 0.8, gain: 0.09, lfo: 0.22 },
+        { type: 'bandpass', f: 1700, q: 0.6, gain: 0.05, lfo: 0.18 },
+      ],
     };
     const gain = ctx.createGain();
     gain.gain.value = 0;
@@ -284,6 +294,27 @@ export class Sound {
     o.stop(t + dur + 0.05);
   }
 
+  /** A soft swelling chord, like an organ heard from the far end of a church. */
+  swell(freqs, { dur = 7, gain = 0.018 } = {}) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (const f of freqs) {
+      for (const [mult, level] of [[1, 1], [2, 0.35], [3, 0.12]]) {
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = f * mult;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(gain * level, t + dur * 0.35);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g).connect(this.sfx);
+        o.start(t);
+        o.stop(t + dur + 0.05);
+      }
+    }
+  }
+
   /** The pull-chain click of a banker's lamp. */
   lamp(on) {
     const clicks = on ? [0, 0.075] : [0];
@@ -393,6 +424,30 @@ export class Sound {
         this.tone({ freq: 420, dur: 0.25, gain: 0.08, type: 'triangle' });
         this.tone({ freq: 840, dur: 0.12, gain: 0.03 });
       } else if (Math.random() < 0.25) this.chirp(pan);
+      return;
+    }
+    if (place === 'basilica') {
+      if (Math.random() < 0.02) {
+        // The organ, far off: a slow chord swelling and fading.
+        const chords = [[220, 277.2, 329.6], [196, 246.9, 293.7], [174.6, 220, 261.6]];
+        this.swell(chords[Math.floor(Math.random() * chords.length)]);
+      } else if (Math.random() < 0.06) {
+        // Footsteps echoing down the nave.
+        for (let k = 0; k < 4; k++) this.noise({ at: k * 0.55, dur: 0.05, type: 'lowpass', freq: 500, gain: 0.03, pan });
+      }
+      return;
+    }
+    if (place === 'barcelona') {
+      if (Math.random() < 0.035) {
+        // A guitar somewhere down the Rambla: four notes falling to E.
+        [440, 392, 349.2, 329.6].forEach((f, k) => {
+          this.tone({ at: k * 0.22, freq: f, dur: 1.1, gain: 0.03, type: 'triangle' });
+          this.tone({ at: k * 0.22, freq: f * 2, dur: 0.5, gain: 0.008 });
+        });
+      } else if (Math.random() < 0.12) {
+        // Parakeets squawking overhead.
+        for (let k = 0; k < 2; k++) this.noise({ at: k * 0.16, dur: 0.11, type: 'bandpass', freq: 2400, sweepTo: 3600, q: 4, gain: 0.03, pan });
+      } else if (Math.random() < 0.1) this.chirp(pan);
       return;
     }
     if (place === 'temple' && Math.random() < 0.03) {

@@ -8,8 +8,9 @@ but there is **no chat**, just the quiet company of other people working.
 
 Or open the **world map** and travel. Study inside the **Great Pyramid** and step out into the
 Giza desert with its Sphinx and camels, study in the arena of the **Colosseum** and walk out into
-the streets of Rome, or study in a **temple hall in Japan** and wander its garden. More countries
-are on their way.
+the streets of Rome, study in a **temple hall in Japan** and wander its garden, or study under the
+stained glass of the **Sagrada Família** and walk out into Barcelona. More countries are on their
+way.
 
 Every minute your lamp is on earns **lumens (✦)**. Spend them in the **shop** on clothes,
 accessories, pets and things to hold; everyone sees your look. Play as a guest straight away, or
@@ -21,13 +22,14 @@ create an account to keep your progress everywhere and add friends.
 |---|---|---|
 | ![The library](docs/library.jpg) | ![The coffee shop](docs/cafe.jpg) | ![The net café](docs/netcafe.jpg) |
 
-![The world map: Egypt, Italy and Japan are open, and the rest of the world is coming soon](docs/world-map.jpg)
+![The world map: Egypt, Italy, Japan and Spain are open, and the rest of the world is coming soon](docs/world-map.jpg)
 
-| | Egypt | Italy | Japan |
+| | Study inside | Step outside | Look around |
 |---|---|---|---|
-| **Study inside** | ![Desks in a torch-lit hall inside the Great Pyramid](docs/egypt-pyramid.jpg) | ![Desks on the arena floor of the Colosseum](docs/italy-colosseum.jpg) | ![Low desks on tatami in a temple hall](docs/japan-temple.jpg) |
-| **Step outside** | ![Out in the desert: an obelisk, a market and camels](docs/egypt-outside.jpg) | ![Out in Rome: a piazza with a fountain](docs/italy-outside.jpg) | ![Out in the temple garden: stone lanterns and a torii gate](docs/japan-outside.jpg) |
-| **Look around** | ![The Great Pyramid from the desert](docs/egypt-giza.jpg) | ![The Colosseum from the street](docs/italy-rome.jpg) | ![The temple hall, the koi pond and the tunnel of torii](docs/japan-garden.jpg) |
+| **Egypt** | ![Desks in a torch-lit hall inside the Great Pyramid](docs/egypt-pyramid.jpg) | ![Out in the desert: an obelisk, a market and camels](docs/egypt-outside.jpg) | ![The Great Pyramid from the desert](docs/egypt-giza.jpg) |
+| **Italy** | ![Desks on the arena floor of the Colosseum](docs/italy-colosseum.jpg) | ![Out in Rome: a piazza with a fountain](docs/italy-outside.jpg) | ![The Colosseum from the street](docs/italy-rome.jpg) |
+| **Japan** | ![Low desks on tatami in a temple hall](docs/japan-temple.jpg) | ![Out in the temple garden: stone lanterns and a torii gate](docs/japan-outside.jpg) | ![The temple hall, the koi pond and the tunnel of torii](docs/japan-garden.jpg) |
+| **Spain** | ![Desks among tree-like columns and stained glass in the Sagrada Família](docs/spain-basilica.jpg) | ![Out in Barcelona: the Rambla, its plane trees and flower stalls](docs/spain-outside.jpg) | ![Looking up at the spires of the Sagrada Família, with a crane still building it](docs/spain-barcelona.jpg) |
 
 | Places | The shop, with a 3D try-on | Your profile |
 |---|---|---|
@@ -65,9 +67,10 @@ START_LUMENS=2500 AUTH_PER_MIN=100000 AUTH_BURST=100000 MAX_CONN_PER_IP=100000 n
 npm run bots -- --count 90                  # spread across every place
 npm run bots -- --count 20 --place square   # a crowd outside
 npm run bots -- --count 30 --place pyramid  # fill the Great Pyramid
+npm run bots -- --count 30 --place basilica # fill the Sagrada Família
 ```
 
-Run the tests (62 tests covering every place's layout, pathfinding, protocol validation, room
+Run the tests (64 tests covering every place's layout, pathfinding, protocol validation, room
 logic, moving between places and countries, accounts and passwords, the shop and the economy, friends, and a
 real server with real HTTP and WebSocket clients):
 
@@ -89,7 +92,7 @@ npm test
 7. **Go outside** any time: walk out of the door (or tap *Go outside*) to the town square, sit on
    a bench, and walk into another building.
 8. **Travel the world**: tap the globe at the top (or the airport shuttle at the bus stop), pick
-   Egypt, Italy or Japan, and you land inside that country's building. Walk out of its door to
+   Egypt, Italy, Japan or Spain, and you land inside that country's building. Walk out of its door to
    look around outside.
 
 ### The places
@@ -124,15 +127,19 @@ wear a pin; point at or tap any other country and it says *coming soon*. Pick a 
 | **Egypt** | **Great Pyramid.** A torch-lit hall with painted walls, columns of hieroglyphs, a golden sarcophagus, two seated colossi and a shaft of daylight. 48 desks with oil lamps. | **Giza desert.** The Great Pyramid with two more behind it, the Sphinx, an obelisk, an oasis with palms, a Bedouin tent with cushions, a market stall, ruins and dunes, resting camels and a caravan of camels on the move. |
 | **Italy** | **Colosseum.** Desks on the sand of the arena under the open sky, with tiers of seats all round, canvas sails, banners, braziers and statues. 48 desks. | **Rome.** The Colosseum from outside, a triumphal arch, a piazza with a fountain and pigeons, café tables under awnings, ochre streets with green shutters, umbrella pines and cypresses, scooters, a little car and a gelato cart. |
 | **Japan** | **Temple hall.** Low desks on tatami with floor cushions and paper lanterns, vermilion pillars, shoji screens, a golden altar with candles and incense, a taiko drum and gold folding screens. 36 desks. | **Temple garden.** The hall's curved roofs, a five-storey pagoda, a bell tower, a torii gate and a tunnel of torii, a koi pond with a bridge, a raked rock garden, stone lanterns, cherry and maple trees, a bamboo grove, and Mt. Fuji in the distance. |
+| **Spain** | **Sagrada Família.** Stone columns that branch like trees, in red porphyry, dark basalt, grey granite and pale sandstone; stained glass throwing blue and green light down one side and red and gold down the other; an altar under a hanging canopy, an organ, and two giant seashells for holy water. 48 desks with glass lanterns. | **Barcelona.** The basilica's sculpted front and its spires with mosaic pinnacles (and a crane, still building it), a square with a pond, a Rambla of plane trees and flower stalls with a mosaic in the pavement, a winding mosaic bench and a mosaic dragon fountain, a house of mosaic and a house of wavy stone among city blocks with cut corners, palms, black-and-yellow taxis, a café terrace and green parakeets. |
 
-- Outside you can sit on the tent's cushions, stone blocks, café chairs or garden benches. As in the
-  square, those seats are for resting, not studying.
+- Outside you can sit on the tent's cushions, stone blocks, café chairs, garden benches or the
+  winding mosaic bench. As in the square, those seats are for resting, not studying.
 - When you walk out of a building you turn round to face the view. The camera slides in front of
   the building behind you rather than through it.
+- Outdoors, drag up past the camera's lowest angle and it tilts up, so you can look up at the
+  pyramid, the Colosseum's walls or the spires.
 - The places sheet lists the places of the country you're in, with buttons to open the world map
   and to go **back to Lamplit town**. You can't travel during a session; end it first.
 - Each place has its own sounds: torches crackling in the pyramid, camel bells in the desert,
-  scooters and birds in Rome, a singing bowl in the temple and a bamboo water knocker in the garden.
+  scooters and birds in Rome, a singing bowl in the temple, a bamboo water knocker in the garden,
+  a far-off organ in the basilica, and a guitar and squawking parakeets in Barcelona.
 - Friends see where you are ("Studying in the Great Pyramid") and can join you there.
 
 ### Everything else
@@ -182,7 +189,7 @@ lamplit/
 │   └── config.js       environment variables
 ├── shared/             used by both the server and the browser
 │   ├── places.js       every place: seats, furniture you can't walk through, doors, spawns
-│   ├── world.js        the countries on the world map and their places (Egypt, Italy, Japan)
+│   ├── world.js        the countries on the world map and their places (Egypt, Italy, Japan, Spain)
 │   ├── layout.js       seat kits, turned seats, obstacles, the walk grid, spawn points
 │   ├── path.js         A* pathfinding with smoothing
 │   ├── protocol.js     message types, limits and validation
@@ -194,7 +201,8 @@ lamplit/
 │   └── js/
 │       ├── main.js      ties everything together: places, doors, camera, input
 │       ├── place.js     one place on screen: instanced seats, lamps and their glow
-│       ├── scenes/      library.js, cafe.js, netcafe.js, square.js, egypt.js, italy.js, japan.js
+│       ├── scenes/      library.js, cafe.js, netcafe.js, square.js, egypt.js, italy.js, japan.js,
+│       │                spain.js
 │       │                (+ common.js, and outdoor.js: sky, fire, palms, petals, camera blockers)
 │       ├── worldmap.js  the world map screen (worldmap-data.js is the map itself, generated)
 │       ├── geo.js       merging shapes into a few meshes per place
@@ -238,7 +246,7 @@ lamplit/
 - Each place is built the first time you go there, then kept, so coming back is instant.
 - Each kind of seat part, body part and shop item is drawn once for the whole room (instancing), however many people use it. All of a place's decoration is merged into a few meshes by material.
 - Indoors, walls are one-sided and whatever hangs on a wall hides when the camera looks in through it, so you always see into the room. Doors stay visible.
-- Outdoors, big buildings (the pyramid, the Colosseum, the temple hall, the town's buildings) block the camera: it slides in front of them, drops toward shoulder height and looks out past you, instead of ending up inside a wall or on a roof.
+- Outdoors, big buildings (the pyramid, the Colosseum, the temple hall, the basilica and Barcelona's blocks, the town's buildings) block the camera: it slides in front of them, drops toward shoulder height and looks out past you, instead of ending up inside a wall or on a roof. Below its lowest angle the outdoor camera stops sinking and tilts up instead, to take in tall things.
 - The world map is an SVG of Natural Earth's 1:110m countries on an Equal Earth projection (74 KB, about 26 KB compressed), loaded the first time you open it. Country names come from the browser (`Intl.DisplayNames`), so they're in the viewer's language. To rebuild it, run `npm run map`.
 - Lamp glow, sunbeams, neon and contact shadows are fake light (additive and blended sprites), so a phone can draw a full room.
 - The 3D preview and the shop thumbnails share one extra WebGL context. Browsers cap live contexts and drop the oldest, which would be the room itself.

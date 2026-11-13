@@ -9,7 +9,7 @@ const open = (kind, x, z) => isOpen(grids[kind], cellOf(grids[kind], x, z));
 
 test('every place numbers its seats in order, with no two in the same spot', () => {
   assert.deepEqual(PLACE_KINDS.slice(0, 4), ['library', 'cafe', 'netcafe', 'square'], 'the town keeps its indexes');
-  assert.deepEqual(PLACE_KINDS.slice(4), ['pyramid', 'giza', 'colosseum', 'rome', 'temple', 'garden']);
+  assert.deepEqual(PLACE_KINDS.slice(4), ['pyramid', 'giza', 'colosseum', 'rome', 'temple', 'garden', 'basilica', 'barcelona']);
   for (const kind of PLACE_KINDS) {
     const { desks } = PLACES[kind];
     assert.ok(desks.length > 0, `${kind} has seats`);
@@ -81,7 +81,7 @@ test('the doors connect: every building opens onto the square and the square has
 });
 
 test('each country is a building and its outdoors, joined by a door; a visit starts inside', () => {
-  assert.deepEqual(Object.keys(COUNTRIES), ['egypt', 'italy', 'japan']);
+  assert.deepEqual(Object.keys(COUNTRIES), ['egypt', 'italy', 'japan', 'spain']);
   for (const [name, c] of Object.entries(COUNTRIES)) {
     const [inside, outside] = c.places;
     assert.equal(c.start, inside);
@@ -103,6 +103,19 @@ test('the Colosseum floor is oval; the garden bridge crosses the pond', () => {
   assert.ok(open('garden', -11, pond.z), 'the bridge over it');
   const path = findPath(grids.garden, [-11, -1.6], [-11, 9.6]);
   assert.ok(path && pathLength(path) < 12.5, 'straight across the bridge');
+});
+
+test('the basilica has a clear nave between its columns; the mosaic bench is one long bench', () => {
+  assert.ok(open('basilica', 0, 0) && open('basilica', 0, -9), 'the nave, up to the altar');
+  for (const [x, z] of PLACES.basilica.columns) assert.ok(!open('basilica', x, z), `column at ${x},${z}`);
+  assert.equal(PLACES.basilica.desks.length, 48);
+  // You can't step through the winding bench between two seats: you walk round one end.
+  const bcn = PLACES.barcelona;
+  assert.equal(bcn.waveSeats.length, 9);
+  for (const [x, z] of bcn.waveSeats) assert.ok(!open('barcelona', x, z), 'a seat of the bench');
+  const path = findPath(grids.barcelona, [-13, 10.2], [-13, 5.6]);
+  assert.ok(path && pathLength(path) > 9, 'round the end of the bench');
+  assert.ok(open('barcelona', 0, 20) && open('barcelona', 0, -13), 'the Rambla and the square in front of the basilica');
 });
 
 test('spawn and arrival points are walkable', () => {

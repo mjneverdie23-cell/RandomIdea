@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { HallManager, Hall } from '../server/halls.js';
 import { openDb } from '../server/db.js';
 import { ProfileService } from '../server/profiles.js';
-import { PLACES, PLACE_KINDS } from '../shared/places.js';
+import { PLACES, PLACE_KINDS, COUNTRIES } from '../shared/places.js';
 
 const DESKS = PLACES.library.desks;
 import { STATE, PROTOCOL, RESUME_GRACE_MS, OPEN_FOCUS_CAP, TEA_MS } from '../shared/protocol.js';
@@ -501,6 +501,25 @@ test('each place fills its own rooms; empty extra rooms close, the first of each
   assert.ok(mgr.halls.has(wa.hall), 'the first coffee shop stays open');
   const c = join({ place: 'cafe' });
   assert.equal(c.c.last('welcome').hall, wa.hall);
+});
+
+test('every country: you arrive inside its building and walk out in front of it', () => {
+  const { mgr, join, me, advance } = setup();
+  const a = join();
+  for (const [name, c] of Object.entries(COUNTRIES)) {
+    const [inside, outside] = c.places;
+    advance(2000);
+    mgr.handle(a.c, { t: 'enter', place: c.start });
+    assert.equal(a.c.last('welcome').place, inside, name);
+    const spawn = PLACES[inside].spawn;
+    assert.ok(Math.abs(me(a.c).pos[0] - spawn.x) <= spawn.w / 2 && Math.abs(me(a.c).pos[1] - spawn.z) <= spawn.d / 2, `${name}: just inside the door`);
+    advance(2000);
+    mgr.handle(a.c, { t: 'enter', place: outside });
+    assert.equal(a.c.last('welcome').place, outside, name);
+    const out = PLACES[outside].arrive[inside];
+    const [x, z] = me(a.c).pos;
+    assert.ok(Math.abs(x - out.x) <= out.w / 2 && Math.abs(z - out.z) <= out.d / 2, `${name}: outside, in front of the building`);
+  }
 });
 
 test('world map: travelling to a country starts inside its building; you can walk out and back', () => {

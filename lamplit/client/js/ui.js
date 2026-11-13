@@ -15,7 +15,7 @@ const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const EMOTE_KEYS = ['wave', 'stretch', 'cheer'];
 /** Icons for each place (and for going outside). */
-const PLACE_ICONS = { library: 'book', cafe: 'tea', netcafe: 'screen', square: 'tree', pyramid: 'pyramid', giza: 'sun', colosseum: 'arch', rome: 'tree', temple: 'torii', garden: 'tree' };
+const PLACE_ICONS = { library: 'book', cafe: 'tea', netcafe: 'screen', square: 'tree', pyramid: 'pyramid', giza: 'sun', colosseum: 'arch', rome: 'tree', temple: 'torii', garden: 'tree', basilica: 'spires', barcelona: 'sun' };
 const VIEWS = { shop: shopHTML, profile: profileHTML, settings: settingsHTML, account: accountHTML };
 
 export class UI {

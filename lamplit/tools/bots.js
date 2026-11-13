@@ -13,7 +13,7 @@
 // limit, e.g. AUTH_PER_MIN=100000 AUTH_BURST=100000 MAX_CONN_PER_IP=100000 npm start
 //
 // Options: --url ws://localhost:8080/ws  --count N  --room N  --ramp N per second
-//          --place library|cafe|netcafe|square|pyramid|giza|colosseum|rome|temple|garden|mix
+//          --place library|cafe|netcafe|square|pyramid|giza|colosseum|rome|temple|garden|basilica|barcelona|mix
 //          --duration seconds (0 = forever)  --short (5-minute sessions)  --quiet
 
 import WebSocket from 'ws';
@@ -51,7 +51,7 @@ function startPlace() {
   if (r < 0.48) return 'cafe';
   if (r < 0.6) return 'netcafe';
   if (r < 0.66) return 'square';
-  return pick(['pyramid', 'colosseum', 'temple', 'pyramid', 'colosseum', 'temple', 'giza', 'rome', 'garden']);
+  return pick(['pyramid', 'colosseum', 'temple', 'basilica', 'pyramid', 'colosseum', 'temple', 'basilica', 'giza', 'rome', 'garden', 'barcelona']);
 }
 
 class Bot {

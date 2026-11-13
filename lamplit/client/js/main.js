@@ -15,6 +15,7 @@ import { square } from './scenes/square.js';
 import { pyramid, giza } from './scenes/egypt.js';
 import { colosseum, rome } from './scenes/italy.js';
 import { temple, garden } from './scenes/japan.js';
+import { basilica, barcelona } from './scenes/spain.js';
 import { Avatars } from './avatars.js';
 import { Labels } from './labels.js';
 import { Net } from './net.js';
@@ -46,7 +47,7 @@ const avatars = new Avatars(scene);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 140);
 
 // Each place is built the first time you go there, then kept for coming back.
-const RECIPES = { library, cafe, netcafe, square, pyramid, giza, colosseum, rome, temple, garden };
+const RECIPES = { library, cafe, netcafe, square, pyramid, giza, colosseum, rome, temple, garden, basilica, barcelona };
 const views = new Map();
 function viewFor(kind) {
   if (!views.has(kind)) {
@@ -1134,6 +1135,8 @@ const camRay = new THREE.Raycaster();
 const camDir = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 const NO_BLOCKERS = [];
+/** Below this pitch the camera tilts up rather than sinking further (outdoors only). */
+const LOOK_UP_FROM = 0.22;
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 function updateCamera(dt, time) {
@@ -1179,20 +1182,29 @@ function updateCamera(dt, time) {
   // camera comes in front of it, drops toward shoulder height and looks out past you, rather
   // than going through the wall or staring down at your feet.
   const blockers = joined && !cam.focusView ? world.camBlockers : NO_BLOCKERS;
-  aim(cam.cur.pitch);
+  // Outdoors you can drag on past the lowest angle: the camera stops sinking and tilts up
+  // instead, to look up at a tall front or a spire.
+  const posPitch = Math.max(cam.cur.pitch, LOOK_UP_FROM);
+  const lookUp = Math.max(0, LOOK_UP_FROM - cam.cur.pitch) * 2;
+  aim(posPitch);
   const reach = castCamera(blockers, cam.cur.dist);
   // In at once so nothing ever blocks the view; back out gently once it's clear.
   cam.reach = snapped || reach < cam.reach ? reach : cam.reach + (reach - cam.reach) * (1 - Math.exp(-dt * 2.5));
   const pulled = Math.max(0, 1 - cam.reach / cam.cur.dist);
-  if (pulled < 0.001) {
+  if (pulled < 0.001 && lookUp === 0) {
     camera.position.copy(cam.target).addScaledVector(camDir, cam.cur.dist);
     camera.lookAt(cam.target);
     return;
   }
-  const low = cam.cur.pitch + (Math.min(cam.cur.pitch, 0.24) - cam.cur.pitch) * pulled;
-  aim(low);
-  camera.position.copy(cam.target).addScaledVector(camDir, castCamera(blockers, cam.reach));
-  const look = low - Math.min(low * 0.4, 0.12) * pulled;
+  let low = posPitch;
+  let back = cam.cur.dist;
+  if (pulled >= 0.001) {
+    low = posPitch + (Math.min(posPitch, 0.24) - posPitch) * pulled;
+    aim(low);
+    back = castCamera(blockers, cam.reach);
+  }
+  camera.position.copy(cam.target).addScaledVector(camDir, back);
+  const look = low - Math.min(low * 0.4, 0.12) * pulled - lookUp;
   camLook.set(-Math.sin(cam.cur.yaw) * Math.cos(look), -Math.sin(look), -Math.cos(cam.cur.yaw) * Math.cos(look)).add(camera.position);
   camera.lookAt(camLook);
 }
@@ -1248,7 +1260,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (pointers.size === 1 && dragged) {
     const limit = world.cam.yawLimit;
     cam.yaw = limit ? Math.max(-limit, Math.min(limit, cam.yaw - dx * 0.005)) : wrapAngle(cam.yaw - dx * 0.005);
-    cam.pitch = Math.max(0.3, Math.min(1.25, cam.pitch + dy * 0.004));
+    cam.pitch = Math.max(world.cam.minPitch, Math.min(1.25, cam.pitch + dy * 0.004));
   } else if (pointers.size === 2 && pinch) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);

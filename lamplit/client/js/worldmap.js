@@ -8,9 +8,9 @@ import { esc } from './views.js';
 import { COUNTRIES } from '../shared/places.js';
 
 /** Icons for each destination's pin and card. */
-export const COUNTRY_ICONS = { egypt: 'pyramid', italy: 'arch', japan: 'torii', town: 'lamp' };
+export const COUNTRY_ICONS = { egypt: 'pyramid', italy: 'arch', japan: 'torii', spain: 'spires', town: 'lamp' };
 /** Which side of its pin each label sits on, so neighbours don't collide. */
-const LABEL_SIDE = { egypt: 'right', italy: 'left', japan: 'right' };
+const LABEL_SIDE = { egypt: 'right', italy: 'right', japan: 'right', spain: 'left' };
 
 let data = null;
 export async function loadMap() {

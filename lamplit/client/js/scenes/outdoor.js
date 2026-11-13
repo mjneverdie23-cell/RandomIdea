@@ -14,6 +14,8 @@ export function outdoors(view, { sky = ['#4f8fd8', '#cfe6f7', '#b8d3a0'], fog = 
   const root = view.root;
   view.background = new THREE.Color(sky[1]);
   view.fog = new THREE.Fog(fog, fogNear, fogFar);
+  // Under an open sky you can tilt the camera up to take in the tall things.
+  view.cam.minPitch = -0.12;
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(160, 32, 16),
     new THREE.MeshBasicMaterial({ map: tex.skyDome({ top: sky[0], horizon: sky[1], ground: sky[2] }), side: THREE.BackSide, fog: false, depthWrite: false }),

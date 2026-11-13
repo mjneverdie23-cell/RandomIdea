@@ -1390,3 +1390,571 @@ export function romanFacade({ wall = '#e3b36a', shutter = '#3f6b4a', rows = 3, c
   }
   return finish(c);
 }
+
+// ------------------------------------------------------------------ Spain
+
+/** Draws a shard (a polygon around cx, cy) and its copies across the edges, so it tiles. */
+function tiled(g, S, cx, cy, pts) {
+  for (const ox of [-S, 0, S]) {
+    for (const oy of [-S, 0, S]) {
+      g.beginPath();
+      pts.forEach(([x, y], k) => (k ? g.lineTo(cx + x + ox, cy + y + oy) : g.moveTo(cx + x + ox, cy + y + oy)));
+      g.closePath();
+      g.fill();
+    }
+  }
+}
+
+/** Broken-tile mosaic (trencadís): bright shards of glazed tile set in pale grout. */
+export function trencadis({ palette = ['#f4f1e8', '#2f6fb8', '#e8b23a', '#3c9a5f', '#d9573c', '#7fc3e0', '#f4f1e8'], seed = 7, repeat = [4, 1], grout = '#d8d2c4' } = {}) {
+  const S = 256;
+  const [c, g] = canvas(S, S);
+  const r = rng(seed);
+  g.fillStyle = grout;
+  g.fillRect(0, 0, S, S);
+  const step = 16;
+  for (let y = 0; y < S; y += step) {
+    for (let x = 0; x < S; x += step) {
+      const n = 4 + Math.floor(r() * 3);
+      const rad = step * (0.52 + r() * 0.2);
+      const pts = [];
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + r() * 0.7;
+        const rr = rad * (0.72 + r() * 0.35);
+        pts.push([Math.cos(a) * rr, Math.sin(a) * rr]);
+      }
+      const col = new THREE.Color(palette[Math.floor(r() * palette.length)]).multiplyScalar(0.88 + r() * 0.2);
+      g.fillStyle = `#${col.getHexString()}`;
+      tiled(g, S, x + step / 2 + (r() - 0.5) * 6, y + step / 2 + (r() - 0.5) * 6, pts);
+    }
+  }
+  for (let i = 0; i < 260; i++) {
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    g.fillRect(r() * S, r() * S, 2, 1);
+  }
+  return finish(c, { repeat, aniso: 8 });
+}
+
+/** A tall stained-glass window with a pointed top: shards of colour held in lead. */
+export function stainedGlass({ palette = ['#2a6fd1', '#3fb0c9', '#4fbf72', '#9ad1e8', '#1d4f9a'], seed = 3 } = {}) {
+  const W = 128;
+  const H = 384;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  const outline = () => {
+    g.beginPath();
+    g.moveTo(6, H - 4);
+    g.lineTo(6, H * 0.3);
+    g.bezierCurveTo(6, H * 0.08, W * 0.36, 4, W / 2, 4);
+    g.bezierCurveTo(W * 0.64, 4, W - 6, H * 0.08, W - 6, H * 0.3);
+    g.lineTo(W - 6, H - 4);
+    g.closePath();
+  };
+  g.save();
+  outline();
+  g.clip();
+  const cols = 5;
+  const rows = 16;
+  const pts = [];
+  for (let j = 0; j <= rows; j++) {
+    for (let i = 0; i <= cols; i++) {
+      const jx = i > 0 && i < cols ? (r() - 0.5) * 16 : 0;
+      const jy = j > 0 && j < rows ? (r() - 0.5) * 14 : 0;
+      pts.push([(i / cols) * W + jx, (j / rows) * H + jy]);
+    }
+  }
+  const at = (i, j) => pts[j * (cols + 1) + i];
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const col = new THREE.Color(palette[Math.floor(r() * palette.length)]).multiplyScalar(0.8 + r() * 0.35 + (1 - j / rows) * 0.15);
+      g.fillStyle = `#${col.getHexString()}`;
+      g.beginPath();
+      g.moveTo(...at(i, j));
+      g.lineTo(...at(i + 1, j));
+      g.lineTo(...at(i + 1, j + 1));
+      g.lineTo(...at(i, j + 1));
+      g.closePath();
+      g.fill();
+      g.strokeStyle = 'rgba(30, 26, 24, 0.85)';
+      g.lineWidth = 2.4;
+      g.stroke();
+    }
+  }
+  g.fillStyle = 'rgba(255, 250, 225, 0.6)';
+  g.beginPath();
+  g.arc(W / 2, H * 0.17, 15, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
+  g.strokeStyle = '#3a3330';
+  g.lineWidth = 5;
+  outline();
+  g.stroke();
+  return finish(c);
+}
+
+/** A round rose window: rings of coloured glass around a bright centre. */
+export function roseWindow({ seed = 5 } = {}) {
+  const S = 256;
+  const [c, g] = canvas(S, S);
+  const r = rng(seed);
+  const pal = ['#e0442f', '#f2a23a', '#f6d85a', '#3fa45a', '#2f7fd1', '#7a4fc9', '#f07aa8'];
+  const m = S / 2;
+  for (const [r0, r1, n] of [[0, 20, 1], [20, 46, 8], [46, 74, 12], [74, 100, 16], [100, 124, 24]]) {
+    for (let k = 0; k < n; k++) {
+      const a0 = (k / n) * Math.PI * 2;
+      const a1 = ((k + 1) / n) * Math.PI * 2;
+      g.beginPath();
+      g.arc(m, m, r1, a0, a1);
+      g.arc(m, m, r0, a1, a0, true);
+      g.closePath();
+      g.fillStyle = r0 === 0 ? '#fff4c8' : pal[(k + Math.floor(r() * 2) + r0) % pal.length];
+      g.fill();
+      g.strokeStyle = 'rgba(30, 26, 24, 0.9)';
+      g.lineWidth = 2.5;
+      g.stroke();
+    }
+  }
+  g.strokeStyle = '#3a3330';
+  g.lineWidth = 6;
+  g.beginPath();
+  g.arc(m, m, 124, 0, Math.PI * 2);
+  g.stroke();
+  return finish(c);
+}
+
+/** Barcelona's pavement: grey tiles pressed with a four-petal flower. */
+export function panot({ seed = 9, repeat = [160, 160], base = '#c9c3b6' } = {}) {
+  const S = 256;
+  const [c, g] = canvas(S, S);
+  const r = rng(seed);
+  const tile = S / 2;
+  const tint = new THREE.Color(base);
+  for (let ty = 0; ty < 2; ty++) {
+    for (let tx = 0; tx < 2; tx++) {
+      const x0 = tx * tile;
+      const y0 = ty * tile;
+      g.fillStyle = `#${tint.clone().multiplyScalar(0.94 + r() * 0.1).getHexString()}`;
+      g.fillRect(x0, y0, tile, tile);
+      g.strokeStyle = 'rgba(70, 64, 56, 0.32)';
+      g.lineWidth = 4;
+      const cx = x0 + tile / 2;
+      const cy = y0 + tile / 2;
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2;
+        g.beginPath();
+        g.ellipse(cx + Math.cos(a) * tile * 0.22, cy + Math.sin(a) * tile * 0.22, tile * 0.2, tile * 0.1, a, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.beginPath();
+      g.arc(cx, cy, tile * 0.06, 0, Math.PI * 2);
+      g.stroke();
+      for (const [qx, qy] of [[x0, y0], [x0 + tile, y0], [x0, y0 + tile], [x0 + tile, y0 + tile]]) {
+        g.beginPath();
+        g.arc(qx, qy, tile * 0.17, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.strokeStyle = 'rgba(60, 56, 50, 0.4)';
+      g.lineWidth = 2;
+      g.strokeRect(x0 + 1, y0 + 1, tile - 2, tile - 2);
+    }
+  }
+  for (let i = 0; i < 1400; i++) {
+    g.fillStyle = `rgba(${r() < 0.5 ? '255,255,255' : '40,36,30'}, ${r() * 0.08})`;
+    g.fillRect(r() * S, r() * S, 2, 2);
+  }
+  return finish(c, { repeat, aniso: 8 });
+}
+
+/** The wavy stripes paved down the middle of the Rambla. */
+export function ramblaWaves({ repeat = [2, 8] } = {}) {
+  const S = 256;
+  const [c, g] = canvas(S, S);
+  const band = 32;
+  for (let k = 0; k < S / band; k++) {
+    g.fillStyle = k % 2 ? '#e9e3d6' : '#c8bda8';
+    g.beginPath();
+    for (let x = 0; x <= S; x += 4) {
+      const y = k * band + Math.sin((x / S) * Math.PI * 4) * 9;
+      if (x === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    for (let x = S; x >= 0; x -= 4) g.lineTo(x, (k + 1) * band + Math.sin((x / S) * Math.PI * 4) * 9);
+    g.closePath();
+    g.fill();
+  }
+  // The last band wraps round to the top.
+  g.fillStyle = '#e9e3d6';
+  g.beginPath();
+  for (let x = 0; x <= S; x += 4) g.lineTo(x, Math.sin((x / S) * Math.PI * 4) * 9);
+  g.lineTo(S, 0);
+  g.lineTo(0, 0);
+  g.closePath();
+  g.fill();
+  return finish(c, { repeat, aniso: 8 });
+}
+
+/** An Eixample façade: tall balcony doors with iron railings and shutters, shops below. */
+export function eixampleFacade({ wall = '#e6d3b3', shutter = '#4f7a52', rows = 5, cols = 3, seed = 31, shop = '#5a3a2a', awning = null } = {}) {
+  const W = 256;
+  const H = 512;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  g.fillStyle = wall;
+  g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,245,225,0.12)' : 'rgba(110,80,50,0.07)';
+    g.fillRect(r() * W, r() * H, 3, 3);
+  }
+  const floorH = H / (rows + 1.2);
+  const cw = W / cols;
+  g.fillStyle = 'rgba(255,255,255,0.35)';
+  g.fillRect(0, 0, W, 10);
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(0, 10, W, 4);
+  for (let y = 0; y < rows; y++) {
+    const top = 18 + y * floorH;
+    g.fillStyle = 'rgba(90, 60, 30, 0.12)';
+    g.fillRect(0, top + floorH - 6, W, 3);
+    for (let x = 0; x < cols; x++) {
+      const wx = x * cw + cw * 0.28;
+      const ww = cw * 0.44;
+      const wy = top + floorH * 0.12;
+      const wh = floorH * 0.74;
+      g.fillStyle = 'rgba(255, 250, 240, 0.7)';
+      g.fillRect(wx - 5, wy - 7, ww + 10, 7);
+      g.fillStyle = '#2b2622';
+      g.fillRect(wx, wy, ww, wh);
+      const shut = r();
+      g.fillStyle = shutter;
+      g.fillRect(wx, wy, ww, wh * (shut < 0.4 ? 0.95 : shut < 0.75 ? 0.5 : 0.15));
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      for (let k = 3; k < wh * 0.95; k += 4) g.fillRect(wx + 1, wy + k, ww - 2, 1);
+      // The balcony: a slab and an iron railing across the lower part of the door.
+      g.fillStyle = 'rgba(250, 245, 235, 0.9)';
+      g.fillRect(wx - 8, wy + wh, ww + 16, 5);
+      g.fillStyle = '#1e1c1c';
+      g.fillRect(wx - 8, wy + wh * 0.58, ww + 16, 3);
+      for (let k = 0; k <= 8; k++) g.fillRect(wx - 8 + (k * (ww + 16)) / 8 - 1, wy + wh * 0.58, 2, wh * 0.42);
+      if (r() < 0.35) {
+        g.fillStyle = r() < 0.5 ? '#d9483b' : '#e8a83a';
+        for (let k = 0; k < 5; k++) g.fillRect(wx - 6 + k * (ww / 4), wy + wh - 6, 4, 4);
+      }
+    }
+  }
+  const gy = 18 + rows * floorH;
+  g.fillStyle = 'rgba(0,0,0,0.2)';
+  g.fillRect(0, gy, W, 5);
+  for (let x = 0; x < cols; x++) {
+    g.fillStyle = shop;
+    g.fillRect(x * cw + cw * 0.1, gy + 14, cw * 0.8, H - gy - 14);
+    g.fillStyle = 'rgba(255, 220, 160, 0.55)';
+    g.fillRect(x * cw + cw * 0.16, gy + 24, cw * 0.68, (H - gy) * 0.55);
+    if (awning) {
+      g.fillStyle = awning;
+      g.fillRect(x * cw + cw * 0.06, gy + 8, cw * 0.88, 12);
+    }
+  }
+  return finish(c);
+}
+
+/** A house of blue-green mosaic with white mask-shaped balconies and bone-like columns. */
+export function mosaicFacade({ seed = 13 } = {}) {
+  const W = 256;
+  const H = 512;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  g.fillStyle = '#9cc6cf';
+  g.fillRect(0, 0, W, H);
+  const pal = ['#3f8fb0', '#6fb7c4', '#2f6f8f', '#b48fc7', '#7fbf9a', '#e9e4f0', '#5a9fd0'];
+  for (let i = 0; i < 1300; i++) {
+    const n = 4 + Math.floor(r() * 2);
+    const rad = 3 + r() * 4;
+    const pts = [];
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + r();
+      pts.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+    }
+    g.fillStyle = pal[Math.floor(r() * pal.length)];
+    tiled(g, W, r() * W, r() * H, pts);
+  }
+  // Mask balconies over dark windows, three floors of them.
+  for (let y = 0; y < 4; y++) {
+    for (let x = 0; x < 3; x++) {
+      const cx = 44 + x * 84;
+      const cy = 70 + y * 86;
+      g.fillStyle = '#2a2a33';
+      g.fillRect(cx - 22, cy - 26, 44, 58);
+      g.fillStyle = '#f4efe6';
+      g.beginPath();
+      g.ellipse(cx, cy + 10, 26, 16, 0, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#2a2a33';
+      for (const s of [-9, 9]) {
+        g.beginPath();
+        g.ellipse(cx + s, cy + 8, 5, 6, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+  // The ground floor's bone-like stone frames round big wavy windows.
+  const gy = 420;
+  g.fillStyle = '#efe7d6';
+  g.fillRect(0, gy - 10, W, H - gy + 10);
+  g.fillStyle = '#3a3a44';
+  for (let x = 0; x < 3; x++) {
+    g.beginPath();
+    g.ellipse(44 + x * 84, gy + 46, 30, 40, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = '#efe7d6';
+  for (let x = 0; x <= 3; x++) {
+    g.beginPath();
+    g.ellipse(2 + x * 84, gy + 46, 10, 48, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  return finish(c);
+}
+
+/** A house of wavy cream stone with seaweed-like iron balconies. */
+export function wavyFacade({ seed = 17 } = {}) {
+  const W = 256;
+  const H = 512;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  g.fillStyle = '#e9dfcb';
+  g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2400; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,250,240,0.16)' : 'rgba(120,100,70,0.06)';
+    g.fillRect(r() * W, r() * H, 3, 3);
+  }
+  const rows = 6;
+  const fh = H / rows;
+  for (let y = 0; y < rows; y++) {
+    const base = y * fh;
+    g.fillStyle = 'rgba(140, 115, 80, 0.22)';
+    g.beginPath();
+    for (let x = 0; x <= W; x += 4) g.lineTo(x, base + fh - 8 + Math.sin((x / W) * Math.PI * 4 + y) * 7);
+    for (let x = W; x >= 0; x -= 4) g.lineTo(x, base + fh + Math.sin((x / W) * Math.PI * 4 + y) * 7);
+    g.closePath();
+    g.fill();
+    for (let x = 0; x < 3; x++) {
+      const cx = 44 + x * 84 + Math.sin(y + x) * 6;
+      const wy = base + fh * 0.2;
+      g.fillStyle = '#2c2824';
+      g.beginPath();
+      g.ellipse(cx, wy + fh * 0.3, 26, fh * 0.32, 0, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = '#141212';
+      g.lineWidth = 2.2;
+      for (let k = 0; k < 7; k++) {
+        g.beginPath();
+        const sx = cx - 30 + k * 10;
+        g.moveTo(sx, wy + fh * 0.62);
+        g.bezierCurveTo(sx + 8, wy + fh * 0.48, sx - 8, wy + fh * 0.42, sx + 3, wy + fh * 0.32);
+        g.stroke();
+      }
+    }
+  }
+  return finish(c);
+}
+
+/**
+ * The basilica's sculpted front: three deep portals under organic gables dripping with
+ * stone, and a green cypress at the top.
+ */
+export function gaudiFacade({ seed = 21 } = {}) {
+  const W = 512;
+  const H = 320;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  g.fillStyle = '#c9b089';
+  g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 160; i++) {
+    g.fillStyle = `rgba(90, 70, 45, ${0.05 + r() * 0.08})`;
+    g.fillRect(r() * W, r() * H, 2 + r() * 3, 20 + r() * 60);
+  }
+  // Ribs running up the front, and small sculpted lumps between them, lit from above.
+  for (let x = 6; x < W; x += 14 + r() * 10) {
+    g.fillStyle = 'rgba(230, 214, 184, 0.35)';
+    g.fillRect(x, 0, 3, H);
+    g.fillStyle = 'rgba(110, 88, 60, 0.25)';
+    g.fillRect(x + 3, 0, 2, H);
+  }
+  for (let i = 0; i < 2600; i++) {
+    const x = r() * W;
+    const y = r() * H * 0.8;
+    const rad = 0.8 + r() * 2.2;
+    g.fillStyle = r() < 0.5 ? 'rgba(236, 222, 194, 0.4)' : 'rgba(115, 92, 62, 0.28)';
+    g.beginPath();
+    g.ellipse(x, y, rad, rad * (0.8 + r() * 0.9), 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  // Stone dripping from the gables like wax.
+  for (let i = 0; i < 260; i++) {
+    const x = r() * W;
+    const y = 4 + r() * 90;
+    g.fillStyle = 'rgba(110, 88, 60, 0.32)';
+    g.fillRect(x, y, 1.5 + r() * 1.5, 8 + r() * 26);
+  }
+  const portal = (cx, w, h) => {
+    const y0 = H - h;
+    g.fillStyle = '#d9c4a0';
+    g.beginPath();
+    g.moveTo(cx - w * 0.62, H);
+    g.lineTo(cx - w * 0.62, y0 + h * 0.3);
+    g.quadraticCurveTo(cx, y0 - h * 0.32, cx + w * 0.62, y0 + h * 0.3);
+    g.lineTo(cx + w * 0.62, H);
+    g.fill();
+    g.fillStyle = '#3a2e24';
+    g.beginPath();
+    g.moveTo(cx - w / 2, H);
+    g.lineTo(cx - w / 2, y0 + h * 0.34);
+    g.quadraticCurveTo(cx, y0 - h * 0.18, cx + w / 2, y0 + h * 0.34);
+    g.lineTo(cx + w / 2, H);
+    g.fill();
+  };
+  portal(W / 2, W * 0.17, H * 0.62);
+  portal(W * 0.2, W * 0.12, H * 0.48);
+  portal(W * 0.8, W * 0.12, H * 0.48);
+  // The cypress at the top, with white doves.
+  g.fillStyle = '#3f7a46';
+  g.beginPath();
+  g.moveTo(W / 2, 0);
+  g.quadraticCurveTo(W / 2 + 26, H * 0.18, W / 2 + 14, H * 0.3);
+  g.lineTo(W / 2 - 14, H * 0.3);
+  g.quadraticCurveTo(W / 2 - 26, H * 0.18, W / 2, 0);
+  g.fill();
+  g.fillStyle = '#f4f1e8';
+  for (let i = 0; i < 14; i++) g.fillRect(W / 2 - 14 + r() * 28, 10 + r() * H * 0.26, 4, 3);
+  return finish(c);
+}
+
+/** A bell tower's stone, with rows of slit windows climbing it. */
+export function towerStone({ seed = 23 } = {}) {
+  const W = 128;
+  const H = 512;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  g.fillStyle = '#c9b089';
+  g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = `rgba(90, 70, 45, ${0.05 + r() * 0.08})`;
+    g.fillRect(r() * W, r() * H, 2 + r() * 2, 30 + r() * 60);
+  }
+  g.fillStyle = '#4a3a2c';
+  for (let y = 12; y < H - 30; y += 22) {
+    for (let x = 0; x < 4; x++) {
+      const sx = 10 + x * 32 + (Math.floor(y / 22) % 2) * 16;
+      g.fillRect(sx % W, y, 7, 14);
+    }
+  }
+  return finish(c);
+}
+
+/** Round glazed scales, pink to green to blue, for a dragon-backed roof. */
+export function scales({ seed = 25 } = {}) {
+  const W = 256;
+  const H = 128;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  const pal = ['#e58fa8', '#d9a26a', '#9fc26a', '#5fb08a', '#3a8fc0', '#2f5fa8'];
+  g.fillStyle = '#2a3a4a';
+  g.fillRect(0, 0, W, H);
+  const s = 16;
+  for (let row = 0; row < H / (s * 0.6) + 1; row++) {
+    for (let x = -s; x < W + s; x += s) {
+      const cx = x + (row % 2 ? s / 2 : 0);
+      const cy = row * s * 0.6;
+      const t = Math.min(pal.length - 1, Math.floor((cx / W) * pal.length + (r() - 0.5) * 0.8));
+      g.fillStyle = pal[Math.max(0, t)];
+      g.beginPath();
+      g.arc(cx, cy, s * 0.55, 0, Math.PI);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      g.fillRect(cx - 3, cy + 2, 4, 2);
+    }
+  }
+  return finish(c);
+}
+
+/** A round mosaic set in the pavement: bold shapes in red, yellow, blue and black. */
+export function miro() {
+  const S = 256;
+  const [c, g] = canvas(S, S);
+  g.save();
+  g.beginPath();
+  g.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2);
+  g.clip();
+  g.fillStyle = '#f3efe4';
+  g.fillRect(0, 0, S, S);
+  g.strokeStyle = 'rgba(0,0,0,0.12)';
+  g.lineWidth = 1;
+  for (let k = 0; k < S; k += 8) {
+    g.beginPath();
+    g.moveTo(k, 0);
+    g.lineTo(k, S);
+    g.moveTo(0, k);
+    g.lineTo(S, k);
+    g.stroke();
+  }
+  g.fillStyle = '#d8352a';
+  g.beginPath();
+  g.arc(92, 104, 44, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#2d5fb4';
+  g.beginPath();
+  g.ellipse(176, 150, 38, 26, 0.6, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#f2c230';
+  g.beginPath();
+  g.arc(150, 70, 26, 0.4, Math.PI * 1.6);
+  g.fill();
+  g.fillStyle = '#3c9a5f';
+  g.beginPath();
+  g.arc(84, 190, 14, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#151515';
+  g.lineWidth = 9;
+  g.beginPath();
+  g.moveTo(40, 160);
+  g.bezierCurveTo(100, 120, 140, 230, 210, 196);
+  g.moveTo(128, 20);
+  g.lineTo(128, 236);
+  g.stroke();
+  g.restore();
+  g.strokeStyle = '#8a8070';
+  g.lineWidth = 4;
+  g.beginPath();
+  g.arc(S / 2, S / 2, S / 2 - 3, 0, Math.PI * 2);
+  g.stroke();
+  return finish(c);
+}
+
+/** A skyscraper's skin of glass panels, red at the foot rising to blue. */
+export function glassTower() {
+  const W = 128;
+  const H = 256;
+  const [c, g] = canvas(W, H);
+  const grad = g.createLinearGradient(0, H, 0, 0);
+  grad.addColorStop(0, '#c2402f');
+  grad.addColorStop(0.35, '#e08a3a');
+  grad.addColorStop(0.6, '#5f8fd8');
+  grad.addColorStop(1, '#2a4fa0');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(255,255,255,0.35)';
+  g.lineWidth = 1;
+  for (let y = 0; y < H; y += 8) {
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(W, y);
+    g.stroke();
+  }
+  for (let x = 0; x < W; x += 8) {
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.lineTo(x, H);
+    g.stroke();
+  }
+  return finish(c);
+}

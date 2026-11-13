@@ -1,6 +1,7 @@
 // World map mode: places in other countries, each a building to study in and the
 // outdoors around it. Egypt: inside the Great Pyramid, and the desert at Giza. Italy:
 // inside the Colosseum, and the streets of Rome. Japan: a temple hall, and its garden.
+// Spain: inside a basilica of tree-like columns and stained glass, and Barcelona.
 // Like the town's places, each defines its seats, the things you can't walk through, its
 // doors and where people appear; places.js adds them to the list of every place.
 
@@ -313,9 +314,149 @@ const garden = {
   arrive: Object.freeze({ temple: area(0, -10.2, 3, 1.2) }),
 };
 
+// ------------------------------------------------------------------ Spain: inside the basilica
+
+const BAS_TABLE_X = [-5, 5];
+const BAS_TABLE_Z = [-5.2, -0.8, 3.6];
+/** The tree-like columns down each side aisle. */
+const BAS_COLUMNS = [-10, -5.5, -1, 3.5, 8].flatMap((z) => [[-9.4, z], [9.4, z]]);
+const BAS_FONTS = [[-3.6, 12.6], [3.6, 12.6]];
+const basilica = {
+  kind: 'basilica',
+  country: 'spain',
+  indoor: true,
+  width: 26,
+  depth: 32,
+  wallHeight: 14,
+  tables: freezeAll(BAS_TABLE_Z.flatMap((z) => BAS_TABLE_X.map((x) => [x, z]))),
+  columns: freezeAll(BAS_COLUMNS),
+  /** The altar on its steps at the apse end, under a hanging canopy. */
+  altar: Object.freeze([-4.5, -16, 4.5, -11.6]),
+  organ: Object.freeze([-13, -16, -8.6, -13.4]),
+  /** Two giant seashells for holy water, by the door. */
+  fonts: freezeAll(BAS_FONTS),
+  desks: seatList((add) => tables(add, BAS_TABLE_X, BAS_TABLE_Z, 4)),
+  blocks: freezeAll([
+    [-4.5, -16, 4.5, -11.6],
+    [-13, -16, -8.6, -13.4],
+  ]),
+  circles: freezeAll([...BAS_COLUMNS.map(([x, z]) => [x, z, 0.55]), ...BAS_FONTS.map(([x, z]) => [x, z, 0.62])]),
+  doors: freezeAll([{ to: 'barcelona', x: 0, z: 15.1 }]),
+  spawn: area(0, 13.3, 2.4, 1.2),
+};
+
+// ------------------------------------------------------------------ Spain: Barcelona
+
+/** London planes down both sides of the Rambla, and a few in the parks by the basilica. */
+const BCN_PLANES = [
+  ...[2, 7, 12, 17, 22, 27].flatMap((z) => [[-5.4, z], [5.4, z]]),
+  [-25, -21],
+  [-29, -15],
+  [24, -21],
+  [28.5, -16],
+];
+const BCN_PALMS = [[-12, -11], [12, -11], [-17, -2.5], [16.5, -7], [-10, 21], [10.5, 21]];
+/** Lamp posts with a crown of lanterns. */
+const BCN_LAMPS = [[-6, -6], [6, -6], [-9, 3], [9, 3]];
+const BCN_POND = Object.freeze({ x: -22, z: -9, a: 5.5, b: 3.2 });
+/** The mosaic bench winds along a wave; each seat faces out of the bench's front. */
+const BCN_BENCH = Object.freeze({ from: -18.3, to: -7.7, z: 8, amp: 0.7, freq: 0.75, mid: -13 });
+const BCN_WAVE = (x) => BCN_BENCH.z + Math.sin((x - BCN_BENCH.mid) * BCN_BENCH.freq) * BCN_BENCH.amp;
+const BCN_WAVE_SEATS = Array.from({ length: 9 }, (_, k) => {
+  const x = -17.6 + k * 1.15;
+  const slope = (BCN_WAVE(x + 0.01) - BCN_WAVE(x - 0.01)) / 0.02;
+  return [x, BCN_WAVE(x), Math.atan2(slope, -1)];
+});
+/** Fill the gaps between the bench's seats (and its ends) so nobody walks through it. */
+const BCN_WAVE_FILL = [
+  ...BCN_WAVE_SEATS.slice(1).map(([x, z], k) => [(x + BCN_WAVE_SEATS[k][0]) / 2, (z + BCN_WAVE_SEATS[k][1]) / 2, 0.36]),
+  [BCN_BENCH.from, BCN_WAVE(BCN_BENCH.from), 0.3],
+  [BCN_BENCH.to, BCN_WAVE(BCN_BENCH.to), 0.3],
+];
+/** Two-seat benches [x, z, rot]: by the pond, and along the Rambla. */
+const BCN_BENCHES = [
+  [-22, -4.2, 0],
+  [-14.8, -9, H],
+  [-4.4, 4.5, -H],
+  [4.4, 9.5, H],
+  [-4.4, 14.5, -H],
+  [4.4, 24.5, H],
+];
+const BCN_CAFE = [11, 14.5, 18].map((z) => [16.8, z]);
+const BCN_DRAGON = Object.freeze({ x: -12, z: 13.6, r: 1.0 });
+const barcelona = {
+  kind: 'barcelona',
+  country: 'spain',
+  indoor: false,
+  width: 66,
+  depth: 58,
+  /** The basilica's footprint; its façade faces the square at z = -16. */
+  basilica: Object.freeze([-15, -29, 15, -16]),
+  rambla: Object.freeze([-4, -1, 4, 29]),
+  /** City blocks round the square: [minX, minZ, maxX, maxZ]. */
+  buildings: freezeAll([
+    [-33, -2, -21, 29],
+    [21, -12, 33, 29],
+    [-21, 23, -7, 29],
+    [7, 23, 21, 29],
+  ]),
+  /** The house of mosaics and the wavy stone house, on the east and west rows. */
+  mosaicHouse: Object.freeze([21, 1, 25, 9]),
+  wavyHouse: Object.freeze([-25, 6, -21, 15]),
+  kiosks: freezeAll([[-2.6, 9.5], [2.6, 19.5]]),
+  taxis: freezeAll([[19.7, -3.5], [19.7, 2.5]]),
+  mosaic: Object.freeze({ x: 0, z: 14.5, r: 1.6 }),
+  pond: BCN_POND,
+  dragon: BCN_DRAGON,
+  planes: freezeAll(BCN_PLANES),
+  palms: freezeAll(BCN_PALMS),
+  lamps: freezeAll(BCN_LAMPS),
+  /** The winding bench's centre line: z = z + sin((x - mid) * freq) * amp, from x to x. */
+  wave: BCN_BENCH,
+  waveSeats: freezeAll(BCN_WAVE_SEATS),
+  benchSpots: freezeAll(BCN_BENCHES),
+  cafeTables: freezeAll(BCN_CAFE),
+  desks: seatList((add) => {
+    // The winding bench is one long mosaic seat, drawn in one piece: its seats are bare.
+    for (const [x, z, rot] of BCN_WAVE_SEATS) add('stone', x, z, rot);
+    benches(add, BCN_BENCHES);
+    for (const [tx, tz] of BCN_CAFE) {
+      add('chair', tx - 0.55, tz, -H);
+      add('chair', tx + 0.55, tz, H);
+    }
+  }),
+  blocks: freezeAll([
+    [-15, -29, 15, -16],
+    [-3.4, -16, 3.4, -15.3],
+    [-11.4, -16, -6.6, -15],
+    [6.6, -16, 11.4, -15],
+    [-33, -2, -21, 29],
+    [21, -12, 33, 29],
+    [-21, 23, -7, 29],
+    [7, 23, 21, 29],
+    [-3.6, 8.5, -1.6, 10.5],
+    [1.6, 18.5, 3.6, 20.5],
+    [18.9, -5.7, 20.5, -1.3],
+    [18.9, 0.3, 20.5, 4.7],
+  ]),
+  circles: freezeAll([
+    ...BCN_PLANES.map(([x, z]) => [x, z, 0.35]),
+    ...BCN_PALMS.map(([x, z]) => [x, z, 0.32]),
+    ...BCN_LAMPS.map(([x, z]) => [x, z, 0.16]),
+    ...BCN_CAFE.map(([x, z]) => [x, z, 0.32]),
+    [BCN_DRAGON.x, BCN_DRAGON.z, BCN_DRAGON.r],
+    ...BCN_WAVE_FILL,
+  ]),
+  ellipses: freezeAll([[BCN_POND.x, BCN_POND.z, BCN_POND.a, BCN_POND.b]]),
+  doors: freezeAll([{ to: 'basilica', x: 0, z: -14.9 }]),
+  spawn: area(0, 4, 6, 2),
+  arrive: Object.freeze({ basilica: area(0, -12.2, 3, 1.2) }),
+};
+
 pyramid.arrive = Object.freeze({ giza: pyramid.spawn });
 colosseum.arrive = Object.freeze({ rome: colosseum.spawn });
 temple.arrive = Object.freeze({ garden: temple.spawn });
+basilica.arrive = Object.freeze({ barcelona: basilica.spawn });
 
 export const WORLD_PLACES = Object.freeze({
   pyramid: Object.freeze(pyramid),
@@ -324,6 +465,8 @@ export const WORLD_PLACES = Object.freeze({
   rome: Object.freeze(rome),
   temple: Object.freeze(temple),
   garden: Object.freeze(garden),
+  basilica: Object.freeze(basilica),
+  barcelona: Object.freeze(barcelona),
 });
 
 /** Countries on the world map you can visit, and where a visit starts. */
@@ -331,4 +474,5 @@ export const COUNTRIES = Object.freeze({
   egypt: Object.freeze({ places: Object.freeze(['pyramid', 'giza']), start: 'pyramid', code: 'EG' }),
   italy: Object.freeze({ places: Object.freeze(['colosseum', 'rome']), start: 'colosseum', code: 'IT' }),
   japan: Object.freeze({ places: Object.freeze(['temple', 'garden']), start: 'temple', code: 'JP' }),
+  spain: Object.freeze({ places: Object.freeze(['basilica', 'barcelona']), start: 'basilica', code: 'ES' }),
 });
