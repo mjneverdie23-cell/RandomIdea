@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="LevelData" format=3]
+
+[ext_resource type="Script" path="res://resources/level_data.gd" id="1_level"]
+[ext_resource type="Script" path="res://resources/gem_type.gd" id="2_gemtype"]
+[ext_resource type="Script" path="res://resources/collect_goal.gd" id="3_goal"]
+[ext_resource type="Resource" path="res://resources/gems/ruby.tres" id="4_ruby"]
+[ext_resource type="Resource" path="res://resources/gems/emerald.tres" id="5_emerald"]
+[ext_resource type="Resource" path="res://resources/gems/topaz.tres" id="6_topaz"]
+[ext_resource type="Resource" path="res://resources/gems/amethyst.tres" id="7_amethyst"]
+[ext_resource type="Resource" path="res://resources/gems/diamond.tres" id="8_diamond"]
+
+[sub_resource type="Resource" id="Resource_goal1"]
+script = ExtResource("3_goal")
+gem_type = ExtResource("8_diamond")
+amount = 12
+
+[resource]
+script = ExtResource("1_level")
+columns = 6
+rows = 9
+gem_types = Array[ExtResource("2_gemtype")]([ExtResource("4_ruby"), ExtResource("5_emerald"), ExtResource("6_topaz"), ExtResource("7_amethyst"), ExtResource("8_diamond")])
+moves = 18
+star_scores = PackedInt32Array(900, 1500, 2200)
+collect_goals = Array[ExtResource("3_goal")]([SubResource("Resource_goal1")])

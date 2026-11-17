@@ -15,6 +15,8 @@ extends Node2D
 ## _on_all_animations_finished() moves the state machine on to its next step.
 
 signal state_changed(new_state: State)
+## start() built a new grid. Background art should redraw to the new size and position.
+signal layout_changed
 ## A swap made a match, so it counts as a move.
 signal move_made
 ## A swap made no match and is sliding back.
@@ -82,6 +84,7 @@ var _clearing: Array[Gem] = []
 ## Prism gem -> the colour id it clears (or ALL_COLORS), for prisms swapped this turn.
 var _prism_targets: Dictionary = {}
 
+var _input_enabled: bool = true
 var _selected: Gem = null
 var _dragging: bool = false
 var _press_cell: Vector2i = NO_CELL
@@ -96,12 +99,15 @@ var _swap_is_revert: bool = false
 @onready var _active_gems: Node2D = $ActiveGems
 
 
-func _ready() -> void:
+## Builds and pops in a new board from the current columns, rows and gem_types. Call once,
+## after setting those (a level reloads the whole scene to restart).
+func start() -> void:
 	if not _is_config_valid():
 		set_process_unhandled_input(false)
 		return
 	_pool.prewarm(columns * rows + columns * 2)
 	_build_grid()
+	layout_changed.emit()
 
 
 func _notification(what: int) -> void:
@@ -133,6 +139,15 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func get_state() -> State:
 	return _state
+
+
+## While disabled the board ignores the player (popups, game over). It still finishes any
+## turn that is already playing out.
+func set_input_enabled(enabled: bool) -> void:
+	_input_enabled = enabled
+	_dragging = false
+	if not enabled:
+		_clear_selection()
 
 
 func get_gem(cell: Vector2i) -> Gem:
@@ -527,7 +542,7 @@ func _set_cell(cell: Vector2i, gem: Gem) -> void:
 
 
 func _on_pointer_pressed(local_pos: Vector2) -> void:
-	if _state != State.IDLE:
+	if _state != State.IDLE or not _input_enabled:
 		return
 	var cell := local_to_grid(local_pos)
 	var gem := get_gem(cell)

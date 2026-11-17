@@ -13,6 +13,11 @@ func _ready() -> void:
 	if board == null:
 		push_warning("BoardBackground: no board assigned.")
 		return
+	board.layout_changed.connect(_on_board_layout_changed)
+	_on_board_layout_changed()
+
+
+func _on_board_layout_changed() -> void:
 	position = board.position
 	queue_redraw()
 

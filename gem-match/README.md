@@ -17,7 +17,7 @@ godot --headless --path gem-match -s res://tests/test_runner.gd
 | 1 | Gem resource and scene, grid array, state machine, tap/swipe input, swapping | **Done** |
 | 2 | Match detection, clearing, gravity, refill, cascades | **Done** |
 | 3 | Special gems, screen shake, particles | **Done** |
-| 4 | HUD, levels, menus, save/load | Planned |
+| 4 | HUD, levels, menus, save/load | **Done** |
 | 5 | Shuffle when no moves are left, audio, final polish | Planned |
 
 ## Controls

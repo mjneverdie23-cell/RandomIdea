@@ -7,9 +7,13 @@ config_version=5
 
 config/name="Gem Match"
 config/description="2D gem-themed match-3 puzzle game."
-run/main_scene="res://scenes/main/main.tscn"
+run/main_scene="res://scenes/menus/main_menu.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/icon="res://icon.svg"
+
+[autoload]
+
+GameState="*res://autoload/game_state.gd"
 
 [display]
 

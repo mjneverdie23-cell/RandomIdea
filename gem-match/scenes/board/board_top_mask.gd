@@ -12,7 +12,8 @@ const FAR := 4000.0
 
 func _ready() -> void:
 	z_index = 10
-	queue_redraw()
+	if board:
+		board.layout_changed.connect(queue_redraw)
 
 
 func _draw() -> void:

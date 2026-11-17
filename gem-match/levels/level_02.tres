@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="LevelData" format=3]
+
+[ext_resource type="Script" path="res://resources/level_data.gd" id="1_level"]
+[ext_resource type="Script" path="res://resources/gem_type.gd" id="2_gemtype"]
+[ext_resource type="Script" path="res://resources/collect_goal.gd" id="3_goal"]
+[ext_resource type="Resource" path="res://resources/gems/ruby.tres" id="4_ruby"]
+[ext_resource type="Resource" path="res://resources/gems/sapphire.tres" id="5_sapphire"]
+[ext_resource type="Resource" path="res://resources/gems/emerald.tres" id="6_emerald"]
+[ext_resource type="Resource" path="res://resources/gems/topaz.tres" id="7_topaz"]
+
+[sub_resource type="Resource" id="Resource_goal1"]
+script = ExtResource("3_goal")
+gem_type = ExtResource("4_ruby")
+amount = 15
+
+[resource]
+script = ExtResource("1_level")
+columns = 8
+rows = 8
+gem_types = Array[ExtResource("2_gemtype")]([ExtResource("4_ruby"), ExtResource("5_sapphire"), ExtResource("6_emerald"), ExtResource("7_topaz")])
+moves = 20
+star_scores = PackedInt32Array(600, 1100, 1700)
+collect_goals = Array[ExtResource("3_goal")]([SubResource("Resource_goal1")])
