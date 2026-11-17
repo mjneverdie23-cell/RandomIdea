@@ -23,9 +23,7 @@ var _select_tween: Tween
 
 @onready var _visual: Node2D = $Visual
 @onready var _highlight: Polygon2D = $Visual/Highlight
-@onready var _edge: Polygon2D = $Visual/Edge
 @onready var _body: Polygon2D = $Visual/Body
-@onready var _shine: Polygon2D = $Visual/Shine
 @onready var _sprite: Sprite2D = $Visual/Sprite
 
 
@@ -96,22 +94,16 @@ func reset_for_pool() -> void:
 func _apply_visuals(radius: float) -> void:
 	var sides := gem_type.placeholder_sides
 	var has_texture := gem_type.texture != null
-	_highlight.polygon = _regular_polygon(sides, radius * 1.22)
-	_sprite.visible = has_texture
-	_edge.visible = not has_texture
+	_highlight.polygon = _regular_polygon(sides, radius * 1.25)
 	_body.visible = not has_texture
-	_shine.visible = not has_texture
+	_sprite.visible = has_texture
 	if has_texture:
 		_sprite.texture = gem_type.texture
 		var tex_size := gem_type.texture.get_size()
 		_sprite.scale = Vector2.ONE * (radius * 2.0 / maxf(tex_size.x, tex_size.y))
-		return
-	_edge.polygon = _regular_polygon(sides, radius)
-	_edge.color = gem_type.color.darkened(0.35)
-	_body.polygon = _regular_polygon(sides, radius * 0.78)
-	_body.color = gem_type.color
-	_shine.polygon = _regular_polygon(sides, radius * 0.3)
-	_shine.position = Vector2(-radius, -radius) * 0.28
+	else:
+		_body.polygon = _regular_polygon(sides, radius)
+		_body.color = gem_type.color
 
 
 ## If a tween the Board is counting is still running, stop it and report it as finished

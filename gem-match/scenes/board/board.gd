@@ -72,6 +72,12 @@ func _ready() -> void:
 	_build_grid()
 
 
+func _notification(what: int) -> void:
+	# A release that happens while the window is unfocused never arrives, so drop the drag.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_dragging = false
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	var mouse_event := event as InputEventMouse
 	if mouse_event == null:
@@ -352,4 +358,5 @@ func _on_gem_animation_finished(_gem: Gem) -> void:
 		_pending_animations = 0
 		return
 	if _pending_animations == 0:
-		_on_all_animations_finished()
+		# Deferred so the next step never runs inside a tween's own `finished` signal.
+		_on_all_animations_finished.call_deferred()

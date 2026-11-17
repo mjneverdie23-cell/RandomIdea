@@ -11,12 +11,7 @@ script = ExtResource("1_gem")
 visible = false
 color = Color(1, 1, 1, 0.85)
 
-[node name="Edge" type="Polygon2D" parent="Visual"]
-
 [node name="Body" type="Polygon2D" parent="Visual"]
-
-[node name="Shine" type="Polygon2D" parent="Visual"]
-color = Color(1, 1, 1, 0.45)
 
 [node name="Sprite" type="Sprite2D" parent="Visual"]
 visible = false
