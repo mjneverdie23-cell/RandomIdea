@@ -20,9 +20,10 @@ godot --headless --path gem-match -s res://tests/test_runner.gd
 - Reach the level's score and collect goals before the moves run out. Chain reactions
   multiply points (x2, x3, ...), and moves left over at the end are worth bonus points.
 - Escape (or the Android back button) goes back one screen.
-- **Lives:** 5 at most, and one comes back every 3 hours, even while the game is closed.
-  Losing a level, or quitting one after your first move, costs a life. With 0 lives the
-  level buttons lock until one regenerates.
+- **Hearts:** a row of 5 hearts at the top of the screen. Each game costs 1 heart, paid
+  when you press Play on the level intro (backing out there is free). Winning does not
+  refund it, and losing or quitting costs nothing more. One heart comes back every 3 hours,
+  even while the game is closed. With 0 hearts the level buttons lock until one is back.
 - **Out of moves?** Once per attempt you are offered a revival for watching an ad or buying
   one (the amounts depend on the situation, see below). Saying "No thanks" starts a 15-second wait before Exit unlocks and the
   game-over screen appears. The game is paused throughout, and Back/Escape does nothing.

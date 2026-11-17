@@ -4,8 +4,9 @@ extends Node
 ## (Time.get_unix_time_from_system()), so lives keep regenerating while the game is closed.
 ## Saved to user://meta.json, separately from GameState's level progress.
 ##
-## Lives: at most MAX_LIVES. Losing or quitting a level that was started costs one. While
-## below the maximum, one life comes back every LIFE_REGEN_SECONDS, counted from
+## Lives (hearts): at most MAX_LIVES. Playing a level costs one, paid when the level starts
+## (spend_life_for_level). Winning does not refund it, and losing or quitting costs nothing
+## more. While below the maximum, one life comes back every LIFE_REGEN_SECONDS, counted from
 ## _regen_anchor. On every read, the time since the anchor is turned into whole lives.
 ##
 ## Weekly race: weeks start Monday 00:00 UTC. The player scores race points (stars) for
@@ -75,6 +76,20 @@ func can_play() -> bool:
 	return get_lives() > 0
 
 
+## Pays one heart to start a level. Returns false (and spends nothing) when out of hearts.
+func spend_life_for_level(level_index: int) -> bool:
+	if not can_play():
+		_log("spend_life_for_level", "level %d: no hearts left, cannot start" % (level_index + 1))
+		return false
+	_lose_life()
+	_log(
+		"spend_life_for_level",
+		"level %d started: 1 heart spent, %d/%d left" % [level_index + 1, _lives, MAX_LIVES]
+	)
+	save_state()
+	return true
+
+
 ## Seconds until the next life arrives, or 0 when lives are full.
 func seconds_to_next_life() -> int:
 	_apply_regen()
@@ -133,12 +148,14 @@ func record_win(level_index: int, stars: int) -> void:
 	save_state()
 
 
-## A level ended with the player out of moves (after declining the revival).
+## A level ended with the player out of moves (after declining the revival). The heart was
+## already paid when the level started; this only feeds the streak and fail counts.
 func record_loss(level_index: int) -> void:
 	_register_failure(level_index, "lost")
 
 
-## The player left a level they had started (made at least one move).
+## The player left a level they had started (made at least one move). Like a loss, it costs
+## no extra heart.
 func record_quit(level_index: int) -> void:
 	_register_failure(level_index, "quit")
 
@@ -152,7 +169,6 @@ func get_level_fails(level_index: int) -> int:
 
 
 func _register_failure(level_index: int, how: String) -> void:
-	_lose_life()
 	_losing_streak += 1
 	_level_fails[level_index] = get_level_fails(level_index) + 1
 	_log(

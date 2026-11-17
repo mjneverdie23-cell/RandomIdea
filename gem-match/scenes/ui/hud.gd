@@ -39,11 +39,6 @@ func set_goals(text: String) -> void:
 	_goals_label.text = text
 
 
-## Once a level has started, leaving it costs a life; the button says so.
-func set_quit_costs_life(costs_life: bool) -> void:
-	_quit_button.text = "Quit (-1 life)" if costs_life else "Levels"
-
-
 ## Briefly shows a message in the middle of the screen.
 func show_toast(text: String) -> void:
 	_toast.text = text

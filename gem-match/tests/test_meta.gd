@@ -12,8 +12,8 @@ const HOUR := 3600
 func test_lives_regenerate_over_time() -> void:
 	var meta := _fresh(MONDAY)
 	check_eq(meta.get_lives(), 5, "a new player has full lives")
-	meta.record_loss(0)
-	check_eq(meta.get_lives(), 4, "a loss costs a life")
+	check(meta.spend_life_for_level(0), "starting a level with hearts works")
+	check_eq(meta.get_lives(), 4, "starting a level costs a heart")
 	check_eq(meta.seconds_to_next_life(), 3 * HOUR, "the next life is 3 hours away")
 	meta.time_override = MONDAY + 3 * HOUR - 1
 	check_eq(meta.get_lives(), 4, "not quite 3 hours later: still 4")
@@ -22,8 +22,8 @@ func test_lives_regenerate_over_time() -> void:
 
 	meta.time_override = MONDAY + 10 * HOUR
 	for _i in 3:
-		meta.record_quit(1)
-	check_eq(meta.get_lives(), 2, "quits cost lives too")
+		meta.spend_life_for_level(1)
+	check_eq(meta.get_lives(), 2, "every game costs a heart")
 	meta.time_override = MONDAY + 17 * HOUR
 	check_eq(meta.get_lives(), 4, "7 hours later: 2 lives back")
 	check_eq(meta.seconds_to_next_life(), 2 * HOUR, "the leftover hour is kept")
@@ -38,8 +38,10 @@ func test_lives_regenerate_over_time() -> void:
 func test_out_of_lives_and_offline_regen() -> void:
 	var meta := _fresh(MONDAY)
 	for _i in 5:
-		meta.record_loss(2)
-	check(not meta.can_play(), "0 lives: cannot play")
+		meta.spend_life_for_level(2)
+	check(not meta.can_play(), "0 hearts: cannot play")
+	check(not meta.spend_life_for_level(2), "starting a level with 0 hearts is refused")
+	check_eq(meta.get_lives(), 0, "and never goes below 0")
 	meta.save_state()
 	var later := _load(MONDAY + 7 * HOUR)
 	check_eq(later.offline_seconds, 7 * HOUR, "time away is measured from the last save")
@@ -54,6 +56,7 @@ func test_streak_and_level_fails() -> void:
 	meta.record_loss(3)
 	meta.record_quit(3)
 	meta.record_loss(4)
+	check_eq(meta.get_lives(), meta.MAX_LIVES, "losing or quitting costs no extra heart")
 	check_eq(meta.get_losing_streak(), 3, "three failures in a row")
 	check_eq(meta.get_level_fails(3), 2, "level 4 failed twice")
 	meta.record_win(3, 2)

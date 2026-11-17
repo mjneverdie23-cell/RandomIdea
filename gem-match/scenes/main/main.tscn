@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scenes/effects/shake_camera.gd" id="5_camera"]
 [ext_resource type="Script" path="res://scenes/ui/hud.gd" id="6_hud"]
 [ext_resource type="PackedScene" path="res://scenes/ui/message_popup.tscn" id="7_popup"]
+[ext_resource type="Script" path="res://scenes/ui/hearts_bar.gd" id="8_hearts"]
 
 [sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_burst"]
 particle_flag_disable_z = true
@@ -55,21 +56,31 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("6_hud")
 
+[node name="Hearts" type="HBoxContainer" parent="UI_Layer/HUD"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 14.0
+offset_bottom = 58.0
+grow_horizontal = 2
+mouse_filter = 2
+script = ExtResource("8_hearts")
+
 [node name="Top" type="VBoxContainer" parent="UI_Layer/HUD"]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
 offset_left = 40.0
-offset_top = 40.0
+offset_top = 66.0
 offset_right = -40.0
-offset_bottom = 300.0
+offset_bottom = 320.0
 grow_horizontal = 2
 mouse_filter = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 10
 
 [node name="LevelLabel" type="Label" parent="UI_Layer/HUD/Top"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 44
+theme_override_font_sizes/font_size = 40
 text = "Level 1"
 horizontal_alignment = 1
 

@@ -23,7 +23,8 @@ var _level: LevelData
 var _phase: Phase = Phase.INTRO
 var _score: int = 0
 var _moves_left: int = 0
-## Moves made so far. Leaving a level after the first move counts as a quit (costs a life).
+## Moves made so far. Leaving a level after the first move counts as a quit (for the
+## losing streak and fail counts; the heart was already paid at the start).
 var _moves_used: int = 0
 ## Set when the window is closing, so shutting the game down is not counted as a quit.
 var _closing_app: bool = false
@@ -70,7 +71,7 @@ func _ready() -> void:
 
 	_refresh_hud()
 	var intro := "%s\n\nSwipe a gem, or tap two neighbours, to swap." % _goal_text()
-	_popup.open("Level %d" % (GameState.current_level + 1), intro, "Play", "Back")
+	_popup.open("Level %d" % (GameState.current_level + 1), intro, "Play (-1 heart)", "Back")
 
 
 # --- Board events -------------------------------------------------------------------------
@@ -144,6 +145,10 @@ func _on_board_settled() -> void:
 func _on_popup_primary() -> void:
 	match _phase:
 		Phase.INTRO:
+			# Every game costs one heart, paid as it starts.
+			if not MetaProgression.spend_life_for_level(GameState.current_level):
+				GameState.go_to_level_select()  # Out of hearts: the level select shows the wait.
+				return
 			_popup.close()
 			_phase = Phase.PLAYING
 			_board.set_input_enabled(true)
@@ -212,7 +217,7 @@ func _lose() -> void:
 	MetaProgression.record_loss(GameState.current_level)
 	AudioManager.play(&"lose")
 	var lives := MetaProgression.get_lives()
-	var body := "Score %d\n%s\n\nLives left: %d" % [_score, _goal_text(), lives]
+	var body := "Score %d\n%s\n\nHearts left: %d" % [_score, _goal_text(), lives]
 	_popup.open("Out of moves", body, "Retry" if lives > 0 else "Levels", "Levels")
 
 
@@ -240,4 +245,3 @@ func _refresh_hud() -> void:
 	_hud.set_moves(_moves_left)
 	_hud.set_score(_score, _level.stars_for(_score), _level.star_scores)
 	_hud.set_goals(_goal_text())
-	_hud.set_quit_costs_life(_phase == Phase.PLAYING and _moves_used > 0)

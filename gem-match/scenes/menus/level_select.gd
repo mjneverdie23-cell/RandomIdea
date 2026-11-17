@@ -1,7 +1,7 @@
 extends Control
 ## Grid of level buttons. Locked levels are disabled; finished ones show their best stars.
-## A status line shows lives (with the time to the next one) and the weekly race rank.
-## With no lives left, every level button is disabled until one regenerates.
+## The hearts row at the top shows lives; a status line shows the weekly race rank. Each
+## game costs a heart, so with none left every level button is disabled until one comes back.
 
 var _buttons: Array[Button] = []
 var _status_timer: float = 0.0
@@ -33,14 +33,9 @@ func _process(delta: float) -> void:
 
 func _refresh_status() -> void:
 	var lives := MetaProgression.get_lives()
-	var text := "Lives %d/%d" % [lives, MetaProgression.MAX_LIVES]
-	var wait := MetaProgression.seconds_to_next_life()
-	if wait > 0:
-		text += (
-			", next in %d:%02d:%02d" % [floori(wait / 3600.0), floori(wait / 60.0) % 60, wait % 60]
-		)
+	var text := "No hearts left: wait for the next one\n" if lives == 0 else ""
 	text += (
-		"\nWeekly race: #%d of %d (%d stars)"
+		"Weekly race: #%d of %d (%d stars)"
 		% [
 			MetaProgression.get_race_rank(),
 			MetaProgression.RACE_SIZE,

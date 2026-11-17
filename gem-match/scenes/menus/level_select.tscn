@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scenes/menus/level_select.gd" id="1_select"]
+[ext_resource type="Script" path="res://scenes/ui/hearts_bar.gd" id="2_hearts"]
 
 [node name="LevelSelect" type="Control"]
 layout_mode = 3
@@ -19,13 +20,18 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/margin_left = 60
-theme_override_constants/margin_top = 120
+theme_override_constants/margin_top = 40
 theme_override_constants/margin_right = 60
 theme_override_constants/margin_bottom = 100
 
 [node name="Box" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
 theme_override_constants/separation = 50
+
+[node name="Hearts" type="HBoxContainer" parent="Margin/Box"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("2_hearts")
 
 [node name="Title" type="Label" parent="Margin/Box"]
 layout_mode = 2
@@ -36,7 +42,7 @@ horizontal_alignment = 1
 [node name="StatusLabel" type="Label" parent="Margin/Box"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
-text = "Lives 5/5"
+text = "Weekly race"
 horizontal_alignment = 1
 
 [node name="Grid" type="GridContainer" parent="Margin/Box"]

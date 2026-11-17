@@ -84,7 +84,7 @@ func test_level_scene_flow() -> void:
 	level._on_board_settled()
 	check(_find_revival_popup(level) == null, "no second revival")
 	check(popup.visible and not get_tree().paused, "game over shows at once")
-	check_eq(meta.get_lives(), meta.MAX_LIVES - 1, "the loss cost a life")
+	check_eq(meta.get_lives(), meta.MAX_LIVES - 1, "the game cost one heart, the loss none")
 	get_tree().paused = false
 	level.queue_free()
 	DirAccess.remove_absolute(meta.save_path)
