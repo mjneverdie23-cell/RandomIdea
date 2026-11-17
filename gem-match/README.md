@@ -59,6 +59,14 @@ All of this runs quietly in the background:
 - **Weekly race:** stars won this week, ranked against 29 bots until there is a server.
   Weeks start Monday 00:00 UTC.
 
+**Seeing it work:** run the game from the editor and watch the Output panel. Every DDA
+function prints a line tagged with its name, for example
+`[DDA] pass_proximity_treatment: moves left 3, progress 72%, proximity 0.31 -> ASSIST: ...`.
+Lives, results and race changes print `[Meta] ...` lines. Gem spawns print only when one is
+forced or steered away from a match; the rest are summed up once per move. Logging is on in
+debug builds and off in release exports; set `debug_log = false` on `DDAManager` or
+`MetaProgression` to silence one of them.
+
 The CSV comes from simulation, not real players: bots play every level 800 times. After
 changing levels, regenerate it (it takes about 5 minutes):
 

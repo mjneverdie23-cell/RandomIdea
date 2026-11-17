@@ -17,6 +17,11 @@ extends Node
 ## Every new gem's colour then comes from get_next_gem_color(), which the Board calls.
 ##
 ## On losing: legacy_pass_proximity_treatment() prices the revival offer (MonetizationModel).
+##
+## Logging: with debug_log on (the default when running from the editor), every DDA function
+## prints a "[DDA] function_name: ..." line to the Output panel, saying what it decided and
+## why. get_next_gem_color() runs for every new gem, so it only prints when it forces or
+## avoids a match; the rest are counted and summed up once per move.
 
 enum Tier { EASIER, NORMAL, HARDER }
 
@@ -43,8 +48,9 @@ const AVOID_CHANCE := 0.10
 const MIN_PALETTE_TO_DROP := 5
 ## The revival offer is measured against this many extra moves.
 const REVIVAL_REFERENCE_MOVES := 5
-## Prints one line per move with the decision. Off in normal builds.
-const DEBUG_LOG := false
+## Prints what every DDA function does to the Output panel. On in debug builds (running
+## from the editor), off in release exports. Set it to false to silence the DDA.
+var debug_log: bool = OS.is_debug_build()
 
 ## Spawn counters since the level started, for debugging and analytics.
 var forced_spawns: int = 0
@@ -66,6 +72,10 @@ var _smoothed: float = 0.5
 var _tier: Tier = Tier.NORMAL
 var _assist_chance: float = 0.0
 var _avoid_chance: float = 0.0
+# Spawns since the last per-move report, for the log.
+var _report_forced: int = 0
+var _report_avoided: int = 0
+var _report_random: int = 0
 
 
 func _ready() -> void:
@@ -112,6 +122,27 @@ func begin_level(level_index: int, level: LevelData) -> void:
 	forced_spawns = 0
 	avoided_spawns = 0
 	random_spawns = 0
+	_report_forced = 0
+	_report_avoided = 0
+	_report_random = 0
+	if debug_log:
+		var goals := PackedStringArray(["%d points" % level.star_scores[0]])
+		for goal in level.collect_goals:
+			goals.append("%d %s" % [goal.amount, goal.gem_type.display_name])
+		_log(
+			"begin_level",
+			(
+				"level %d, %d moves, %d colours, goals: %s. Start proximity %.2f%s"
+				% [
+					level_index + 1,
+					level.moves,
+					_color_count,
+					", ".join(goals),
+					_proximity,
+					"" if has_data() else " (no data table: neutral 0.5)",
+				]
+			)
+		)
 	_apply_tier(Tier.NORMAL)
 
 
@@ -147,21 +178,31 @@ func lookup_win_probability(level_index: int, moves_left: int, progress: float) 
 ## passProximityTreatment. Call on every accepted move, with the moves left BEFORE the move
 ## and the score / collected gems so far. Returns the Pass Proximity it measured.
 func pass_proximity_treatment(moves_left: int, score: int, collected: Dictionary) -> float:
+	_log_spawn_report()
 	var progress := progress_of(score, collected)
 	_proximity = lookup_win_probability(_level_index, moves_left, progress)
+	var decision: String
 	if moves_left <= 1 and progress >= RESCUE_MIN_PROGRESS:
 		_assist_chance = 1.0  # Last move, close to winning: every refill makes a match.
+		decision = (
+			"RESCUE: last move and %.0f%% done, every refill makes a match" % (progress * 100)
+		)
 	elif _proximity < ASSIST_BELOW:
 		_assist_chance = ASSIST_CHANCE
+		decision = (
+			"ASSIST: behind (proximity < %.2f), %.0f%% of refills forced to match"
+			% [ASSIST_BELOW, ASSIST_CHANCE * 100]
+		)
 	else:
 		_assist_chance = 0.0
-	if DEBUG_LOG:
-		print(
-			(
-				"DDA move: moves_left %d progress %.2f proximity %.2f assist %.0f%%"
-				% [moves_left, progress, _proximity, _assist_chance * 100.0]
-			)
+		decision = "no help: on track"
+	_log(
+		"pass_proximity_treatment",
+		(
+			"moves left %d, progress %.0f%%, proximity %.2f -> %s"
+			% [moves_left, progress * 100, _proximity, decision]
 		)
+	)
 	return _proximity
 
 
@@ -179,10 +220,20 @@ func difficulty_actions_component() -> Tier:
 			tier = Tier.EASIER
 		elif _smoothed > HARDER_ABOVE:
 			tier = Tier.HARDER
+	var previous := _tier
 	if tier != _tier:
 		_apply_tier(tier)
-		if DEBUG_LOG:
-			print("DDA tier -> %s (smoothed %.2f)" % [Tier.keys()[tier], _smoothed])
+	_log(
+		"difficulty_actions_component",
+		(
+			"smoothed proximity %.2f -> tier %s%s"
+			% [
+				_smoothed,
+				Tier.keys()[_tier],
+				" (was %s)" % Tier.keys()[previous] if previous != _tier else " (unchanged)",
+			]
+		)
+	)
 	return _tier
 
 
@@ -192,10 +243,20 @@ func difficulty_actions_component() -> Tier:
 func get_next_gem_color(allowed: PackedInt32Array, matching: PackedInt32Array) -> int:
 	if not matching.is_empty() and _assist_chance > 0.0 and _rng.randf() < _assist_chance:
 		forced_spawns += 1
+		_report_forced += 1
+		var forced := matching[_rng.randi_range(0, matching.size() - 1)]
 		for color in matching:
 			if _goal_colors.has(color):
-				return color  # Help that also counts towards a collect goal.
-		return matching[_rng.randi_range(0, matching.size() - 1)]
+				forced = color  # Help that also counts towards a collect goal.
+				break
+		_log(
+			"get_next_gem_color",
+			(
+				"FORCED %s (completes a match%s)"
+				% [_color_name(forced), ", goal gem" if _goal_colors.has(forced) else ""]
+			)
+		)
+		return forced
 
 	var pool := allowed
 	if _palette.size() < _color_count:
@@ -212,8 +273,18 @@ func get_next_gem_color(allowed: PackedInt32Array, matching: PackedInt32Array) -
 				calm.append(color)
 		if not calm.is_empty():
 			avoided_spawns += 1
-			return calm[_rng.randi_range(0, calm.size() - 1)]
+			_report_avoided += 1
+			var chosen := calm[_rng.randi_range(0, calm.size() - 1)]
+			_log(
+				"get_next_gem_color",
+				(
+					"AVOIDED a match (HARDER tier): %s instead of a matching colour"
+					% _color_name(chosen)
+				)
+			)
+			return chosen
 	random_spawns += 1
+	_report_random += 1
 	return pool[_rng.randi_range(0, pool.size() - 1)]
 
 
@@ -227,17 +298,50 @@ func legacy_pass_proximity_treatment(
 ) -> MonetizationModel.RevivalOffer:
 	var progress := progress_of(score, collected)
 	var proximity := lookup_win_probability(_level_index, REVIVAL_REFERENCE_MOVES, progress)
+	var streak := MetaProgression.get_losing_streak()
+	var fails := MetaProgression.get_level_fails(_level_index)
+	var lives := MetaProgression.get_lives()
+	var rank := MetaProgression.get_race_rank()
 	var offer := MonetizationModel.make_offer(
-		proximity,
-		MetaProgression.get_losing_streak(),
-		MetaProgression.get_level_fails(_level_index),
-		MetaProgression.get_lives(),
-		MetaProgression.MAX_LIVES,
-		MetaProgression.get_race_rank(),
-		MetaProgression.RACE_SIZE
+		proximity, streak, fails, lives, MetaProgression.MAX_LIVES, rank, MetaProgression.RACE_SIZE
 	)
-	if DEBUG_LOG:
-		print("DDA revival: progress %.2f -> %s" % [progress, offer])
+	_log_spawn_report()
+	_log(
+		"legacy_pass_proximity_treatment",
+		(
+			"progress %.0f%%, proximity with %d more moves %.2f"
+			% [progress * 100, REVIVAL_REFERENCE_MOVES, proximity]
+		)
+	)
+	_log(
+		"legacy_pass_proximity_treatment",
+		(
+			"streak %d, level fails %d, lives %d/%d, race #%d of %d"
+			% [streak, fails, lives, MetaProgression.MAX_LIVES, rank, MetaProgression.RACE_SIZE]
+		)
+	)
+	_log(
+		"legacy_pass_proximity_treatment",
+		(
+			"multiplier x%.2f = %s"
+			% [
+				offer.reward_multiplier,
+				MonetizationModel.describe_multiplier(
+					proximity,
+					streak,
+					fails,
+					lives,
+					MetaProgression.MAX_LIVES,
+					rank,
+					MetaProgression.RACE_SIZE
+				),
+			]
+		)
+	)
+	_log(
+		"legacy_pass_proximity_treatment",
+		"offer: watch ad +%d moves, buy +%d moves" % [offer.ad_moves, offer.iap_moves]
+	)
 	return offer
 
 
@@ -250,12 +354,22 @@ func _apply_tier(tier: Tier) -> void:
 	_palette.clear()
 	for color in _color_count:
 		_palette.append(color)
+	var dropped := -1
 	if tier == Tier.EASIER and _color_count >= MIN_PALETTE_TO_DROP:
 		# Fewer colours means more matches. Never drop a colour a collect goal needs.
 		for color in range(_color_count - 1, -1, -1):
 			if not _goal_colors.has(color):
 				_palette.remove_at(_palette.find(color))
+				dropped = color
 				break
+	var action := "refills use all %d colours" % _color_count
+	if dropped != -1:
+		action = "refills skip %s (fewer colours, more matches)" % _color_name(dropped)
+	elif tier == Tier.EASIER:
+		action += " (palette too small to drop one)"
+	if tier == Tier.HARDER:
+		action += ", %.0f%% of refills avoid making a match" % (AVOID_CHANCE * 100)
+	_log("_apply_tier", "tier %s: %s" % [Tier.keys()[tier], action])
 
 
 ## Parses the CSV into _table. Rows may come in any order; missing rows read as 0.
@@ -296,3 +410,40 @@ func _load_table() -> void:
 			continue
 		var index := _level_offset[level] + moves_left * BUCKETS + bucket
 		_table[index] = clampf(row[3].to_float(), 0.0, 1.0)
+	_log(
+		"_load_table",
+		"loaded %d rows for %d levels from %s" % [rows.size(), level_count, DATA_PATH]
+	)
+
+
+## Sums up get_next_gem_color() since the last report (one line instead of one per gem).
+func _log_spawn_report() -> void:
+	var total := _report_forced + _report_avoided + _report_random
+	if total > 0:
+		_log(
+			"get_next_gem_color",
+			(
+				"%d gems spawned since last report: %d forced, %d avoided, %d random%s"
+				% [
+					total,
+					_report_forced,
+					_report_avoided,
+					_report_random,
+					" (reduced palette)" if _palette.size() < _color_count else "",
+				]
+			)
+		)
+	_report_forced = 0
+	_report_avoided = 0
+	_report_random = 0
+
+
+func _log(function_name: String, text: String) -> void:
+	if debug_log:
+		print("[DDA] %s: %s" % [function_name, text])
+
+
+func _color_name(color: int) -> String:
+	if _level == null or color < 0 or color >= _level.gem_types.size():
+		return "colour %d" % color
+	return _level.gem_types[color].display_name

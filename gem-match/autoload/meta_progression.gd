@@ -12,6 +12,10 @@ extends Node
 ## wins. There is no server yet, so the other RACE_SIZE - 1 racers are bots with a fixed
 ## pace per week; their points grow as the week goes on. Replace _bot_points() with a real
 ## leaderboard when there is a backend.
+##
+## Logging: with debug_log on (the default when running from the editor), every change prints
+## a "[Meta] function_name: ..." line to the Output panel. Getters that the level select
+## polls every second stay quiet.
 
 signal lives_changed(lives: int)
 
@@ -25,6 +29,8 @@ const RACE_SIZE := 30
 const RACE_BOT_MAX_POINTS := 60
 const SAVE_VERSION := 1
 
+## Prints what changes to the Output panel. On in debug builds, off in release exports.
+var debug_log: bool = OS.is_debug_build()
 ## Tests point this somewhere else so they never touch the player's save.
 var save_path: String = "user://meta.json"
 ## Tests set this to fake the clock (unix seconds); -1 uses the real time.
@@ -83,6 +89,10 @@ func _lose_life() -> void:
 		_regen_anchor = now()  # The regen clock starts when the first life is spent.
 	_lives = maxi(_lives - 1, 0)
 	lives_changed.emit(_lives)
+	_log(
+		"_lose_life",
+		"lost a life: %d/%d left, next in %s" % [_lives, MAX_LIVES, _clock(seconds_to_next_life())]
+	)
 
 
 ## Turns the time since _regen_anchor into whole lives, keeping the leftover time.
@@ -98,9 +108,11 @@ func _apply_regen() -> void:
 	var gained := floori(float(t - _regen_anchor) / LIFE_REGEN_SECONDS)
 	if gained <= 0:
 		return
+	var before := _lives
 	_lives = mini(MAX_LIVES, _lives + gained)
 	_regen_anchor = t if _lives >= MAX_LIVES else _regen_anchor + gained * LIFE_REGEN_SECONDS
 	lives_changed.emit(_lives)
+	_log("_apply_regen", "+%d lives from time passed: %d/%d" % [_lives - before, _lives, MAX_LIVES])
 
 
 # --- Results ------------------------------------------------------------------------------
@@ -111,17 +123,24 @@ func record_win(level_index: int, stars: int) -> void:
 	_level_fails.erase(level_index)
 	_roll_race_week()
 	_race_points += stars
+	_log(
+		"record_win",
+		(
+			"level %d won with %d stars: streak reset, race points %d"
+			% [level_index + 1, stars, _race_points]
+		)
+	)
 	save_state()
 
 
 ## A level ended with the player out of moves (after declining the revival).
 func record_loss(level_index: int) -> void:
-	_register_failure(level_index)
+	_register_failure(level_index, "lost")
 
 
 ## The player left a level they had started (made at least one move).
 func record_quit(level_index: int) -> void:
-	_register_failure(level_index)
+	_register_failure(level_index, "quit")
 
 
 func get_losing_streak() -> int:
@@ -132,10 +151,17 @@ func get_level_fails(level_index: int) -> int:
 	return _level_fails.get(level_index, 0)
 
 
-func _register_failure(level_index: int) -> void:
+func _register_failure(level_index: int, how: String) -> void:
 	_lose_life()
 	_losing_streak += 1
 	_level_fails[level_index] = get_level_fails(level_index) + 1
+	_log(
+		"record_" + ("loss" if how == "lost" else how),
+		(
+			"level %d %s: losing streak %d, fails on this level %d"
+			% [level_index + 1, how, _losing_streak, get_level_fails(level_index)]
+		)
+	)
 	save_state()
 
 
@@ -175,6 +201,8 @@ static func _bot_points(week: int, bot: int, elapsed: float) -> int:
 func _roll_race_week() -> void:
 	var week := week_index(now())
 	if week != _race_week:
+		if _race_week != -1:
+			_log("_roll_race_week", "new race week: points reset (had %d)" % _race_points)
 		_race_week = week
 		_race_points = 0
 
@@ -238,6 +266,23 @@ func load_state() -> void:
 	offline_seconds = maxi(now() - _last_seen, 0)
 	_apply_regen()
 	_roll_race_week()
+	_log(
+		"load_state",
+		(
+			"login after %s offline: lives %d/%d, losing streak %d, race points %d"
+			% [_clock(offline_seconds), _lives, MAX_LIVES, _losing_streak, _race_points]
+		)
+	)
+
+
+func _log(function_name: String, text: String) -> void:
+	if debug_log:
+		print("[Meta] %s: %s" % [function_name, text])
+
+
+## Seconds as h:mm:ss.
+static func _clock(seconds: int) -> String:
+	return "%d:%02d:%02d" % [floori(seconds / 3600.0), floori(seconds / 60.0) % 60, seconds % 60]
 
 
 static func _as_int(value: Variant, fallback: int) -> int:

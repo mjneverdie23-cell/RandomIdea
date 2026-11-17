@@ -97,19 +97,57 @@ static func reward_multiplier(
 	race_rank: int,
 	race_size: int
 ) -> float:
+	var raw := 0.0
+	for term in _weighted_terms(
+		proximity, losing_streak, level_fails, lives, max_lives, race_rank, race_size
+	):
+		raw += term
+	return MULTIPLIER_MIN + (MULTIPLIER_MAX - MULTIPLIER_MIN) * clampf(raw, 0.0, 1.0)
+
+
+## The multiplier written out term by term, for logs.
+static func describe_multiplier(
+	proximity: float,
+	losing_streak: int,
+	level_fails: int,
+	lives: int,
+	max_lives: int,
+	race_rank: int,
+	race_size: int
+) -> String:
+	var terms := _weighted_terms(
+		proximity, losing_streak, level_fails, lives, max_lives, race_rank, race_size
+	)
+	return (
+		"1 + streak %.3f + fails %.3f + low life %.3f + race %.3f + struggle %.3f"
+		% [terms[0], terms[1], terms[2], terms[3], terms[4]]
+	)
+
+
+## The five weighted inputs of the multiplier, each already times its weight.
+static func _weighted_terms(
+	proximity: float,
+	losing_streak: int,
+	level_fails: int,
+	lives: int,
+	max_lives: int,
+	race_rank: int,
+	race_size: int
+) -> PackedFloat32Array:
 	var streak := 1.0 - exp(-maxf(losing_streak, 0) / STREAK_SCALE)
 	var fails := 1.0 - exp(-maxf(level_fails, 0) / FAILS_SCALE)
 	var low_life := clampf(float(max_lives - lives) / maxf(max_lives, 1), 0.0, 1.0)
 	var standing := 1.0 - clampf(float(race_rank - 1) / maxf(race_size - 1, 1), 0.0, 1.0)
 	var struggle := 1.0 - clampf(proximity, 0.0, 1.0)
-	var raw := (
-		WEIGHT_STREAK * streak
-		+ WEIGHT_FAILS * fails
-		+ WEIGHT_LOW_LIFE * low_life
-		+ WEIGHT_STANDING * standing
-		+ WEIGHT_STRUGGLE * struggle
+	return PackedFloat32Array(
+		[
+			WEIGHT_STREAK * streak,
+			WEIGHT_FAILS * fails,
+			WEIGHT_LOW_LIFE * low_life,
+			WEIGHT_STANDING * standing,
+			WEIGHT_STRUGGLE * struggle,
+		]
 	)
-	return MULTIPLIER_MIN + (MULTIPLIER_MAX - MULTIPLIER_MIN) * clampf(raw, 0.0, 1.0)
 
 
 ## Moves a purchased revival grants for a given multiplier.
