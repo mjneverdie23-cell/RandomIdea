@@ -10,3 +10,7 @@ build/
 node_modules/
 *.log
 .DS_Store
+
+# Python bytecode (tools/sim)
+__pycache__/
+*.pyc
