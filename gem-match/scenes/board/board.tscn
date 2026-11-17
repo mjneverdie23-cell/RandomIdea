@@ -10,6 +10,7 @@
 [ext_resource type="Resource" path="res://resources/gems/diamond.tres" id="8_diamond"]
 [ext_resource type="Script" path="res://scenes/board/gem_pool.gd" id="9_pool"]
 [ext_resource type="PackedScene" path="res://scenes/gem/gem.tscn" id="10_gem"]
+[ext_resource type="Script" path="res://scenes/board/board_top_mask.gd" id="11_mask"]
 
 [node name="Board" type="Node2D"]
 script = ExtResource("1_board")
@@ -20,3 +21,7 @@ script = ExtResource("9_pool")
 gem_scene = ExtResource("10_gem")
 
 [node name="ActiveGems" type="Node2D" parent="."]
+
+[node name="TopMask" type="Node2D" parent="." node_paths=PackedStringArray("board")]
+script = ExtResource("11_mask")
+board = NodePath("..")

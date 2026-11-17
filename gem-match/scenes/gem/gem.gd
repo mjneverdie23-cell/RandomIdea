@@ -10,6 +10,8 @@ extends Node2D
 signal move_finished(gem: Gem)
 ## Emitted when the pop-in animation from play_spawn() ends.
 signal spawn_finished(gem: Gem)
+## Emitted when the destroy animation from play_clear() ends. The gem can then be pooled.
+signal clear_finished(gem: Gem)
 
 const SELECTED_SCALE := 1.12
 const SELECT_PULSE_TIME := 0.35
@@ -19,6 +21,7 @@ var grid_pos: Vector2i = Vector2i(-1, -1)
 
 var _move_tween: Tween
 var _spawn_tween: Tween
+var _clear_tween: Tween
 var _select_tween: Tween
 
 @onready var _visual: Node2D = $Visual
@@ -56,6 +59,17 @@ func play_spawn(duration: float, delay: float = 0.0) -> void:
 	_spawn_tween.finished.connect(_on_spawn_tween_finished)
 
 
+## Pops the gem slightly bigger, then shrinks it to nothing. Emits clear_finished at the end.
+func play_clear(duration: float, delay: float = 0.0) -> void:
+	_cancel_tracked_tween(_clear_tween, clear_finished)
+	_clear_tween = create_tween()
+	var grow := _clear_tween.tween_property(_visual, "scale", Vector2.ONE * 1.25, duration * 0.35)
+	grow.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT).set_delay(delay)
+	var shrink := _clear_tween.tween_property(_visual, "scale", Vector2.ZERO, duration * 0.65)
+	shrink.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	_clear_tween.finished.connect(_on_clear_tween_finished)
+
+
 ## Shows or hides the selection outline and the pulsing scale.
 func set_selected(selected: bool) -> void:
 	_highlight.visible = selected
@@ -75,11 +89,12 @@ func set_selected(selected: bool) -> void:
 
 ## Puts the gem back to a neutral state before it returns to the pool. Emits nothing.
 func reset_for_pool() -> void:
-	for tween: Tween in [_move_tween, _spawn_tween, _select_tween]:
+	for tween: Tween in [_move_tween, _spawn_tween, _clear_tween, _select_tween]:
 		if tween:
 			tween.kill()
 	_move_tween = null
 	_spawn_tween = null
+	_clear_tween = null
 	_select_tween = null
 	gem_type = null
 	grid_pos = Vector2i(-1, -1)
@@ -120,6 +135,10 @@ func _on_move_tween_finished() -> void:
 
 func _on_spawn_tween_finished() -> void:
 	spawn_finished.emit(self)
+
+
+func _on_clear_tween_finished() -> void:
+	clear_finished.emit(self)
 
 
 ## A regular polygon with one corner pointing up (4 sides gives a diamond shape).
