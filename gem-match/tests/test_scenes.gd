@@ -49,6 +49,27 @@ func test_level_scene_flow() -> void:
 		check(await wait_board_idle(board), "a turn settles in the level scene")
 		check_eq(level._moves_left, level._level.moves - 1, "a move was used")
 		check(level._score > 0, "the turn scored points")
+
+	# Running out of moves the first time offers a revival, which pauses the game.
+	level._moves_left = 0
+	level._on_board_settled()
+	var revival := _find_revival_popup(level)
+	check(revival != null and revival.visible, "out of moves shows the revival popup")
+	check(get_tree().paused, "the revival popup pauses the game")
+	if revival != null:
+		revival._watch_ad_button.pressed.emit()
+		check(await wait_until(func() -> bool: return not get_tree().paused, 5.0), "ad revives")
+		var revival_moves: int = level.get_script().get_script_constant_map()["REVIVAL_MOVES"]
+		check_eq(level._moves_left, revival_moves, "revival grants extra moves")
+		check(board._input_enabled, "the board takes input again")
+	await get_tree().process_frame
+
+	# The second time there is no offer: straight to game over.
+	level._moves_left = 0
+	level._on_board_settled()
+	check(_find_revival_popup(level) == null, "no second revival")
+	check(popup.visible and not get_tree().paused, "game over shows at once")
+	get_tree().paused = false
 	level.queue_free()
 	await get_tree().process_frame
 	Engine.time_scale = 1.0
@@ -66,3 +87,10 @@ func test_every_sound_plays() -> void:
 		audio.play(sound)
 	check(AudioServer.get_bus_index(&"Music") != -1, "Music bus exists")
 	check(AudioServer.get_bus_index(&"SFX") != -1, "SFX bus exists")
+
+
+func _find_revival_popup(level: Node) -> RevivalPopup:
+	for child in level.get_node("UI_Layer").get_children():
+		if child is RevivalPopup and not child.is_queued_for_deletion():
+			return child
+	return null

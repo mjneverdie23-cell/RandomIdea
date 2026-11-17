@@ -16,6 +16,8 @@ config/quit_on_go_back=false
 
 GameState="*res://autoload/game_state.gd"
 AudioManager="*res://autoload/audio_manager.gd"
+AdManager="*res://autoload/ad_manager.gd"
+IAPManager="*res://autoload/iap_manager.gd"
 
 [display]
 

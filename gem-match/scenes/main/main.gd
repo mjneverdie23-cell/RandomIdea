@@ -1,9 +1,9 @@
 extends Node2D
 ## Runs one level. Sets the Board up from the LevelData, keeps score, moves and goals,
-## shows the start / win / lose popups, and turns Board signals into feedback (particles,
-## screen shake and sound). The Board never knows any of this exists.
+## shows the start / revival / win / lose popups, and turns Board signals into feedback
+## (particles, screen shake and sound). The Board never knows any of this exists.
 
-enum Phase { INTRO, PLAYING, WON, LOST }
+enum Phase { INTRO, PLAYING, REVIVAL_OFFER, WON, LOST }
 
 const SHAKE_BY_SPECIAL := {
 	Gem.Special.STRIPED_H: 0.3,
@@ -17,16 +17,22 @@ const BOARD_AREA := Rect2(0, 330, 720, 760)
 const MOVE_BONUS := 50
 ## Points for destroying a prism, which has no GemType to read points from.
 const PRISM_POINTS := 30
+## Moves granted by a revival (ad or purchase).
+const REVIVAL_MOVES := 5
+const REVIVAL_POPUP_SCENE := preload("res://scenes/ui/revival_popup.tscn")
 
 var _level: LevelData
 var _phase: Phase = Phase.INTRO
 var _score: int = 0
 var _moves_left: int = 0
 var _collected: Dictionary = {}  # GemType -> gems destroyed so far
+## One revival per attempt at the level. Retrying reloads the scene, which resets it.
+var _has_revived: bool = false
 
 @onready var _board: Board = $Board
 @onready var _camera: ShakeCamera = $Camera
 @onready var _effects: BurstEffects = $Effects
+@onready var _ui_layer: CanvasLayer = $UI_Layer
 @onready var _hud: Hud = $UI_Layer/HUD
 @onready var _popup: MessagePopup = $UI_Layer/Popup
 
@@ -109,7 +115,7 @@ func _on_board_settled() -> void:
 	if _goals_met():
 		_win()
 	elif _moves_left <= 0:
-		_lose()
+		_on_out_of_moves()
 
 
 # --- Level flow ---------------------------------------------------------------------------
@@ -144,6 +150,38 @@ func _win() -> void:
 		_popup.open("Level complete!", body, "Next level", "Levels")
 	else:
 		_popup.open("You beat every level!", body, "Levels")
+
+
+## Out of moves without winning. The first time, offer a revival; after that, game over.
+func _on_out_of_moves() -> void:
+	if _has_revived:
+		_lose()
+		return
+	_phase = Phase.REVIVAL_OFFER
+	_board.set_input_enabled(false)
+	var revival: RevivalPopup = REVIVAL_POPUP_SCENE.instantiate()
+	_ui_layer.add_child(revival)
+	revival.revival_accepted.connect(_on_revival_accepted.bind(revival))
+	revival.player_exited.connect(_on_revival_declined.bind(revival))
+	revival.open(REVIVAL_MOVES)  # Pauses the game until the player decides.
+
+
+## The popup has already unpaused the game.
+func _on_revival_accepted(revival: RevivalPopup) -> void:
+	revival.queue_free()
+	_has_revived = true
+	_moves_left += REVIVAL_MOVES
+	_phase = Phase.PLAYING
+	_board.set_input_enabled(true)
+	_refresh_hud()
+	_hud.show_toast("+%d moves!" % REVIVAL_MOVES)
+	AudioManager.play(&"create")
+
+
+## The player said no and waited out the lockout: show the real game-over popup.
+func _on_revival_declined(revival: RevivalPopup) -> void:
+	revival.queue_free()
+	_lose()
 
 
 func _lose() -> void:

@@ -20,6 +20,9 @@ godot --headless --path gem-match -s res://tests/test_runner.gd
 - Reach the level's score and collect goals before the moves run out. Chain reactions
   multiply points (x2, x3, ...), and moves left over at the end are worth bonus points.
 - Escape (or the Android back button) goes back one screen.
+- **Out of moves?** Once per attempt you are offered a revival (+5 moves) for watching an
+  ad or buying one. Saying "No thanks" starts a 15-second wait before Exit unlocks and the
+  game-over screen appears. The game is paused throughout, and Back/Escape does nothing.
 
 | Match | Makes | Looks like | When it goes off |
 |---|---|---|---|
@@ -41,12 +44,17 @@ seconds without input, a possible move wiggles as a hint.
 | Scoring (cascade multiplier, move bonus) | `scenes/main/main.gd` |
 | Sounds and music | `autoload/audio_manager.gd` (`_build_sounds`, `_build_music`) |
 | Volumes | `default_bus_layout.tres` (Music and SFX buses) |
+| Revival: moves granted | `REVIVAL_MOVES` in `scenes/main/main.gd` |
+| Revival: lockout length | `lockout_seconds` on `scenes/ui/revival_popup.tscn` |
+| Fake vs real ads / purchases | `USE_MOCK_DATA` in `autoload/ad_manager.gd` and `autoload/iap_manager.gd`; plug the SDK into `_show_real_ad()` / `_start_real_purchase()` |
 
 ## Architecture
 
 ```
 autoload/game_state.gd          Autoload: current level, progress + settings saved as JSON in user://, scene changes, back navigation
 autoload/audio_manager.gd       Autoload: Music/SFX buses, synthesised sounds, button clicks
+autoload/ad_manager.gd          Autoload: rewarded ads (mock: 2 s delay, then success)
+autoload/iap_manager.gd         Autoload: in-app purchase of a revival (mock: 2 s delay, then success)
 resources/                      GemType, LevelData, CollectGoal, LevelCatalog resources and the six gem .tres files
 levels/                         Eight levels and the catalog
 scenes/board/board.gd|.tscn     Board: grid array, state machine, input, swapping, matching, specials, gravity, refill, shuffle, hints
@@ -57,7 +65,7 @@ scenes/board/board_top_mask.gd  Hides refill gems until they drop into the grid
 scenes/gem/gem.gd|.tscn         Gem: visuals and tweens only; reports finished animations with signals
 scenes/effects/                 Shake camera (trauma based) and pooled particle bursts
 scenes/main/main.gd|.tscn       Level scene and controller: score, moves, goals, popups, feedback
-scenes/ui/                      HUD and the start/win/lose popup
+scenes/ui/                      HUD, the start/win/lose popup and the revival popup
 scenes/menus/                   Main menu and level select
 tests/                          Headless test runner and suites
 ```

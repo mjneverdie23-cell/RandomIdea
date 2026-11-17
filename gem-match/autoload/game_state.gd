@@ -93,19 +93,22 @@ func set_sfx_enabled(enabled: bool) -> void:
 
 func play_level(index: int) -> void:
 	current_level = clampi(index, 0, level_count() - 1)
-	get_tree().change_scene_to_file(LEVEL_SCENE)
+	_change_scene(LEVEL_SCENE)
 
 
 func go_to_level_select() -> void:
-	get_tree().change_scene_to_file(LEVEL_SELECT_SCENE)
+	_change_scene(LEVEL_SELECT_SCENE)
 
 
 func go_to_main_menu() -> void:
-	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+	_change_scene(MAIN_MENU_SCENE)
 
 
-## Escape / back: level -> level select -> main menu -> quit.
+## Escape / back: level -> level select -> main menu -> quit. Ignored while the game is
+## paused, so a paused popup (the revival lockout) decides when the player may leave.
 func go_back() -> void:
+	if get_tree().paused:
+		return
 	var scene := get_tree().current_scene
 	if scene == null:
 		return
@@ -116,6 +119,12 @@ func go_back() -> void:
 			go_to_main_menu()
 		MAIN_MENU_SCENE:
 			get_tree().quit()
+
+
+## A new scene must never start frozen, so every scene change also unpauses.
+func _change_scene(path: String) -> void:
+	get_tree().paused = false
+	get_tree().change_scene_to_file(path)
 
 
 # --- Save / load --------------------------------------------------------------------------

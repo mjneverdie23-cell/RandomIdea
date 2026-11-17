@@ -1,0 +1,114 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/ui/revival_popup.gd" id="1_revival"]
+
+[node name="RevivalPopup" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_revival")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.65)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(580, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="Box" type="VBoxContainer" parent="Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="Title" type="Label" parent="Center/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "Out of moves!"
+horizontal_alignment = 1
+
+[node name="Message" type="Label" parent="Center/Panel/Margin/Box"]
+custom_minimum_size = Vector2(516, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "Keep playing with 5 extra moves?"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Offer" type="VBoxContainer" parent="Center/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="WatchAdButton" type="Button" parent="Center/Panel/Margin/Box/Offer"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Watch ad to revive"
+
+[node name="BuyButton" type="Button" parent="Center/Panel/Margin/Box/Offer"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Buy revival"
+
+[node name="StatusLabel" type="Label" parent="Center/Panel/Margin/Box/Offer"]
+visible = false
+custom_minimum_size = Vector2(516, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Loading ad..."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="DeclineButton" type="Button" parent="Center/Panel/Margin/Box/Offer"]
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "No thanks"
+flat = true
+
+[node name="Lockout" type="VBoxContainer" parent="Center/Panel/Margin/Box"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="WaitLabel" type="Label" parent="Center/Panel/Margin/Box/Lockout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "Please wait..."
+horizontal_alignment = 1
+
+[node name="CooldownBar" type="ProgressBar" parent="Center/Panel/Margin/Box/Lockout"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+show_percentage = false
+
+[node name="ExitButton" type="Button" parent="Center/Panel/Margin/Box/Lockout"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+disabled = true
+text = "Exit"
