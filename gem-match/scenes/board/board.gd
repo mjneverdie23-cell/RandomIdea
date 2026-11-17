@@ -22,7 +22,7 @@ signal layout_changed
 signal swap_started
 ## A swap made a match, so it counts as a move.
 signal move_made
-## A swap made no match and is sliding back.
+## A swap made no match and is sliding back. board_settled follows once it is back.
 signal swap_rejected
 ## One gem was destroyed (emitted as it vanishes). `at` is its global position. `cascade` is
 ## 0 for the gems the player's swap matched, 1 for the first chain reaction, and so on.
@@ -35,7 +35,8 @@ signal special_created(kind: Gem.Special, at: Vector2)
 signal special_activated(kind: Gem.Special, at: Vector2)
 ## No move was possible, so the board is rearranging itself.
 signal shuffled
-## The board has stopped moving and is waiting for the player again.
+## The board has stopped moving and is waiting for the player again: after a turn and its
+## cascades, after a shuffle, and after a rejected swap has slid back.
 signal board_settled
 
 enum State { IDLE, SWAPPING, MATCHING, FALLING, REFILLING, SHUFFLING }
@@ -243,6 +244,7 @@ func _on_swap_finished() -> void:
 	if _swap_is_revert:
 		_swap_is_revert = false
 		_change_state(State.IDLE)
+		board_settled.emit()
 		return
 	_change_state(State.MATCHING)
 	_cascade = 0

@@ -17,6 +17,8 @@ const BOARD_AREA := Rect2(0, 330, 720, 760)
 const MOVE_BONUS := 50
 ## Points for destroying a prism, which has no GemType to read points from.
 const PRISM_POINTS := 30
+## Moves lost for a swap that makes no match.
+const WRONG_MOVE_PENALTY := 1
 ## Moves granted by a revival (ad or purchase).
 const REVIVAL_MOVES := 5
 const REVIVAL_POPUP_SCENE := preload("res://scenes/ui/revival_popup.tscn")
@@ -49,7 +51,7 @@ func _ready() -> void:
 	_board.move_made.connect(_on_move_made)
 	_board.board_settled.connect(_on_board_settled)
 	_board.swap_started.connect(AudioManager.play.bind(&"swap", 1.0))
-	_board.swap_rejected.connect(AudioManager.play.bind(&"invalid", 1.0))
+	_board.swap_rejected.connect(_on_swap_rejected)
 	_board.special_created.connect(_on_special_created)
 	_board.shuffled.connect(_on_shuffled)
 	_popup.primary_pressed.connect(_on_popup_primary)
@@ -65,7 +67,10 @@ func _ready() -> void:
 	_board.start()
 
 	_refresh_hud()
-	var intro := "%s\n\nSwipe a gem, or tap two neighbours, to swap." % _goal_text()
+	var intro := (
+		"%s\n\nSwipe a gem, or tap two neighbours, to swap.\nA swap with no match costs a move."
+		% _goal_text()
+	)
 	_popup.open("Level %d" % (GameState.current_level + 1), intro, "Play", "Back")
 
 
@@ -106,6 +111,17 @@ func _on_shuffled() -> void:
 func _on_move_made() -> void:
 	_moves_left -= 1
 	_refresh_hud()
+
+
+## A swap that makes no match slides back and still costs a move. If that was the last
+## move, the board_settled that follows the slide-back runs the normal out-of-moves check.
+func _on_swap_rejected() -> void:
+	AudioManager.play(&"invalid")
+	if _phase != Phase.PLAYING:
+		return
+	_moves_left = maxi(_moves_left - WRONG_MOVE_PENALTY, 0)
+	_refresh_hud()
+	_hud.show_toast("No match: -%d move" % WRONG_MOVE_PENALTY)
 
 
 ## The turn (with all its cascades) is over: decide whether the level is won or lost.

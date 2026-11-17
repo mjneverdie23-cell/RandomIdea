@@ -47,12 +47,15 @@ func test_swap_without_match_slides_back() -> void:
 	if not move.is_empty():
 		var before := board.get_color_grid()
 		var rejected := [false]
+		var settled := [false]
 		board.swap_rejected.connect(func() -> void: rejected[0] = true)
+		board.board_settled.connect(func() -> void: settled[0] = true)
 		board._try_swap(move[0], move[1])
 		check(board.get_state() == Board.State.SWAPPING, "input moves the board to SWAPPING")
 		check(not board._try_swap(move[0], move[1]), "a second swap is refused while busy")
 		check(await wait_board_idle(board), "the board settles")
 		check(rejected[0], "swap_rejected was emitted")
+		check(settled[0], "board_settled follows the slide-back")
 		check_eq(board.get_color_grid(), before, "the board is unchanged")
 		check_board_invariants(board, "after revert")
 	board.queue_free()
