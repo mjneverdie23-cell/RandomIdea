@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GemType" format=3]
+
+[ext_resource type="Script" path="res://resources/gem_type.gd" id="1_gemtype"]
+
+[resource]
+script = ExtResource("1_gemtype")
+id = &"ruby"
+display_name = "Ruby"
+color = Color(0.89, 0.12, 0.25, 1)
+placeholder_sides = 8
+points = 10

@@ -1,0 +1,28 @@
+; Gem Match - 2D gem-themed match-3 game (Godot 4).
+; Open THIS folder (gem-match/) in the Godot editor, not the repository root.
+
+config_version=5
+
+[application]
+
+config/name="Gem Match"
+config/description="2D gem-themed match-3 puzzle game."
+run/main_scene="res://scenes/main/main.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/size/window_width_override=450
+window/size/window_height_override=800
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/handheld/orientation=1
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.1, 0.07, 0.17, 1)

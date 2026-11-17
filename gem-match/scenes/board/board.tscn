@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/board/board.gd" id="1_board"]
+[ext_resource type="Script" path="res://resources/gem_type.gd" id="2_gemtype"]
+[ext_resource type="Resource" path="res://resources/gems/ruby.tres" id="3_ruby"]
+[ext_resource type="Resource" path="res://resources/gems/sapphire.tres" id="4_sapphire"]
+[ext_resource type="Resource" path="res://resources/gems/emerald.tres" id="5_emerald"]
+[ext_resource type="Resource" path="res://resources/gems/topaz.tres" id="6_topaz"]
+[ext_resource type="Resource" path="res://resources/gems/amethyst.tres" id="7_amethyst"]
+[ext_resource type="Resource" path="res://resources/gems/diamond.tres" id="8_diamond"]
+[ext_resource type="Script" path="res://scenes/board/gem_pool.gd" id="9_pool"]
+[ext_resource type="PackedScene" path="res://scenes/gem/gem.tscn" id="10_gem"]
+
+[node name="Board" type="Node2D"]
+script = ExtResource("1_board")
+gem_types = Array[ExtResource("2_gemtype")]([ExtResource("3_ruby"), ExtResource("4_sapphire"), ExtResource("5_emerald"), ExtResource("6_topaz"), ExtResource("7_amethyst"), ExtResource("8_diamond")])
+
+[node name="GemPool" type="Node" parent="."]
+script = ExtResource("9_pool")
+gem_scene = ExtResource("10_gem")
+
+[node name="ActiveGems" type="Node2D" parent="."]

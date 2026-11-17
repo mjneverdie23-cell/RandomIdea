@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GemType" format=3]
+
+[ext_resource type="Script" path="res://resources/gem_type.gd" id="1_gemtype"]
+
+[resource]
+script = ExtResource("1_gemtype")
+id = &"sapphire"
+display_name = "Sapphire"
+color = Color(0.15, 0.4, 0.95, 1)
+placeholder_sides = 12
+points = 10

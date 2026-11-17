@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/gem/gem.gd" id="1_gem"]
+
+[node name="Gem" type="Node2D"]
+script = ExtResource("1_gem")
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Highlight" type="Polygon2D" parent="Visual"]
+visible = false
+color = Color(1, 1, 1, 0.85)
+
+[node name="Edge" type="Polygon2D" parent="Visual"]
+
+[node name="Body" type="Polygon2D" parent="Visual"]
+
+[node name="Shine" type="Polygon2D" parent="Visual"]
+color = Color(1, 1, 1, 0.45)
+
+[node name="Sprite" type="Sprite2D" parent="Visual"]
+visible = false

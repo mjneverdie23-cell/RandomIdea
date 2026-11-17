@@ -1,0 +1,65 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/board/board_background.gd" id="1_background"]
+[ext_resource type="PackedScene" path="res://scenes/board/board.tscn" id="2_board"]
+[ext_resource type="Script" path="res://scenes/ui/state_label.gd" id="3_state_label"]
+
+[node name="Main" type="Node2D"]
+
+[node name="Background" type="Node2D" parent="." node_paths=PackedStringArray("board")]
+script = ExtResource("1_background")
+board = NodePath("../Board")
+
+[node name="Board" parent="." instance=ExtResource("2_board")]
+position = Vector2(40, 320)
+
+[node name="UI_Layer" type="CanvasLayer" parent="."]
+
+[node name="HUD" type="Control" parent="UI_Layer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="StateLabel" type="Label" parent="UI_Layer/HUD" node_paths=PackedStringArray("board")]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 150.0
+offset_bottom = 200.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 36
+text = "State: -"
+horizontal_alignment = 1
+script = ExtResource("3_state_label")
+board = NodePath("../../../Board")
+
+[node name="HintLabel" type="Label" parent="UI_Layer/HUD"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -220.0
+offset_bottom = -120.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 1, 1, 0.6)
+theme_override_font_sizes/font_size = 26
+text = "Phase 1 prototype
+Swipe a gem, or tap two neighbours, to swap"
+horizontal_alignment = 1
+
+[node name="Popups" type="Control" parent="UI_Layer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="AudioManager" type="Node" parent="."]
