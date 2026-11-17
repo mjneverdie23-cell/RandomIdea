@@ -2,11 +2,10 @@ extends TestSuite
 ## Checks every level in the catalog is well-formed and that its board can start.
 
 const BOARD_SCENE := preload("res://scenes/board/board.tscn")
-const CATALOG: LevelCatalog = preload("res://levels/catalog.tres")
 
 
 func test_every_level_is_valid() -> void:
-	var catalog := CATALOG
+	var catalog := _catalog()
 	check(catalog != null and not catalog.levels.is_empty(), "the catalog has levels")
 	for i in catalog.levels.size():
 		var level := catalog.levels[i]
@@ -27,7 +26,7 @@ func test_every_level_is_valid() -> void:
 
 
 func test_every_level_board_starts() -> void:
-	var catalog := CATALOG
+	var catalog := _catalog()
 	Engine.time_scale = 8.0
 	for i in catalog.levels.size():
 		var level := catalog.levels[i]
@@ -42,3 +41,8 @@ func test_every_level_board_starts() -> void:
 		check_board_invariants(board, "level %d start" % (i + 1))
 		board.queue_free()
 	Engine.time_scale = 1.0
+
+
+## Loaded at runtime rather than preloaded into a const (see GameState.CATALOG_PATH).
+func _catalog() -> LevelCatalog:
+	return load("res://levels/catalog.tres")

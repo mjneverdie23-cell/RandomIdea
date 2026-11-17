@@ -2,8 +2,6 @@ extends TestSuite
 ## DDAManager: the data table, the per-move treatments and the gem colour source.
 ## Needs the DDAManager and MetaProgression autoloads; skipped without them.
 
-const CATALOG: LevelCatalog = preload("res://levels/catalog.tres")
-
 
 func test_table_loads_and_behaves() -> void:
 	var dda := _dda()
@@ -13,8 +11,8 @@ func test_table_loads_and_behaves() -> void:
 	check_eq(dda.lookup_win_probability(0, 5, 1.0), 1.0, "a finished level is a sure win")
 	check_eq(dda.lookup_win_probability(99, 5, 0.5), 0.5, "unknown level: neutral")
 	check_eq(dda.lookup_win_probability(0, 0, 0.5), 0.0, "no moves left: no win")
-	for level in CATALOG.levels.size():
-		var moves: int = CATALOG.levels[level].moves
+	for level in _levels().size():
+		var moves: int = _levels()[level].moves
 		var previous := -1.0
 		for bucket in 20:
 			var p: float = dda.lookup_win_probability(level, moves, bucket / 20.0)
@@ -34,7 +32,7 @@ func test_spawns_stay_in_bounds_and_rescue_forces_matches() -> void:
 	var dda := _dda()
 	if dda == null:
 		return
-	var level: LevelData = CATALOG.levels[2]  # 5 colours, collect emeralds
+	var level: LevelData = _levels()[2]  # 5 colours, collect emeralds
 	dda.begin_level(2, level)
 	dda.set_seed(1)
 	var allowed := PackedInt32Array([0, 1, 2, 3, 4])
@@ -57,7 +55,7 @@ func test_difficulty_tiers() -> void:
 	var dda := _dda()
 	if dda == null:
 		return
-	var level: LevelData = CATALOG.levels[4]  # 5 colours, no collect goal
+	var level: LevelData = _levels()[4]  # 5 colours, no collect goal
 	dda.begin_level(4, level)
 	dda.set_seed(2)
 	for _i in 10:  # Far behind with few moves left.
@@ -81,13 +79,13 @@ func test_revival_offer_is_priced() -> void:
 	var dda := _dda()
 	if dda == null:
 		return
-	var level: LevelData = CATALOG.levels[1]
+	var level: LevelData = _levels()[1]
 	dda.begin_level(1, level)
 	var goal := level.collect_goals[0]
-	var close := dda.legacy_pass_proximity_treatment(
+	var close: MonetizationModel.RevivalOffer = dda.legacy_pass_proximity_treatment(
 		level.star_scores[0], {goal.gem_type: goal.amount - 2}
 	)
-	var far := dda.legacy_pass_proximity_treatment(0, {})
+	var far: MonetizationModel.RevivalOffer = dda.legacy_pass_proximity_treatment(0, {})
 	check(close.proximity > far.proximity, "more progress, higher proximity")
 	check(close.ad_moves < far.ad_moves, "closer players get fewer ad moves")
 	for offer in [close, far]:
@@ -102,3 +100,9 @@ func _dda() -> Node:
 		return root.get_node("DDAManager")
 	print("          (skipped: DDAManager/MetaProgression autoloads not loaded)")
 	return null
+
+
+## Loaded at runtime rather than preloaded into a const (see GameState.CATALOG_PATH).
+func _levels() -> Array[LevelData]:
+	var catalog: LevelCatalog = load("res://levels/catalog.tres")
+	return catalog.levels

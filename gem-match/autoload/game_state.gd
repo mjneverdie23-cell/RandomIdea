@@ -8,7 +8,9 @@ extends Node
 signal settings_changed
 
 const SAVE_VERSION := 1
-const CATALOG: LevelCatalog = preload("res://levels/catalog.tres")
+## Loaded at runtime, not preloaded into a const: a const preload makes Godot type the levels
+## by script path while it is still compiling, which clashes with the LevelData class name.
+const CATALOG_PATH := "res://levels/catalog.tres"
 const MAIN_MENU_SCENE := "res://scenes/menus/main_menu.tscn"
 const LEVEL_SELECT_SCENE := "res://scenes/menus/level_select.tscn"
 const LEVEL_SCENE := "res://scenes/main/main.tscn"
@@ -20,6 +22,7 @@ var current_level: int = 0
 var music_enabled: bool = true
 var sfx_enabled: bool = true
 
+var _catalog: LevelCatalog
 var _unlocked_count: int = 1
 var _best_scores: Dictionary = {}  # level index -> int
 var _best_stars: Dictionary = {}  # level index -> int
@@ -45,11 +48,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func level_count() -> int:
-	return CATALOG.levels.size()
+	return _levels().size()
 
 
 func get_level(index: int) -> LevelData:
-	return CATALOG.levels[clampi(index, 0, level_count() - 1)]
+	return _levels()[clampi(index, 0, level_count() - 1)]
+
+
+## The catalog's levels, loading the catalog the first time it is needed.
+func _levels() -> Array[LevelData]:
+	if _catalog == null:
+		_catalog = load(CATALOG_PATH)
+	return _catalog.levels
 
 
 func is_unlocked(index: int) -> bool:
