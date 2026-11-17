@@ -5,12 +5,15 @@ extends Control
 
 signal quit_pressed
 
+var _toast_tween: Tween
+
 @onready var _level_label: Label = $Top/LevelLabel
 @onready var _moves_label: Label = $Top/Stats/MovesLabel
 @onready var _score_label: Label = $Top/Stats/ScoreLabel
 @onready var _score_bar: ProgressBar = $Top/ScoreBar
 @onready var _goals_label: Label = $Top/GoalsLabel
 @onready var _quit_button: Button = $QuitButton
+@onready var _toast: Label = $Toast
 
 
 func _ready() -> void:
@@ -34,3 +37,14 @@ func set_score(score: int, stars: int, star_scores: PackedInt32Array) -> void:
 
 func set_goals(text: String) -> void:
 	_goals_label.text = text
+
+
+## Briefly shows a message in the middle of the screen.
+func show_toast(text: String) -> void:
+	_toast.text = text
+	if _toast_tween:
+		_toast_tween.kill()
+	_toast.modulate.a = 1.0
+	_toast_tween = create_tween()
+	_toast_tween.tween_interval(0.8)
+	_toast_tween.tween_property(_toast, "modulate:a", 0.0, 0.4)

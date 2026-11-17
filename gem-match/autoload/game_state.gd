@@ -29,6 +29,18 @@ func _ready() -> void:
 	load_progress()
 
 
+func _notification(what: int) -> void:
+	# Android back button (project setting quit_on_go_back is off, so this is ours).
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		go_back()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		go_back()
+
+
 # --- Levels -------------------------------------------------------------------------------
 
 
@@ -90,6 +102,20 @@ func go_to_level_select() -> void:
 
 func go_to_main_menu() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+
+
+## Escape / back: level -> level select -> main menu -> quit.
+func go_back() -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	match scene.scene_file_path:
+		LEVEL_SCENE:
+			go_to_level_select()
+		LEVEL_SELECT_SCENE:
+			go_to_main_menu()
+		MAIN_MENU_SCENE:
+			get_tree().quit()
 
 
 # --- Save / load --------------------------------------------------------------------------

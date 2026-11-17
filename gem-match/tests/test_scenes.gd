@@ -52,3 +52,17 @@ func test_level_scene_flow() -> void:
 	level.queue_free()
 	await get_tree().process_frame
 	Engine.time_scale = 1.0
+
+
+func test_every_sound_plays() -> void:
+	if not get_tree().root.has_node("AudioManager"):
+		print("          (skipped: AudioManager autoload not loaded)")
+		return
+	var audio: Node = get_tree().root.get_node("AudioManager")
+	for sound: StringName in [
+		&"click", &"swap", &"invalid", &"match", &"create", &"special", &"shuffle", &"win", &"lose"
+	]:
+		check(audio._sounds.has(sound), "sound %s exists" % sound)
+		audio.play(sound)
+	check(AudioServer.get_bus_index(&"Music") != -1, "Music bus exists")
+	check(AudioServer.get_bus_index(&"SFX") != -1, "SFX bus exists")

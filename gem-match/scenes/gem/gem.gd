@@ -33,6 +33,7 @@ var _spawn_tween: Tween
 var _clear_tween: Tween
 var _select_tween: Tween
 var _pop_tween: Tween
+var _hint_tween: Tween
 
 @onready var _visual: Node2D = $Visual
 @onready var _highlight: Polygon2D = $Visual/Highlight
@@ -116,14 +117,22 @@ func set_selected(selected: bool) -> void:
 		_select_tween.tween_property(_visual, "scale", Vector2.ONE, 0.15)
 
 
-## The colour used for effects such as particles.
-func get_effect_color() -> Color:
-	return gem_type.color if gem_type else PRISM_COLOR
+## A quick wiggle to point out a possible move. Purely cosmetic; emits nothing.
+func play_hint() -> void:
+	if _hint_tween:
+		_hint_tween.kill()
+	_hint_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	for _i in 2:
+		_hint_tween.tween_property(_visual, "rotation", 0.3, 0.08)
+		_hint_tween.tween_property(_visual, "rotation", -0.3, 0.12)
+	_hint_tween.tween_property(_visual, "rotation", 0.0, 0.08)
 
 
 ## Puts the gem back to a neutral state before it returns to the pool. Emits nothing.
 func reset_for_pool() -> void:
-	for tween: Tween in [_move_tween, _spawn_tween, _clear_tween, _select_tween, _pop_tween]:
+	for tween: Tween in [
+		_move_tween, _spawn_tween, _clear_tween, _select_tween, _pop_tween, _hint_tween
+	]:
 		if tween:
 			tween.kill()
 	_move_tween = null
@@ -131,6 +140,7 @@ func reset_for_pool() -> void:
 	_clear_tween = null
 	_select_tween = null
 	_pop_tween = null
+	_hint_tween = null
 	gem_type = null
 	special = Special.NONE
 	grid_pos = Vector2i(-1, -1)

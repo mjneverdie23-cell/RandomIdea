@@ -12,7 +12,7 @@ var _next: int = 0
 func _ready() -> void:
 	var template := get_child(0) as GPUParticles2D
 	_emitters.append(template)
-	for i in pool_size - 1:
+	for _i in pool_size - 1:
 		var copy := template.duplicate() as GPUParticles2D
 		add_child(copy)
 		_emitters.append(copy)

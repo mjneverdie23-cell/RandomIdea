@@ -25,3 +25,6 @@ gem_scene = ExtResource("10_gem")
 [node name="TopMask" type="Node2D" parent="." node_paths=PackedStringArray("board")]
 script = ExtResource("11_mask")
 board = NodePath("..")
+
+[node name="HintTimer" type="Timer" parent="."]
+one_shot = true

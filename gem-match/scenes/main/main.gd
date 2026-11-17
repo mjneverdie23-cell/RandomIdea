@@ -1,7 +1,7 @@
 extends Node2D
 ## Runs one level. Sets the Board up from the LevelData, keeps score, moves and goals,
-## shows the start / win / lose popups, and turns Board signals into feedback (particles
-## and screen shake). The Board never knows any of this exists.
+## shows the start / win / lose popups, and turns Board signals into feedback (particles,
+## screen shake and sound). The Board never knows any of this exists.
 
 enum Phase { INTRO, PLAYING, WON, LOST }
 
@@ -42,6 +42,10 @@ func _ready() -> void:
 	_board.wave_cleared.connect(_on_wave_cleared)
 	_board.move_made.connect(_on_move_made)
 	_board.board_settled.connect(_on_board_settled)
+	_board.swap_started.connect(AudioManager.play.bind(&"swap", 1.0))
+	_board.swap_rejected.connect(AudioManager.play.bind(&"invalid", 1.0))
+	_board.special_created.connect(_on_special_created)
+	_board.shuffled.connect(_on_shuffled)
 	_popup.primary_pressed.connect(_on_popup_primary)
 	_popup.secondary_pressed.connect(GameState.go_to_level_select)
 	_hud.quit_pressed.connect(GameState.go_to_level_select)
@@ -73,11 +77,24 @@ func _on_gem_cleared(gem_type: GemType, at: Vector2, cascade: int) -> void:
 
 func _on_special_activated(kind: Gem.Special, _at: Vector2) -> void:
 	_camera.add_trauma(SHAKE_BY_SPECIAL.get(kind, 0.0))
+	AudioManager.play(&"special")
 
 
+func _on_special_created(_kind: Gem.Special, _at: Vector2) -> void:
+	AudioManager.play(&"create")
+
+
+## Each chain reaction plays the match sound a little higher.
 func _on_wave_cleared(cascade: int, _gem_count: int) -> void:
+	AudioManager.play(&"match", 1.0 + 0.12 * mini(cascade, 6))
 	if cascade >= 2:
 		_camera.add_trauma(0.1 * mini(cascade, 4))
+		_hud.show_toast("Combo x%d!" % (cascade + 1))
+
+
+func _on_shuffled() -> void:
+	AudioManager.play(&"shuffle")
+	_hud.show_toast("No moves left - shuffling")
 
 
 func _on_move_made() -> void:
@@ -121,6 +138,7 @@ func _win() -> void:
 	var stars := _level.stars_for(_score)
 	GameState.record_win(GameState.current_level, _score, stars)
 	_refresh_hud()
+	AudioManager.play(&"win")
 	var body := "Score %d\n(includes %d for moves left)\n\nStars: %d of 3" % [_score, bonus, stars]
 	if GameState.has_next_level():
 		_popup.open("Level complete!", body, "Next level", "Levels")
@@ -131,6 +149,7 @@ func _win() -> void:
 func _lose() -> void:
 	_phase = Phase.LOST
 	_board.set_input_enabled(false)
+	AudioManager.play(&"lose")
 	_popup.open("Out of moves", "Score %d\n%s" % [_score, _goal_text()], "Retry", "Levels")
 
 

@@ -165,6 +165,33 @@ func test_special_swaps() -> void:
 	Engine.time_scale = 1.0
 
 
+func test_board_with_no_moves_shuffles() -> void:
+	seed(5)
+	Engine.time_scale = 8.0
+	var board: Board = BOARD_SCENE.instantiate()
+	add_child(board)
+	board.start()
+	check(await wait_board_idle(board), "the starting board settles")
+	var stuck := {}
+	for x in board.columns:
+		for y in board.rows:
+			stuck[Vector2i(x, y)] = (x % 2) + 2 * (y % 2)
+	_paint(board, stuck)
+	check(board._find_possible_move().is_empty(), "the painted board is stuck")
+	var shuffled := [false]
+	board.shuffled.connect(func() -> void: shuffled[0] = true)
+	# Re-run the end-of-cascade check, as if a turn had just finished on this board.
+	board._state = Board.State.MATCHING
+	board._resolve_matches(false)
+	check_eq(board.get_state(), Board.State.SHUFFLING, "a stuck board starts shuffling")
+	check(await wait_board_idle(board), "the shuffle settles")
+	check(shuffled[0], "shuffled was emitted")
+	check(not board._find_possible_move().is_empty(), "the shuffled board has a move")
+	check_board_invariants(board, "after shuffle")
+	board.queue_free()
+	Engine.time_scale = 1.0
+
+
 ## Repaints the board: overrides[cell] is a gem_types index; other cells use a pattern
 ## that never makes a match ((x + 2y) mod 4).
 func _paint(board: Board, overrides: Dictionary) -> void:

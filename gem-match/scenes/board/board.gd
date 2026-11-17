@@ -9,6 +9,7 @@ extends Node2D
 ## Turn flow:
 ##   IDLE -> SWAPPING -> MATCHING -> FALLING -> REFILLING -> MATCHING -> ... -> IDLE
 ## A swap that makes no match goes MATCHING -> SWAPPING (slide back) -> IDLE.
+## If the settled board has no possible move it goes MATCHING -> SHUFFLING -> IDLE.
 ##
 ## Animation barrier: before the Board starts a gem animation it adds 1 to
 ## _pending_animations. Each gem signals when that animation ends. When the count reaches 0,
@@ -17,12 +18,14 @@ extends Node2D
 signal state_changed(new_state: State)
 ## start() built a new grid. Background art should redraw to the new size and position.
 signal layout_changed
+## The player started a swap (it may still be rejected).
+signal swap_started
 ## A swap made a match, so it counts as a move.
 signal move_made
 ## A swap made no match and is sliding back.
 signal swap_rejected
-## One gem is being destroyed. `at` is its global position. `cascade` is 0 for the gems the
-## player's swap matched, 1 for the first chain reaction, and so on.
+## One gem was destroyed (emitted as it vanishes). `at` is its global position. `cascade` is
+## 0 for the gems the player's swap matched, 1 for the first chain reaction, and so on.
 signal gem_cleared(gem_type: GemType, at: Vector2, cascade: int)
 ## A wave of gems is being destroyed: once for the swap's matches, then once per cascade.
 signal wave_cleared(cascade: int, gem_count: int)
@@ -30,19 +33,24 @@ signal wave_cleared(cascade: int, gem_count: int)
 signal special_created(kind: Gem.Special, at: Vector2)
 ## A special gem went off.
 signal special_activated(kind: Gem.Special, at: Vector2)
+## No move was possible, so the board is rearranging itself.
+signal shuffled
 ## The board has stopped moving and is waiting for the player again.
 signal board_settled
 
-enum State { IDLE, SWAPPING, MATCHING, FALLING, REFILLING }
+enum State { IDLE, SWAPPING, MATCHING, FALLING, REFILLING, SHUFFLING }
 
 ## Every legal state change. Any other change is a bug, so it is refused and logged.
 const TRANSITIONS := {
 	State.IDLE: [State.SWAPPING],
 	State.SWAPPING: [State.MATCHING, State.IDLE],
-	State.MATCHING: [State.FALLING, State.SWAPPING, State.IDLE],
+	State.MATCHING: [State.FALLING, State.SWAPPING, State.IDLE, State.SHUFFLING],
 	State.FALLING: [State.REFILLING],
 	State.REFILLING: [State.MATCHING],
+	State.SHUFFLING: [State.IDLE],
 }
+## Shuffle attempts before falling back to recolouring the plain gems.
+const SHUFFLE_ATTEMPTS := 100
 const NO_CELL := Vector2i(-1, -1)
 ## Prism target meaning "every gem on the board" (two prisms swapped together).
 const ALL_COLORS := -2
@@ -61,6 +69,8 @@ const ALL_COLORS := -2
 @export_group("Input")
 ## How far, in pixels, the pointer must move after a press before it counts as a swipe.
 @export var swipe_threshold: float = 28.0
+## Seconds of player inactivity before a possible move wiggles as a hint (0 = never).
+@export var hint_delay: float = 6.0
 
 @export_group("Animation")
 @export var swap_duration: float = 0.22
@@ -72,6 +82,7 @@ const ALL_COLORS := -2
 @export var fall_duration_per_cell: float = 0.04
 ## Extra destroy delay per cell of distance from a special gem, so its blast ripples outwards.
 @export var blast_ripple_delay: float = 0.035
+@export var shuffle_duration: float = 0.45
 
 var _state: State = State.REFILLING
 ## _grid[x][y] holds a Gem, or null for an empty cell.
@@ -97,6 +108,11 @@ var _swap_is_revert: bool = false
 
 @onready var _pool: GemPool = $GemPool
 @onready var _active_gems: Node2D = $ActiveGems
+@onready var _hint_timer: Timer = $HintTimer
+
+
+func _ready() -> void:
+	_hint_timer.timeout.connect(_on_hint_timer_timeout)
 
 
 ## Builds and pops in a new board from the current columns, rows and gem_types. Call once,
@@ -148,6 +164,7 @@ func set_input_enabled(enabled: bool) -> void:
 	_dragging = false
 	if not enabled:
 		_clear_selection()
+	_restart_hint_timer()
 
 
 func get_gem(cell: Vector2i) -> Gem:
@@ -194,6 +211,7 @@ func _change_state(new_state: State) -> void:
 		)
 		return
 	_state = new_state
+	_restart_hint_timer()
 	state_changed.emit(new_state)
 
 
@@ -208,6 +226,8 @@ func _on_all_animations_finished() -> void:
 			_on_fall_finished()
 		State.REFILLING:
 			_on_refill_finished()
+		State.SHUFFLING:
+			_on_shuffle_finished()
 
 
 ## Call after starting a batch of animations. If the batch turned out to be empty, nothing
@@ -267,7 +287,16 @@ func _resolve_matches(is_swap_check: bool) -> void:
 	_clear_wave(groups, triggered)
 
 
+## The cascade is over. Hand control back, unless there is no move left to make.
 func _settle() -> void:
+	if _find_possible_move().is_empty():
+		_shuffle()
+		return
+	_change_state(State.IDLE)
+	board_settled.emit()
+
+
+func _on_shuffle_finished() -> void:
 	_change_state(State.IDLE)
 	board_settled.emit()
 
@@ -349,7 +378,6 @@ func _clear_wave(groups: Array[MatchFinder.MatchGroup], triggered: Array[Gem]) -
 			continue
 		_grid[cell.x][cell.y] = null
 		_clearing.append(gem)
-		gem_cleared.emit(gem.gem_type, gem.global_position, _cascade)
 		_pending_animations += 1
 		gem.play_clear(clear_duration, delays[cell])
 	wave_cleared.emit(_cascade, delays.size())
@@ -463,6 +491,95 @@ func _fall_time(cells: int) -> float:
 	return fall_duration + fall_duration_per_cell * cells
 
 
+# --- No moves left: shuffle ------------------------------------------------------------------
+
+
+## A swap the player could make right now, as [cell_a, cell_b], or [] if there is none.
+func _find_possible_move() -> Array[Vector2i]:
+	for x in columns:
+		for y in rows:
+			for step: Vector2i in [Vector2i.RIGHT, Vector2i.DOWN]:
+				var a := Vector2i(x, y)
+				var b := a + step
+				var gem_a := get_gem(a)
+				var gem_b := get_gem(b)
+				if gem_a == null or gem_b == null:
+					continue
+				var special_a := gem_a.special != Gem.Special.NONE
+				var special_b := gem_b.special != Gem.Special.NONE
+				var prism := (
+					gem_a.special == Gem.Special.PRISM or gem_b.special == Gem.Special.PRISM
+				)
+				if prism or (special_a and special_b):
+					return [a, b]
+	return MatchFinder.find_possible_move(get_color_grid())
+
+
+## Rearranges every gem so there are no matches and at least one move (SHUFFLING state).
+## Tries random orders first; if that keeps failing, recolours the plain gems.
+func _shuffle() -> void:
+	_change_state(State.SHUFFLING)
+	shuffled.emit()
+	var cells: Array[Vector2i] = []
+	var gems: Array[Gem] = []
+	for x in columns:
+		for y in rows:
+			cells.append(Vector2i(x, y))
+			gems.append(_grid[x][y])
+
+	var playable := false
+	for _attempt in SHUFFLE_ATTEMPTS:
+		gems.shuffle()
+		for i in cells.size():
+			_set_cell(cells[i], gems[i])
+		if _is_playable():
+			playable = true
+			break
+	var recolour_attempts := 0
+	while not playable and recolour_attempts < 20:
+		recolour_attempts += 1
+		for cell in cells:
+			var gem := get_gem(cell)
+			if gem.special == Gem.Special.NONE:
+				gem.setup(_pick_spawn_type(cell), cell, cell_size * gem_radius_ratio)
+		playable = _is_playable()
+	if not playable:
+		push_warning("Board: could not find a playable shuffle; the board may be stuck.")
+
+	for cell in cells:
+		_move_gem(get_gem(cell), grid_to_local(cell), shuffle_duration, Tween.TRANS_BACK)
+	_wait_for_animations()
+
+
+func _is_playable() -> bool:
+	return (
+		MatchFinder.find_matches(get_color_grid()).is_empty()
+		and not _find_possible_move().is_empty()
+	)
+
+
+# --- Hints --------------------------------------------------------------------------------
+
+
+## (Re)starts the idle countdown, but only while the player can actually move.
+func _restart_hint_timer() -> void:
+	if not is_node_ready():
+		return
+	if _state == State.IDLE and _input_enabled and hint_delay > 0.0:
+		_hint_timer.start(hint_delay)
+	else:
+		_hint_timer.stop()
+
+
+func _on_hint_timer_timeout() -> void:
+	if _state != State.IDLE or not _input_enabled:
+		return
+	var move := _find_possible_move()
+	for cell in move:
+		get_gem(cell).play_hint()
+	_hint_timer.start(hint_delay)
+
+
 # --- Grid construction --------------------------------------------------------------------
 
 
@@ -526,7 +643,7 @@ func _spawn_gem(gem_type: GemType, cell: Vector2i) -> Gem:
 	if not gem.move_finished.is_connected(_on_gem_animation_finished):
 		gem.move_finished.connect(_on_gem_animation_finished)
 		gem.spawn_finished.connect(_on_gem_animation_finished)
-		gem.clear_finished.connect(_on_gem_animation_finished)
+		gem.clear_finished.connect(_on_gem_clear_finished)
 	gem.setup(gem_type, cell, cell_size * gem_radius_ratio)
 	_set_cell(cell, gem)
 	return gem
@@ -544,6 +661,7 @@ func _set_cell(cell: Vector2i, gem: Gem) -> void:
 func _on_pointer_pressed(local_pos: Vector2) -> void:
 	if _state != State.IDLE or not _input_enabled:
 		return
+	_restart_hint_timer()
 	var cell := local_to_grid(local_pos)
 	var gem := get_gem(cell)
 	if gem == null:
@@ -616,6 +734,7 @@ func _try_swap(from: Vector2i, to: Vector2i) -> bool:
 	_swap_to = to
 	_swap_is_revert = false
 	_change_state(State.SWAPPING)
+	swap_started.emit()
 	_animate_swap(from, to, Tween.TRANS_BACK)
 	return true
 
@@ -651,6 +770,11 @@ func _move_gem(
 ) -> void:
 	_pending_animations += 1
 	gem.move_to(target, duration, trans, easing)
+
+
+func _on_gem_clear_finished(gem: Gem) -> void:
+	gem_cleared.emit(gem.gem_type, gem.global_position, _cascade)
+	_on_gem_animation_finished(gem)
 
 
 func _on_gem_animation_finished(_gem: Gem) -> void:

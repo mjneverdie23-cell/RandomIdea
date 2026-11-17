@@ -127,3 +127,50 @@ static func _build_group(group_runs: Array, colors: Array) -> MatchGroup:
 	elif longest.cells.size() == 4:
 		group.shape = Shape.LINE_4
 	return group
+
+
+## The first colour swap that would make a match, as [cell_a, cell_b], or [] if there is
+## none. Special-gem swaps (prisms, two specials) are the Board's business, not this one's.
+static func find_possible_move(colors: Array) -> Array[Vector2i]:
+	var columns := colors.size()
+	var rows: int = colors[0].size() if columns > 0 else 0
+	for x in columns:
+		for y in rows:
+			for step: Vector2i in [Vector2i.RIGHT, Vector2i.DOWN]:
+				var a := Vector2i(x, y)
+				var b := a + step
+				if b.x >= columns or b.y >= rows:
+					continue
+				var color_a: int = colors[a.x][a.y]
+				var color_b: int = colors[b.x][b.y]
+				if color_a == color_b:
+					continue
+				if _makes_line(colors, a, color_b, b) or _makes_line(colors, b, color_a, a):
+					return [a, b]
+	return []
+
+
+## Would `color` placed at `cell` make a line of 3? `vacated` is the cell the gem came from;
+## it holds a different colour after the swap, so counting stops there.
+static func _makes_line(colors: Array, cell: Vector2i, color: int, vacated: Vector2i) -> bool:
+	if color == NO_COLOR:
+		return false
+	var columns := colors.size()
+	var rows: int = colors[0].size()
+	for axis: Vector2i in [Vector2i.RIGHT, Vector2i.DOWN]:
+		var count := 1
+		for direction: Vector2i in [axis, -axis]:
+			var c := cell + direction
+			while (
+				c.x >= 0
+				and c.x < columns
+				and c.y >= 0
+				and c.y < rows
+				and c != vacated
+				and colors[c.x][c.y] == color
+			):
+				count += 1
+				c += direction
+		if count >= MIN_RUN:
+			return true
+	return false

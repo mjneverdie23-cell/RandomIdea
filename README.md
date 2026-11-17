@@ -61,8 +61,9 @@ See [HANDBOOK.md](HANDBOOK.md) §2-3 for the full map of the codebase.
 shared rules and data: a **Unity 6** project and an **Unreal Engine 5** C++ project. See
 [tactical-shooter-template/README.md](tactical-shooter-template/README.md).
 
-`gem-match/` is a separate **Godot 4 match-3 puzzle game** with a gem theme, built in phases.
-Open `gem-match/project.godot` on its own. See [gem-match/README.md](gem-match/README.md).
+`gem-match/` is a separate **Godot 4 match-3 puzzle game** with a gem theme: special gems,
+cascades, eight levels, menus, saving and synthesised audio, with deliberately minimal
+visuals. Open `gem-match/project.godot` on its own. See [gem-match/README.md](gem-match/README.md).
 
 ## Licence
 

@@ -50,3 +50,22 @@ func test_separate_groups_and_empty_cells() -> void:
 		MatchFinder.find_matches(grid_from_text(["...", "..."])).is_empty(), "empty never matches"
 	)
 	check(MatchFinder.find_matches(grid_from_text(["00100"])).is_empty(), "broken run")
+
+
+func test_possible_moves() -> void:
+	# A 2x2 tiling of four colours has no match and no move at all.
+	var stuck: Array = []
+	for x in 8:
+		var column := PackedInt32Array()
+		for y in 8:
+			column.append((x % 2) + 2 * (y % 2))
+		stuck.append(column)
+	check(MatchFinder.find_matches(stuck).is_empty(), "the tiling has no matches")
+	check(MatchFinder.find_possible_move(stuck).is_empty(), "the tiling has no moves")
+
+	var one_move := grid_from_text(["0010", "1201", "2312"])
+	var move := MatchFinder.find_possible_move(one_move)
+	check(
+		move.size() == 2 and move[0] == Vector2i(2, 0) and move[1] == Vector2i(3, 0),
+		"finds the first move in scan order"
+	)
