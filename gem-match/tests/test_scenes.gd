@@ -73,7 +73,9 @@ func test_level_scene_flow() -> void:
 	if revival != null:
 		revival._watch_ad_button.pressed.emit()
 		check(await wait_until(func() -> bool: return not get_tree().paused, 5.0), "ad revives")
-		check_eq(level._moves_left, revival._offer.ad_moves, "the ad grants the offered moves")
+		check_eq(
+			level._moves_left, revival._current_offer.ad_moves, "the ad grants the offered moves"
+		)
 		check(board._input_enabled, "the board takes input again")
 	await get_tree().process_frame
 

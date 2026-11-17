@@ -24,7 +24,7 @@ enum Pending { NONE, AD, PURCHASE }
 @export var lockout_seconds: float = 15.0
 
 var _pending: Pending = Pending.NONE
-var _offer: MonetizationModel.RevivalOffer
+var _current_offer: MonetizationModel.RevivalOffer
 var _lockout_tween: Tween
 
 @onready var _message: Label = $Center/Panel/Margin/Box/Message
@@ -52,7 +52,7 @@ func _ready() -> void:
 
 ## Shows the offer stage and pauses the game.
 func open(offer: MonetizationModel.RevivalOffer) -> void:
-	_offer = offer
+	_current_offer = offer
 	_message.text = "Keep playing?"
 	_watch_ad_button.text = "Watch ad: +%d moves" % offer.ad_moves
 	var price := IAPManager.get_revival_price_text()
@@ -100,14 +100,18 @@ func _wait_for(kind: Pending, message: String) -> void:
 func _on_ad_rewarded(success: bool) -> void:
 	if _pending == Pending.AD:
 		_finish_offer(
-			success, _offer.ad_moves, "The ad didn't finish, so there's no reward. Try again?"
+			success,
+			_current_offer.ad_moves,
+			"The ad didn't finish, so there's no reward. Try again?"
 		)
 
 
 func _on_purchase_completed(success: bool) -> void:
 	if _pending == Pending.PURCHASE:
 		_finish_offer(
-			success, _offer.iap_moves, "The purchase didn't go through. You were not charged."
+			success,
+			_current_offer.iap_moves,
+			"The purchase didn't go through. You were not charged."
 		)
 
 

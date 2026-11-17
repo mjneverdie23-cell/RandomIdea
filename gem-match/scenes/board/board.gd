@@ -370,11 +370,13 @@ func _clear_wave(groups: Array[MatchFinder.MatchGroup], triggered: Array[Gem]) -
 			continue
 		activated[source] = true
 		special_activated.emit(source.special, source.global_position)
-		var start: float = delays.get(source.grid_pos, 0.0)
+		var source_delay: float = delays.get(source.grid_pos, 0.0)
 		for cell in _special_area(source):
 			if keep.has(cell):
 				continue
-			var delay := start + blast_ripple_delay * Vector2(cell - source.grid_pos).length()
+			var delay := (
+				source_delay + blast_ripple_delay * Vector2(cell - source.grid_pos).length()
+			)
 			if not delays.has(cell) or delays[cell] > delay:
 				delays[cell] = delay
 			var hit := get_gem(cell)
