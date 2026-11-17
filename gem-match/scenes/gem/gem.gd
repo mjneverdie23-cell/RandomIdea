@@ -6,35 +6,61 @@ extends Node2D
 ## Gems are pooled (see GemPool): call setup() when one is taken from the pool, and
 ## reset_for_pool() when it goes back.
 
-## Emitted when a move_to() tween ends (swap, and later fall/refill).
+## Emitted when a move_to() tween ends (swap, fall, refill).
 signal move_finished(gem: Gem)
 ## Emitted when the pop-in animation from play_spawn() ends.
 signal spawn_finished(gem: Gem)
 ## Emitted when the destroy animation from play_clear() ends. The gem can then be pooled.
 signal clear_finished(gem: Gem)
 
+## STRIPED_H clears its row, STRIPED_V its column, WRAPPED the 3x3 area around it, and
+## PRISM every gem of one colour. A PRISM has no colour of its own (gem_type is null).
+enum Special { NONE, STRIPED_H, STRIPED_V, WRAPPED, PRISM }
+
 const SELECTED_SCALE := 1.12
 const SELECT_PULSE_TIME := 0.35
+const PRISM_COLOR := Color(0.95, 0.95, 1.0)
+const MARKER_COLOR := Color(1, 1, 1, 0.9)
+const PRISM_MARKER_COLOR := Color(0.1, 0.08, 0.2)
 
 var gem_type: GemType
+var special: Special = Special.NONE
 var grid_pos: Vector2i = Vector2i(-1, -1)
 
+var _radius: float = 32.0
 var _move_tween: Tween
 var _spawn_tween: Tween
 var _clear_tween: Tween
 var _select_tween: Tween
+var _pop_tween: Tween
 
 @onready var _visual: Node2D = $Visual
 @onready var _highlight: Polygon2D = $Visual/Highlight
 @onready var _body: Polygon2D = $Visual/Body
 @onready var _sprite: Sprite2D = $Visual/Sprite
+@onready var _marker: Polygon2D = $Visual/Marker
 
 
 ## Gives a pooled gem its identity. `radius` is half the gem's on-screen width in pixels.
 func setup(new_type: GemType, cell: Vector2i, radius: float) -> void:
 	gem_type = new_type
 	grid_pos = cell
-	_apply_visuals(radius)
+	special = Special.NONE
+	_radius = radius
+	_apply_visuals()
+
+
+## Turns this gem into a special gem, with a springy pop. A PRISM loses its colour.
+func make_special(kind: Special) -> void:
+	special = kind
+	if kind == Special.PRISM:
+		gem_type = null
+	_apply_visuals()
+	if _pop_tween:
+		_pop_tween.kill()
+	_visual.scale = Vector2.ONE * 0.5
+	_pop_tween = create_tween().set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_pop_tween.tween_property(_visual, "scale", Vector2.ONE, 0.5)
 
 
 ## Slides the gem to `target` (in the parent's local space). Emits move_finished at the end.
@@ -59,9 +85,12 @@ func play_spawn(duration: float, delay: float = 0.0) -> void:
 	_spawn_tween.finished.connect(_on_spawn_tween_finished)
 
 
-## Pops the gem slightly bigger, then shrinks it to nothing. Emits clear_finished at the end.
+## After `delay`, pops the gem slightly bigger and then shrinks it to nothing.
+## Emits clear_finished at the end.
 func play_clear(duration: float, delay: float = 0.0) -> void:
 	_cancel_tracked_tween(_clear_tween, clear_finished)
+	if _pop_tween:
+		_pop_tween.kill()
 	_clear_tween = create_tween()
 	var grow := _clear_tween.tween_property(_visual, "scale", Vector2.ONE * 1.25, duration * 0.35)
 	grow.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT).set_delay(delay)
@@ -87,16 +116,23 @@ func set_selected(selected: bool) -> void:
 		_select_tween.tween_property(_visual, "scale", Vector2.ONE, 0.15)
 
 
+## The colour used for effects such as particles.
+func get_effect_color() -> Color:
+	return gem_type.color if gem_type else PRISM_COLOR
+
+
 ## Puts the gem back to a neutral state before it returns to the pool. Emits nothing.
 func reset_for_pool() -> void:
-	for tween: Tween in [_move_tween, _spawn_tween, _clear_tween, _select_tween]:
+	for tween: Tween in [_move_tween, _spawn_tween, _clear_tween, _select_tween, _pop_tween]:
 		if tween:
 			tween.kill()
 	_move_tween = null
 	_spawn_tween = null
 	_clear_tween = null
 	_select_tween = null
+	_pop_tween = null
 	gem_type = null
+	special = Special.NONE
 	grid_pos = Vector2i(-1, -1)
 	position = Vector2.ZERO
 	z_index = 0
@@ -104,21 +140,35 @@ func reset_for_pool() -> void:
 	_visual.scale = Vector2.ONE
 	_visual.rotation = 0.0
 	_highlight.visible = false
+	_marker.visible = false
 
 
-func _apply_visuals(radius: float) -> void:
-	var sides := gem_type.placeholder_sides
-	var has_texture := gem_type.texture != null
-	_highlight.polygon = _regular_polygon(sides, radius * 1.25)
-	_body.visible = not has_texture
-	_sprite.visible = has_texture
-	if has_texture:
-		_sprite.texture = gem_type.texture
-		var tex_size := gem_type.texture.get_size()
-		_sprite.scale = Vector2.ONE * (radius * 2.0 / maxf(tex_size.x, tex_size.y))
+func _apply_visuals() -> void:
+	var r := _radius
+	var is_prism := special == Special.PRISM
+	var sides := 12 if is_prism else gem_type.placeholder_sides
+	var texture: Texture2D = null if is_prism else gem_type.texture
+	_highlight.polygon = _regular_polygon(sides, r * 1.25)
+	_body.visible = texture == null
+	_sprite.visible = texture != null
+	if texture:
+		_sprite.texture = texture
+		_sprite.scale = Vector2.ONE * (r * 2.0 / maxf(texture.get_width(), texture.get_height()))
 	else:
-		_body.polygon = _regular_polygon(sides, radius)
-		_body.color = gem_type.color
+		_body.polygon = _regular_polygon(sides, r)
+		_body.color = PRISM_COLOR if is_prism else gem_type.color
+
+	_marker.visible = special != Special.NONE
+	_marker.color = PRISM_MARKER_COLOR if is_prism else MARKER_COLOR
+	match special:
+		Special.STRIPED_H:
+			_marker.polygon = _rect(Vector2(r * 1.6, r * 0.3))
+		Special.STRIPED_V:
+			_marker.polygon = _rect(Vector2(r * 0.3, r * 1.6))
+		Special.WRAPPED:
+			_marker.polygon = _rect(Vector2(r * 0.75, r * 0.75))
+		Special.PRISM:
+			_marker.polygon = _regular_polygon(12, r * 0.4)
 
 
 ## If a tween the Board is counting is still running, stop it and report it as finished
@@ -147,3 +197,9 @@ static func _regular_polygon(sides: int, radius: float) -> PackedVector2Array:
 	for i in sides:
 		points.append(Vector2.from_angle(-PI / 2.0 + TAU * i / sides) * radius)
 	return points
+
+
+## A rectangle of `size` centred on the gem.
+static func _rect(size: Vector2) -> PackedVector2Array:
+	var h := size / 2.0
+	return PackedVector2Array([Vector2(-h.x, -h.y), Vector2(h.x, -h.y), h, Vector2(-h.x, h.y)])

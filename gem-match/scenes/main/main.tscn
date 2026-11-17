@@ -3,8 +3,21 @@
 [ext_resource type="Script" path="res://scenes/board/board_background.gd" id="1_background"]
 [ext_resource type="PackedScene" path="res://scenes/board/board.tscn" id="2_board"]
 [ext_resource type="Script" path="res://scenes/ui/state_label.gd" id="3_state_label"]
+[ext_resource type="Script" path="res://scenes/main/main.gd" id="4_main"]
+[ext_resource type="Script" path="res://scenes/effects/burst_effects.gd" id="5_effects"]
+[ext_resource type="Script" path="res://scenes/effects/shake_camera.gd" id="6_camera"]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_burst"]
+particle_flag_disable_z = true
+spread = 180.0
+initial_velocity_min = 140.0
+initial_velocity_max = 300.0
+gravity = Vector3(0, 800, 0)
+scale_min = 5.0
+scale_max = 9.0
 
 [node name="Main" type="Node2D"]
+script = ExtResource("4_main")
 
 [node name="Background" type="Node2D" parent="." node_paths=PackedStringArray("board")]
 script = ExtResource("1_background")
@@ -12,6 +25,22 @@ board = NodePath("../Board")
 
 [node name="Board" parent="." instance=ExtResource("2_board")]
 position = Vector2(40, 320)
+
+[node name="Effects" type="Node2D" parent="."]
+z_index = 20
+script = ExtResource("5_effects")
+
+[node name="Burst" type="GPUParticles2D" parent="Effects"]
+emitting = false
+amount = 10
+process_material = SubResource("ParticleProcessMaterial_burst")
+lifetime = 0.45
+one_shot = true
+explosiveness = 1.0
+
+[node name="Camera" type="Camera2D" parent="."]
+anchor_mode = 0
+script = ExtResource("6_camera")
 
 [node name="UI_Layer" type="CanvasLayer" parent="."]
 

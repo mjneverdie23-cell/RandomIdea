@@ -16,7 +16,7 @@ godot --headless --path gem-match -s res://tests/test_runner.gd
 |---|---|---|
 | 1 | Gem resource and scene, grid array, state machine, tap/swipe input, swapping | **Done** |
 | 2 | Match detection, clearing, gravity, refill, cascades | **Done** |
-| 3 | Special gems, screen shake, particles | Planned |
+| 3 | Special gems, screen shake, particles | **Done** |
 | 4 | HUD, levels, menus, save/load | Planned |
 | 5 | Shuffle when no moves are left, audio, final polish | Planned |
 
@@ -24,6 +24,17 @@ godot --headless --path gem-match -s res://tests/test_runner.gd
 
 - **Swipe** a gem towards a neighbour, or **tap** a gem and then tap one of its neighbours.
 - Tap the selected gem again, tap outside the board, or right-click to deselect.
+
+## Special gems
+
+| Match | Makes | Looks like | When it goes off |
+|---|---|---|---|
+| 4 in a line | Striped | white bar | clears its row (horizontal match) or column (vertical match) |
+| L, T or + shape | Wrapped | white square | clears the 3x3 area around it |
+| 5 in a line | Prism | white gem, dark centre | swap it with a gem to clear every gem of that colour |
+
+Swapping two specials sets both off; two prisms clear the whole board. Any special caught
+in a blast goes off too.
 
 ## Layout
 

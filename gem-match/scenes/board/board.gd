@@ -22,6 +22,12 @@ signal swap_rejected
 ## One gem is being destroyed. `at` is its global position. `cascade` is 0 for the gems the
 ## player's swap matched, 1 for the first chain reaction, and so on.
 signal gem_cleared(gem_type: GemType, at: Vector2, cascade: int)
+## A wave of gems is being destroyed: once for the swap's matches, then once per cascade.
+signal wave_cleared(cascade: int, gem_count: int)
+## A match made a special gem.
+signal special_created(kind: Gem.Special, at: Vector2)
+## A special gem went off.
+signal special_activated(kind: Gem.Special, at: Vector2)
 ## The board has stopped moving and is waiting for the player again.
 signal board_settled
 
@@ -36,6 +42,8 @@ const TRANSITIONS := {
 	State.REFILLING: [State.MATCHING],
 }
 const NO_CELL := Vector2i(-1, -1)
+## Prism target meaning "every gem on the board" (two prisms swapped together).
+const ALL_COLORS := -2
 
 @export_group("Grid")
 @export_range(3, 12) var columns: int = 8
@@ -60,6 +68,8 @@ const NO_CELL := Vector2i(-1, -1)
 @export var clear_duration: float = 0.25
 @export var fall_duration: float = 0.22
 @export var fall_duration_per_cell: float = 0.04
+## Extra destroy delay per cell of distance from a special gem, so its blast ripples outwards.
+@export var blast_ripple_delay: float = 0.035
 
 var _state: State = State.REFILLING
 ## _grid[x][y] holds a Gem, or null for an empty cell.
@@ -69,6 +79,8 @@ var _pending_animations: int = 0
 var _cascade: int = 0
 ## Gems playing their destroy animation. They go back to the pool when it ends.
 var _clearing: Array[Gem] = []
+## Prism gem -> the colour id it clears (or ALL_COLORS), for prisms swapped this turn.
+var _prism_targets: Dictionary = {}
 
 var _selected: Gem = null
 var _dragging: bool = false
@@ -206,6 +218,7 @@ func _on_clear_finished() -> void:
 	for gem in _clearing:
 		_pool.release(gem)
 	_clearing.clear()
+	_prism_targets.clear()
 	_change_state(State.FALLING)
 	_apply_gravity()
 
@@ -225,7 +238,10 @@ func _on_refill_finished() -> void:
 ## means the swap is undone. Otherwise "no match" means the cascade is over.
 func _resolve_matches(is_swap_check: bool) -> void:
 	var groups := MatchFinder.find_matches(get_color_grid())
-	if groups.is_empty():
+	var triggered: Array[Gem] = []
+	if is_swap_check:
+		triggered = _swap_triggers()
+	if groups.is_empty() and triggered.is_empty():
 		if is_swap_check:
 			_revert_swap()
 		else:
@@ -233,10 +249,7 @@ func _resolve_matches(is_swap_check: bool) -> void:
 		return
 	if is_swap_check:
 		move_made.emit()
-	var cells: Array[Vector2i] = []
-	for group in groups:
-		cells.append_array(group.cells)
-	_clear_cells(cells)
+	_clear_wave(groups, triggered)
 
 
 func _settle() -> void:
@@ -247,18 +260,154 @@ func _settle() -> void:
 # --- Matching, gravity and refill -----------------------------------------------------------
 
 
-## Takes the gems out of the grid and plays their destroy animation (MATCHING state).
-func _clear_cells(cells: Array[Vector2i]) -> void:
-	for cell in cells:
+## Specials that the swap itself sets off, even without a colour match:
+## a prism swapped with anything, or two specials swapped together.
+func _swap_triggers() -> Array[Gem]:
+	var moved := get_gem(_swap_to)
+	var other := get_gem(_swap_from)
+	var triggered: Array[Gem] = []
+	if moved.special == Gem.Special.PRISM and other.special == Gem.Special.PRISM:
+		_prism_targets[moved] = ALL_COLORS
+		_prism_targets[other] = ALL_COLORS
+		triggered.assign([moved, other])
+	elif moved.special == Gem.Special.PRISM or other.special == Gem.Special.PRISM:
+		var prism := moved if moved.special == Gem.Special.PRISM else other
+		var partner := other if prism == moved else moved
+		_prism_targets[prism] = _color_of(partner)
+		triggered.append(prism)
+		if partner.special != Gem.Special.NONE:
+			triggered.append(partner)
+	elif moved.special != Gem.Special.NONE and other.special != Gem.Special.NONE:
+		triggered.assign([moved, other])
+	return triggered
+
+
+## Destroys one wave of gems (MATCHING state): the matched groups, the specials the swap set
+## off, and everything those specials hit, including chain reactions. Matches of 4+ leave a
+## new special gem behind instead of clearing one of their cells.
+func _clear_wave(groups: Array[MatchFinder.MatchGroup], triggered: Array[Gem]) -> void:
+	var delays := {}  # Vector2i -> destroy delay in seconds
+	var keep := {}  # Vector2i -> Gem.Special created there this wave
+	for group in groups:
+		var kind := _special_for(group)
+		if kind != Gem.Special.NONE:
+			var cell := _creation_cell(group)
+			if cell != NO_CELL:
+				keep[cell] = kind
+		for cell in group.cells:
+			if not keep.has(cell):
+				delays[cell] = 0.0
+
+	var queue: Array[Gem] = []
+	queue.append_array(triggered)
+	for gem in triggered:
+		delays[gem.grid_pos] = 0.0
+	for cell: Vector2i in delays:
+		var gem := get_gem(cell)
+		if gem and gem.special != Gem.Special.NONE and not queue.has(gem):
+			queue.append(gem)
+	var activated := {}
+	while not queue.is_empty():
+		var source: Gem = queue.pop_front()
+		if activated.has(source):
+			continue
+		activated[source] = true
+		special_activated.emit(source.special, source.global_position)
+		var start: float = delays.get(source.grid_pos, 0.0)
+		for cell in _special_area(source):
+			if keep.has(cell):
+				continue
+			var delay := start + blast_ripple_delay * Vector2(cell - source.grid_pos).length()
+			if not delays.has(cell) or delays[cell] > delay:
+				delays[cell] = delay
+			var hit := get_gem(cell)
+			if hit and hit.special != Gem.Special.NONE and not activated.has(hit):
+				queue.append(hit)
+
+	for cell: Vector2i in keep:
+		var gem := get_gem(cell)
+		gem.make_special(keep[cell])
+		special_created.emit(keep[cell], gem.global_position)
+	for cell: Vector2i in delays:
 		var gem := get_gem(cell)
 		if gem == null:
-			continue  # Already taken by another group this turn.
+			continue
 		_grid[cell.x][cell.y] = null
 		_clearing.append(gem)
 		gem_cleared.emit(gem.gem_type, gem.global_position, _cascade)
 		_pending_animations += 1
-		gem.play_clear(clear_duration)
+		gem.play_clear(clear_duration, delays[cell])
+	wave_cleared.emit(_cascade, delays.size())
 	_wait_for_animations()
+
+
+static func _special_for(group: MatchFinder.MatchGroup) -> Gem.Special:
+	match group.shape:
+		MatchFinder.Shape.LINE_4:
+			return Gem.Special.STRIPED_H if group.horizontal else Gem.Special.STRIPED_V
+		MatchFinder.Shape.CROSS:
+			return Gem.Special.WRAPPED
+		MatchFinder.Shape.LINE_5:
+			return Gem.Special.PRISM
+	return Gem.Special.NONE
+
+
+## Where a match's new special gem appears: on the swapped gem if it is part of the match,
+## otherwise on the group's pivot. Only a plain gem can become special. NO_CELL if none can.
+func _creation_cell(group: MatchFinder.MatchGroup) -> Vector2i:
+	var candidates: Array[Vector2i] = []
+	if _cascade == 0:
+		candidates.assign([_swap_to, _swap_from])
+	candidates.append(group.pivot)
+	candidates.append_array(group.cells)
+	for cell in candidates:
+		var gem := get_gem(cell)
+		if group.cells.has(cell) and gem.special == Gem.Special.NONE:
+			return cell
+	return NO_CELL
+
+
+## The cells a special gem destroys when it goes off (its own cell included).
+func _special_area(source: Gem) -> Array[Vector2i]:
+	var origin := source.grid_pos
+	var cells: Array[Vector2i] = []
+	match source.special:
+		Gem.Special.STRIPED_H:
+			for x in columns:
+				cells.append(Vector2i(x, origin.y))
+		Gem.Special.STRIPED_V:
+			for y in rows:
+				cells.append(Vector2i(origin.x, y))
+		Gem.Special.WRAPPED:
+			for dx in range(-1, 2):
+				for dy in range(-1, 2):
+					var cell := origin + Vector2i(dx, dy)
+					if is_in_bounds(cell):
+						cells.append(cell)
+		Gem.Special.PRISM:
+			var target: int = _prism_targets.get(source, _most_common_color())
+			cells.append(origin)
+			for x in columns:
+				for y in rows:
+					var cell := Vector2i(x, y)
+					if target == ALL_COLORS or _color_of(get_gem(cell)) == target:
+						cells.append(cell)
+	return cells
+
+
+## Used when a prism is set off by another special instead of being swapped.
+func _most_common_color() -> int:
+	var counts := {}
+	var best := MatchFinder.NO_COLOR
+	for x in columns:
+		for y in rows:
+			var color := _color_of(_grid[x][y])
+			if color == MatchFinder.NO_COLOR:
+				continue
+			counts[color] = counts.get(color, 0) + 1
+			if best == MatchFinder.NO_COLOR or counts[color] > counts[best]:
+				best = color
+	return best
 
 
 ## Drops every gem as far down its column as it can go (FALLING state).
