@@ -17,14 +17,16 @@ const BOARD_AREA := Rect2(0, 330, 720, 760)
 const MOVE_BONUS := 50
 ## Points for destroying a prism, which has no GemType to read points from.
 const PRISM_POINTS := 30
-## Moves granted by a revival (ad or purchase).
-const REVIVAL_MOVES := 5
 const REVIVAL_POPUP_SCENE := preload("res://scenes/ui/revival_popup.tscn")
 
 var _level: LevelData
 var _phase: Phase = Phase.INTRO
 var _score: int = 0
 var _moves_left: int = 0
+## Moves made so far. Leaving a level after the first move counts as a quit (costs a life).
+var _moves_used: int = 0
+## Set when the window is closing, so shutting the game down is not counted as a quit.
+var _closing_app: bool = false
 var _collected: Dictionary = {}  # GemType -> gems destroyed so far
 ## One revival per attempt at the level. Retrying reloads the scene, which resets it.
 var _has_revived: bool = false
@@ -56,6 +58,8 @@ func _ready() -> void:
 	_popup.secondary_pressed.connect(GameState.go_to_level_select)
 	_hud.quit_pressed.connect(GameState.go_to_level_select)
 
+	DDAManager.begin_level(GameState.current_level, _level)
+	_board.color_source = DDAManager.get_next_gem_color
 	_board.columns = _level.columns
 	_board.rows = _level.rows
 	_board.gem_types = _level.gem_types
@@ -103,8 +107,24 @@ func _on_shuffled() -> void:
 	_hud.show_toast("No moves left - shuffling")
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_closing_app = true
+
+
+## Leaving a started level by any route (Levels button, Escape, Back) counts as a quit.
+func _exit_tree() -> void:
+	if _phase == Phase.PLAYING and _moves_used > 0 and not _closing_app:
+		MetaProgression.record_quit(GameState.current_level)
+
+
+## A swap was accepted. The DDA systems run now: after the swap is decided but before its
+## cascades refill the board, so their spawn decisions apply to this move.
 func _on_move_made() -> void:
+	DDAManager.pass_proximity_treatment(_moves_left, _score, _collected)
+	DDAManager.difficulty_actions_component()
 	_moves_left -= 1
+	_moves_used += 1
 	_refresh_hud()
 
 
@@ -133,7 +153,7 @@ func _on_popup_primary() -> void:
 			else:
 				GameState.go_to_level_select()
 		Phase.LOST:
-			GameState.play_level(GameState.current_level)
+			GameState.play_level(GameState.current_level)  # Goes to Levels if out of lives.
 
 
 func _win() -> void:
@@ -143,6 +163,7 @@ func _win() -> void:
 	_score += bonus
 	var stars := _level.stars_for(_score)
 	GameState.record_win(GameState.current_level, _score, stars)
+	MetaProgression.record_win(GameState.current_level, stars)
 	_refresh_hud()
 	AudioManager.play(&"win")
 	var body := "Score %d\n(includes %d for moves left)\n\nStars: %d of 3" % [_score, bonus, stars]
@@ -159,22 +180,23 @@ func _on_out_of_moves() -> void:
 		return
 	_phase = Phase.REVIVAL_OFFER
 	_board.set_input_enabled(false)
+	var offer := DDAManager.legacy_pass_proximity_treatment(_score, _collected)
 	var revival: RevivalPopup = REVIVAL_POPUP_SCENE.instantiate()
 	_ui_layer.add_child(revival)
 	revival.revival_accepted.connect(_on_revival_accepted.bind(revival))
 	revival.player_exited.connect(_on_revival_declined.bind(revival))
-	revival.open(REVIVAL_MOVES)  # Pauses the game until the player decides.
+	revival.open(offer)  # Pauses the game until the player decides.
 
 
 ## The popup has already unpaused the game.
-func _on_revival_accepted(revival: RevivalPopup) -> void:
+func _on_revival_accepted(moves: int, revival: RevivalPopup) -> void:
 	revival.queue_free()
 	_has_revived = true
-	_moves_left += REVIVAL_MOVES
+	_moves_left += moves
 	_phase = Phase.PLAYING
 	_board.set_input_enabled(true)
 	_refresh_hud()
-	_hud.show_toast("+%d moves!" % REVIVAL_MOVES)
+	_hud.show_toast("+%d moves!" % moves)
 	AudioManager.play(&"create")
 
 
@@ -187,8 +209,11 @@ func _on_revival_declined(revival: RevivalPopup) -> void:
 func _lose() -> void:
 	_phase = Phase.LOST
 	_board.set_input_enabled(false)
+	MetaProgression.record_loss(GameState.current_level)
 	AudioManager.play(&"lose")
-	_popup.open("Out of moves", "Score %d\n%s" % [_score, _goal_text()], "Retry", "Levels")
+	var lives := MetaProgression.get_lives()
+	var body := "Score %d\n%s\n\nLives left: %d" % [_score, _goal_text(), lives]
+	_popup.open("Out of moves", body, "Retry" if lives > 0 else "Levels", "Levels")
 
 
 func _goals_met() -> bool:
@@ -215,3 +240,4 @@ func _refresh_hud() -> void:
 	_hud.set_moves(_moves_left)
 	_hud.set_score(_score, _level.stars_for(_score), _level.star_scores)
 	_hud.set_goals(_goal_text())
+	_hud.set_quit_costs_life(_phase == Phase.PLAYING and _moves_used > 0)

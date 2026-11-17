@@ -18,6 +18,8 @@ GameState="*res://autoload/game_state.gd"
 AudioManager="*res://autoload/audio_manager.gd"
 AdManager="*res://autoload/ad_manager.gd"
 IAPManager="*res://autoload/iap_manager.gd"
+MetaProgression="*res://autoload/meta_progression.gd"
+DDAManager="*res://autoload/dda_manager.gd"
 
 [display]
 

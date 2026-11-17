@@ -85,6 +85,14 @@ const ALL_COLORS := -2
 @export var blast_ripple_delay: float = 0.035
 @export var shuffle_duration: float = 0.45
 
+## Picks the colour of every new gem: func(allowed: PackedInt32Array,
+## matching: PackedInt32Array) -> int, returning an index into gem_types. `allowed` lists the
+## colours that may go in the cell; `matching` the ones that would complete a line there.
+## The level sets this to DDAManager.get_next_gem_color. Left empty (tests, the editor),
+## the Board picks uniformly from `allowed`.
+var color_source: Callable
+
+var _all_colors := PackedInt32Array()
 var _state: State = State.REFILLING
 ## _grid[x][y] holds a Gem, or null for an empty cell.
 var _grid: Array = []
@@ -123,6 +131,9 @@ func start() -> void:
 		set_process_unhandled_input(false)
 		return
 	_pool.prewarm(columns * rows + columns * 2)
+	_all_colors.clear()
+	for color in gem_types.size():
+		_all_colors.append(color)
 	_build_grid()
 	layout_changed.emit()
 
@@ -481,9 +492,11 @@ func _refill() -> void:
 		var empty := 0
 		while empty < rows and _grid[x][empty] == null:
 			empty += 1
-		for y in empty:
+		# Bottom-up, so the colours below each new gem are known when it is picked.
+		for y in range(empty - 1, -1, -1):
 			var cell := Vector2i(x, y)
-			var gem := _spawn_gem(gem_types.pick_random(), cell)
+			var color := _next_color(_all_colors, _matching_colors_at(cell))
+			var gem := _spawn_gem(gem_types[color], cell)
 			gem.position = grid_to_local(Vector2i(x, y - empty))
 			_move_gem(gem, grid_to_local(cell), _fall_time(empty), Tween.TRANS_BOUNCE)
 	_wait_for_animations()
@@ -615,23 +628,49 @@ func _build_grid() -> void:
 	_wait_for_animations()
 
 
-## A random type that does not make a line of 3 with the two gems to the left or the two
-## gems above. This keeps the starting board free of matches.
+## A type that does not make a line of 3 with the two gems to the left or the two gems
+## above. This keeps the starting board (and a recoloured shuffle) free of matches.
 func _pick_spawn_type(cell: Vector2i) -> GemType:
-	var candidates: Array[GemType] = []
-	candidates.assign(gem_types)
-	var left := _type_at(cell + Vector2i.LEFT)
-	if left != null and left == _type_at(cell + Vector2i.LEFT * 2):
-		candidates.erase(left)
-	var up := _type_at(cell + Vector2i.UP)
-	if up != null and up == _type_at(cell + Vector2i.UP * 2):
-		candidates.erase(up)
-	return candidates.pick_random()
+	var allowed := _all_colors.duplicate()
+	for step: Vector2i in [Vector2i.LEFT, Vector2i.UP]:
+		var near := _color_at(cell + step)
+		if near != MatchFinder.NO_COLOR and near == _color_at(cell + step * 2):
+			var index := allowed.find(near)
+			if index != -1:
+				allowed.remove_at(index)
+	return gem_types[_next_color(allowed, PackedInt32Array())]
 
 
-func _type_at(cell: Vector2i) -> GemType:
-	var gem := get_gem(cell)
-	return gem.gem_type if gem else null
+## Asks the colour source (normally DDAManager) for a colour.
+func _next_color(allowed: PackedInt32Array, matching: PackedInt32Array) -> int:
+	if color_source.is_valid():
+		return color_source.call(allowed, matching)
+	return allowed[randi() % allowed.size()]
+
+
+## Colours that would complete a line of 3 at `cell`, judged from the gems around it now.
+func _matching_colors_at(cell: Vector2i) -> PackedInt32Array:
+	var found := PackedInt32Array()
+	var left := _color_at(cell + Vector2i.LEFT)
+	var right := _color_at(cell + Vector2i.RIGHT)
+	var up := _color_at(cell + Vector2i.UP)
+	var down := _color_at(cell + Vector2i.DOWN)
+	_add_if_pair(found, left, _color_at(cell + Vector2i.LEFT * 2))
+	_add_if_pair(found, right, _color_at(cell + Vector2i.RIGHT * 2))
+	_add_if_pair(found, left, right)
+	_add_if_pair(found, down, _color_at(cell + Vector2i.DOWN * 2))
+	_add_if_pair(found, up, _color_at(cell + Vector2i.UP * 2))
+	_add_if_pair(found, up, down)
+	return found
+
+
+func _color_at(cell: Vector2i) -> int:
+	return _color_of(get_gem(cell))
+
+
+static func _add_if_pair(found: PackedInt32Array, a: int, b: int) -> void:
+	if a != MatchFinder.NO_COLOR and a == b and not found.has(a):
+		found.append(a)
 
 
 func _color_of(gem: Gem) -> int:

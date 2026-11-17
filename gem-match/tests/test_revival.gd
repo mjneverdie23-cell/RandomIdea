@@ -12,7 +12,7 @@ func test_decline_locks_exit_until_the_bar_is_full() -> void:
 	popup.lockout_seconds = 0.6
 	var exited := [false]
 	popup.player_exited.connect(func() -> void: exited[0] = true)
-	popup.open(5)
+	popup.open(_offer())
 	check(get_tree().paused, "opening the popup pauses the game")
 	check(popup._offer.visible and not popup._lockout.visible, "starts on the offer")
 
@@ -44,14 +44,17 @@ func test_watching_an_ad_revives() -> void:
 	if not _has_managers():
 		return
 	var popup := _new_popup()
-	var accepted := [false]
-	popup.revival_accepted.connect(func() -> void: accepted[0] = true)
-	popup.open(5)
+	var accepted := [0]
+	popup.revival_accepted.connect(func(moves: int) -> void: accepted[0] = moves)
+	popup.open(_offer())
 	popup._watch_ad_button.pressed.emit()
 	check(
 		popup._watch_ad_button.disabled and popup._decline_button.disabled, "locked while loading"
 	)
-	check(await wait_until(func() -> bool: return accepted[0], 5.0), "the ad grants the revival")
+	check(
+		await wait_until(func() -> bool: return accepted[0] > 0, 5.0), "the ad grants the revival"
+	)
+	check_eq(accepted[0], 4, "the ad pays the offer's ad moves")
 	check(not popup.visible and not get_tree().paused, "closes and unpauses")
 	_cleanup(popup)
 
@@ -60,11 +63,12 @@ func test_buying_revives() -> void:
 	if not _has_managers():
 		return
 	var popup := _new_popup()
-	var accepted := [false]
-	popup.revival_accepted.connect(func() -> void: accepted[0] = true)
-	popup.open(5)
+	var accepted := [0]
+	popup.revival_accepted.connect(func(moves: int) -> void: accepted[0] = moves)
+	popup.open(_offer())
 	popup._buy_button.pressed.emit()
-	check(await wait_until(func() -> bool: return accepted[0], 5.0), "the purchase grants it")
+	check(await wait_until(func() -> bool: return accepted[0] > 0, 5.0), "the purchase grants it")
+	check_eq(accepted[0], 7, "the purchase pays the offer's purchase moves")
 	check(not get_tree().paused, "unpaused after buying")
 	_cleanup(popup)
 
@@ -75,15 +79,15 @@ func test_failed_ad_keeps_the_offer_open() -> void:
 	var ads: Node = get_tree().root.get_node("AdManager")
 	ads.mock_success = false
 	var popup := _new_popup()
-	var accepted := [false]
-	popup.revival_accepted.connect(func() -> void: accepted[0] = true)
-	popup.open(5)
+	var accepted := [0]
+	popup.revival_accepted.connect(func(moves: int) -> void: accepted[0] = moves)
+	popup.open(_offer())
 	popup._watch_ad_button.pressed.emit()
 	check(
 		await wait_until(func() -> bool: return not popup._watch_ad_button.disabled, 5.0),
 		"buttons come back after a failed ad"
 	)
-	check(not accepted[0], "no revival without a reward")
+	check_eq(accepted[0], 0, "no revival without a reward")
 	check(popup.visible and get_tree().paused, "the offer stays open and paused")
 	check(popup._status_label.visible, "the player is told why")
 	ads.mock_success = true
@@ -96,6 +100,14 @@ func _has_managers() -> bool:
 		return true
 	print("          (skipped: AdManager/IAPManager autoloads not loaded)")
 	return false
+
+
+## A fixed offer, so the tests know which amount each path pays.
+func _offer() -> MonetizationModel.RevivalOffer:
+	var offer := MonetizationModel.RevivalOffer.new()
+	offer.ad_moves = 4
+	offer.iap_moves = 7
+	return offer
 
 
 func _new_popup() -> RevivalPopup:

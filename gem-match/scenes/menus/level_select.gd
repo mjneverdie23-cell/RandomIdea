@@ -1,6 +1,12 @@
 extends Control
 ## Grid of level buttons. Locked levels are disabled; finished ones show their best stars.
+## A status line shows lives (with the time to the next one) and the weekly race rank.
+## With no lives left, every level button is disabled until one regenerates.
 
+var _buttons: Array[Button] = []
+var _status_timer: float = 0.0
+
+@onready var _status_label: Label = $Margin/Box/StatusLabel
 @onready var _grid: GridContainer = $Margin/Box/Grid
 @onready var _back_button: Button = $Margin/Box/BackButton
 
@@ -11,10 +17,39 @@ func _ready() -> void:
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(140, 140)
 		button.add_theme_font_size_override("font_size", 34)
-		button.disabled = not GameState.is_unlocked(index)
 		button.text = _button_text(index)
 		button.pressed.connect(GameState.play_level.bind(index))
 		_grid.add_child(button)
+		_buttons.append(button)
+	_refresh_status()
+
+
+func _process(delta: float) -> void:
+	_status_timer += delta
+	if _status_timer >= 1.0:
+		_status_timer = 0.0
+		_refresh_status()
+
+
+func _refresh_status() -> void:
+	var lives := MetaProgression.get_lives()
+	var text := "Lives %d/%d" % [lives, MetaProgression.MAX_LIVES]
+	var wait := MetaProgression.seconds_to_next_life()
+	if wait > 0:
+		text += (
+			", next in %d:%02d:%02d" % [floori(wait / 3600.0), floori(wait / 60.0) % 60, wait % 60]
+		)
+	text += (
+		"\nWeekly race: #%d of %d (%d stars)"
+		% [
+			MetaProgression.get_race_rank(),
+			MetaProgression.RACE_SIZE,
+			MetaProgression.get_race_points(),
+		]
+	)
+	_status_label.text = text
+	for index in _buttons.size():
+		_buttons[index].disabled = lives == 0 or not GameState.is_unlocked(index)
 
 
 func _button_text(index: int) -> String:

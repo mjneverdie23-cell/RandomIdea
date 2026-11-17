@@ -33,6 +33,12 @@ func test_level_scene_flow() -> void:
 		return
 	var game_state: Node = get_tree().root.get_node("GameState")
 	game_state.current_level = 0
+	# Keep the player's real lives and streaks out of this test.
+	var meta: Node = get_tree().root.get_node("MetaProgression")
+	var real_meta_path: String = meta.save_path
+	meta.save_path = "user://test_scene_meta.json"
+	DirAccess.remove_absolute(meta.save_path)
+	meta.load_state()
 	Engine.time_scale = 8.0
 	var level: Node = load("res://scenes/main/main.tscn").instantiate()
 	add_child(level)
@@ -67,8 +73,7 @@ func test_level_scene_flow() -> void:
 	if revival != null:
 		revival._watch_ad_button.pressed.emit()
 		check(await wait_until(func() -> bool: return not get_tree().paused, 5.0), "ad revives")
-		var revival_moves: int = level.get_script().get_script_constant_map()["REVIVAL_MOVES"]
-		check_eq(level._moves_left, revival_moves, "revival grants extra moves")
+		check_eq(level._moves_left, revival._offer.ad_moves, "the ad grants the offered moves")
 		check(board._input_enabled, "the board takes input again")
 	await get_tree().process_frame
 
@@ -77,8 +82,12 @@ func test_level_scene_flow() -> void:
 	level._on_board_settled()
 	check(_find_revival_popup(level) == null, "no second revival")
 	check(popup.visible and not get_tree().paused, "game over shows at once")
+	check_eq(meta.get_lives(), meta.MAX_LIVES - 1, "the loss cost a life")
 	get_tree().paused = false
 	level.queue_free()
+	DirAccess.remove_absolute(meta.save_path)
+	meta.save_path = real_meta_path
+	meta.load_state()
 	await get_tree().process_frame
 	Engine.time_scale = 1.0
 

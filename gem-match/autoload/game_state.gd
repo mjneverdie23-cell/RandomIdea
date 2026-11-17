@@ -91,8 +91,12 @@ func set_sfx_enabled(enabled: bool) -> void:
 # --- Scenes -------------------------------------------------------------------------------
 
 
+## Starts a level, or shows the level select instead when the player is out of lives.
 func play_level(index: int) -> void:
 	current_level = clampi(index, 0, level_count() - 1)
+	if not MetaProgression.can_play():
+		_change_scene(LEVEL_SELECT_SCENE)
+		return
 	_change_scene(LEVEL_SCENE)
 
 

@@ -2,8 +2,10 @@ class_name RevivalPopup
 extends Control
 ## "Out of moves" revival offer, in two stages.
 ##
-## Offer stage: [Watch ad], [Buy revival] and [No thanks]. A successful ad or purchase closes
-## the popup and emits revival_accepted.
+## Offer stage: [Watch ad], [Buy revival] and [No thanks]. The amounts come from a
+## MonetizationModel.RevivalOffer (built by DDAManager.legacy_pass_proximity_treatment()).
+## A successful ad or purchase closes the popup and emits revival_accepted with the moves
+## that path earned.
 ## Lockout stage (after [No thanks]): the offer buttons go away, a bar fills over
 ## lockout_seconds and [Exit] stays disabled until it is full. [Exit] then closes the popup
 ## and emits player_exited.
@@ -11,8 +13,8 @@ extends Control
 ## The popup owns the pause: open() pauses the tree and closing unpauses it. The popup itself
 ## always processes, so its buttons and tweens keep working while the game is frozen.
 
-## The player paid (ad or purchase). The tree is already unpaused when this is emitted.
-signal revival_accepted
+## The player paid (ad or purchase) and earned `moves`. The tree is already unpaused.
+signal revival_accepted(moves: int)
 ## The player declined and waited out the lockout. The tree is already unpaused.
 signal player_exited
 
@@ -22,6 +24,7 @@ enum Pending { NONE, AD, PURCHASE }
 @export var lockout_seconds: float = 15.0
 
 var _pending: Pending = Pending.NONE
+var _offer: MonetizationModel.RevivalOffer
 var _lockout_tween: Tween
 
 @onready var _message: Label = $Center/Panel/Margin/Box/Message
@@ -47,11 +50,15 @@ func _ready() -> void:
 	hide()
 
 
-## Shows the offer stage and pauses the game. `extra_moves` is only used for the wording.
-func open(extra_moves: int) -> void:
-	_message.text = "Keep playing with %d extra moves?" % extra_moves
+## Shows the offer stage and pauses the game.
+func open(offer: MonetizationModel.RevivalOffer) -> void:
+	_offer = offer
+	_message.text = "Keep playing?"
+	_watch_ad_button.text = "Watch ad: +%d moves" % offer.ad_moves
 	var price := IAPManager.get_revival_price_text()
-	_buy_button.text = "Buy revival (%s)" % price if not price.is_empty() else "Buy revival"
+	_buy_button.text = "Buy +%d moves" % offer.iap_moves
+	if not price.is_empty():
+		_buy_button.text += " (%s)" % price
 	_show_offer_stage()
 	show()
 	get_tree().paused = true
@@ -92,19 +99,23 @@ func _wait_for(kind: Pending, message: String) -> void:
 
 func _on_ad_rewarded(success: bool) -> void:
 	if _pending == Pending.AD:
-		_finish_offer(success, "The ad didn't finish, so there's no reward. Try again?")
+		_finish_offer(
+			success, _offer.ad_moves, "The ad didn't finish, so there's no reward. Try again?"
+		)
 
 
 func _on_purchase_completed(success: bool) -> void:
 	if _pending == Pending.PURCHASE:
-		_finish_offer(success, "The purchase didn't go through. You were not charged.")
+		_finish_offer(
+			success, _offer.iap_moves, "The purchase didn't go through. You were not charged."
+		)
 
 
-func _finish_offer(success: bool, failure_message: String) -> void:
+func _finish_offer(success: bool, moves: int, failure_message: String) -> void:
 	_pending = Pending.NONE
 	if success:
 		_close()
-		revival_accepted.emit()
+		revival_accepted.emit(moves)
 		return
 	_set_offer_buttons_enabled(true)
 	_status_label.text = failure_message
