@@ -50,25 +50,17 @@ func test_level_scene_flow() -> void:
 		check_eq(level._moves_left, level._level.moves - 1, "a move was used")
 		check(level._score > 0, "the turn scored points")
 
-	# A swap that makes no match costs a move.
+	# A swap that makes no match slides back for free.
 	var wrong := find_move(board, false)
 	if not wrong.is_empty():
 		var before: int = level._moves_left
 		board._try_swap(wrong[0], wrong[1])
 		check(await wait_board_idle(board), "a wrong move slides back")
-		check_eq(level._moves_left, before - 1, "a wrong move costs 1 move")
+		check_eq(level._moves_left, before, "a wrong move costs nothing")
 
-	# Spending the last move on a wrong swap runs out of moves, which offers a revival
-	# and pauses the game.
-	level._moves_left = 1
-	wrong = find_move(board, false)
-	if wrong.is_empty():
-		level._moves_left = 0
-		level._on_board_settled()
-	else:
-		board._try_swap(wrong[0], wrong[1])
-		check(await wait_until(func() -> bool: return get_tree().paused, 5.0), "game pauses")
-		check_eq(level._moves_left, 0, "the wrong move used the last move")
+	# Running out of moves the first time offers a revival, which pauses the game.
+	level._moves_left = 0
+	level._on_board_settled()
 	var revival := _find_revival_popup(level)
 	check(revival != null and revival.visible, "out of moves shows the revival popup")
 	check(get_tree().paused, "the revival popup pauses the game")

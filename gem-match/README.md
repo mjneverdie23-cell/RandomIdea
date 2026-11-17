@@ -16,7 +16,7 @@ godot --headless --path gem-match -s res://tests/test_runner.gd
 ## How to play
 
 - **Swipe** a gem towards a neighbour, or **tap** a gem and then one of its neighbours.
-- A swap must make a line of 3 or more. Otherwise the gems slide back **and you lose a move**.
+- A swap must make a line of 3 or more, otherwise the gems slide back (no move is used).
 - Reach the level's score and collect goals before the moves run out. Chain reactions
   multiply points (x2, x3, ...), and moves left over at the end are worth bonus points.
 - Escape (or the Android back button) goes back one screen.
@@ -41,7 +41,7 @@ seconds without input, a possible move wiggles as a hint.
 | A gem's colour, shape, points or art | `resources/gems/*.tres` (`GemType`). Set `texture` to replace the polygon |
 | Levels (size, gems, moves, star scores, goals) | `levels/level_XX.tres` (`LevelData`); order in `levels/catalog.tres` |
 | Animation timings, swipe distance, hint delay | Inspector on the Board node, `scenes/board/board.tscn` |
-| Scoring (cascade multiplier, move bonus), wrong-move penalty | `scenes/main/main.gd` (`WRONG_MOVE_PENALTY`) |
+| Scoring (cascade multiplier, move bonus) | `scenes/main/main.gd` |
 | Sounds and music | `autoload/audio_manager.gd` (`_build_sounds`, `_build_music`) |
 | Volumes | `default_bus_layout.tres` (Music and SFX buses) |
 | Revival: moves granted | `REVIVAL_MOVES` in `scenes/main/main.gd` |
